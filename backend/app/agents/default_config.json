@@ -1,0 +1,54 @@
+{
+  "version": "2.0",
+  "agents": {
+    "supervisor": {
+      "name": "小满总调度",
+      "description": "负责理解用户意图，路由到对应子 agent",
+      "enabled": true,
+      "tools": "all",
+      "temperature": 0.2
+    },
+    "bookkeeping": {
+      "name": "记账助手",
+      "description": "一句话记账、账本查询、预算管理",
+      "enabled": true,
+      "tools": ["get_ledger_view", "get_budget", "get_trend", "record_transaction"],
+      "temperature": 0.1
+    },
+    "portfolio": {
+      "name": "持仓行情助手",
+      "description": "持仓查询、实时行情、K线走势、自选股管理",
+      "enabled": true,
+      "tools": ["get_market_view", "get_kline", "search_symbol", "get_quote", "add_to_watchlist", "remove_from_watchlist", "get_watchlist", "record_position", "sell_position"],
+      "temperature": 0.1
+    }
+  },
+  "skills": {
+    "risk_analysis": {
+      "name": "风险体检",
+      "description": "五维财务健康检查",
+      "enabled": true
+    },
+    "goals_tracking": {
+      "name": "目标追踪",
+      "description": "储蓄目标、财务目标进度追踪",
+      "enabled": true
+    },
+    "morning_report": {
+      "name": "每日晨报",
+      "description": "每天早上推送持仓和行情概览",
+      "enabled": false
+    },
+    "long_memory": {
+      "name": "长期记忆",
+      "description": "记住用户的家庭、职业、偏好等长期信息",
+      "enabled": true
+    }
+  },
+  "defaults": {
+    "default_lang": "zh",
+    "default_model": "deepseek/deepseek-chat",
+    "approval_threshold": 5000,
+    "max_tool_turns": 5
+  }
+}

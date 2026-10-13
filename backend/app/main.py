@@ -80,6 +80,9 @@ async def lifespan(app_ref: FastAPI):
     # Langfuse 观测：懒初始化（没配 env 就 no-op）
     from . import observability
     observability._init()
+    # Agent 配置：初始化默认角色/skills/工具配置
+    from . import agent_config
+    await agent_config.init_default_config()
     log.info("database initialised, scheduler started")
     yield
     log.info("xiaoman backend shutting down")
@@ -1755,6 +1758,27 @@ async def clear_logs_endpoint() -> dict:
     cleared = clear_logs()
     log.info("logs cleared manually (%d lines removed)", cleared)
     return {"ok": True, "cleared_lines": cleared}
+
+
+# ---------------------------------------------------------------------------
+# Agent 配置：角色 / skills / 工具开关
+# ---------------------------------------------------------------------------
+
+@app.get("/api/agent-config")
+async def get_agent_config() -> dict:
+    """读当前 agent 配置（角色/skills/工具）。"""
+    from . import agent_config
+    cfg = await agent_config.get_config()
+    return {"ok": True, "config": cfg}
+
+
+@app.post("/api/agent-config")
+async def update_agent_config(payload: dict) -> dict:
+    """更新 agent 配置。"""
+    from . import agent_config
+    new_cfg = payload.get("config", payload)
+    await agent_config.update_config(new_cfg)
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------
