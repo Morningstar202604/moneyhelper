@@ -54,12 +54,34 @@ def _make_langchain_tool(name: str, description: str, impl: Any, param_schema: d
     )
 
 
-def _build_finance_tools() -> list[StructuredTool]:
-    """把财务读类工具包装成 LangChain 工具。"""
+def _build_finance_tools(agent_name: str = "supervisor") -> list[StructuredTool]:
+    """把财务读类工具包装成 LangChain 工具，按 agent 分组过滤。
+
+    每个 agent 只看到自己该用的工具，减少 token 消耗。
+    """
+    # 按 agent 分组的工具名
+    AGENT_TOOLS: dict[str, set[str]] = {
+        "bookkeeping": {
+            "get_ledger_view", "get_budget", "get_trend", "record_transaction",
+        },
+        "portfolio": {
+            "get_market_view", "get_kline", "search_symbol", "get_quote",
+            "add_to_watchlist", "remove_from_watchlist", "get_watchlist",
+            "record_position", "sell_position",
+        },
+        "supervisor": {
+            # supervisor 用所有工具（总调度）
+        },
+    }
+    allowed = AGENT_TOOLS.get(agent_name, set())
+
     lc_tools: list[StructuredTool] = []
     for t in tools.TOOLS:
         fname = t["function"]["name"]
         if fname in agent.WRITE_EXCLUDED:
+            continue
+        # 按 agent 分组过滤（supervisor 不过滤）
+        if allowed and fname not in allowed:
             continue
         impl = tools.TOOL_IMPL.get(fname)
         if not impl:
@@ -73,7 +95,7 @@ def _build_finance_tools() -> list[StructuredTool]:
     return lc_tools
 
 
-async def run_react_agent(question: str, system_prompt: str, lang: str = "zh") -> dict[str, Any]:
+async def run_react_agent(question: str, system_prompt: str, lang: str = "zh", agent_name: str = "supervisor") -> dict[str, Any]:
     """用 LangGraph 官方 create_react_agent 跑一轮 agent。
 
     返回与 agent.run_agent 兼容的格式：{answer, steps, tools_used, llm}
@@ -91,7 +113,7 @@ async def run_react_agent(question: str, system_prompt: str, lang: str = "zh") -
         max_tokens=2048,
     )
 
-    lc_tools = _build_finance_tools()
+    lc_tools = _build_finance_tools(agent_name)
 
     # 长期记忆注入
     memories = await db.list_memory()
