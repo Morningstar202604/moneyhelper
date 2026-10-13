@@ -256,6 +256,33 @@
   }
 }
 
+/* thinking dots：对标 ChatGPT 的三个点动画 */
+.thinking-dots {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.thinking-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.4;
+  animation: thinking-bounce 1.4s ease-in-out infinite both;
+}
+.thinking-dots span:nth-child(1) { animation-delay: -0.32s; }
+.thinking-dots span:nth-child(2) { animation-delay: -0.16s; }
+@keyframes thinking-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 /* 历史跳转定位高亮：短暂的边缘光圈提示用户“就是这一条” */
 @keyframes locate-flash {
   0% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.35); }

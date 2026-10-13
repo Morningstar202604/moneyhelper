@@ -372,6 +372,11 @@ function BubbleInner({
                   {m.text}
                 </ReactMarkdown>
                 {streaming && m.text && <span className="stream-caret" aria-hidden="true" />}
+                {streaming && !m.text && (
+                  <span className="thinking-dots" aria-label="思考中">
+                    <span /><span /><span />
+                  </span>
+                )}
               </div>
               {/* 结构化数据卡：对话内嵌小卡，点"展开"唤起 DataModal */}
               {m.cards && m.cards.length > 0 && (
