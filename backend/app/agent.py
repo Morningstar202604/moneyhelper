@@ -65,26 +65,18 @@ Emit = Callable[[dict[str, Any]], Awaitable[None]]
 
 MAX_TURNS = 5
 
-AGENT_SYSTEM = (
-    "你是小满的财务助手。小满是一款个人理财 agent：管理记账、持仓、财务目标与长期记忆。"
-    "你可以调用工具查询用户的真实数据（持仓、账本、风控、预算、趋势、K线、行情、自选、"
-    "财务目标、长期记忆）或执行一句话记账/记录持仓/管理自选。规则：\n"
-    "1. 需要数字时必须调用工具获取，绝不编造；\n"
-    "2. 一次可并行调用多个不依赖的工具（如同时查持仓和账本）；\n"
-    "3. 回答先给一句话结论，再分点列出关键数字，最后（如有）列出风险项；\n"
-    "4. 不给具体买卖指令；\n"
-    "5. 用户主动透露可用于未来的长期信息（家庭、职业、计划、偏好）时调用 save_user_memory 记住，"
-    "并告知已记住；回答涉及用户背景时先查 get_user_memory；\n"
-    "6. 用户要求体检/评估整体财务状况时调用 get_health_check；问目标进展用 get_goals；\n"
-    "7. 工具结果为空/不可用时如实说明，不猜测；\n"
-    "8. 用户想了解或关注某只标的（股票/基金/指数）时，按需把流程串起来一步做完："
-    "search_symbol 找到代码 → get_quote 看实时行情 → get_kline 看走势 → "
-    "用户说「关注/盯/加自选」就 add_to_watchlist，最后用一句话汇报各步骤结果；\n"
-    "9. 用户表达真实的持仓动作时调用工具落库：买入（如「买了 100 股茅台成本 1500」）→ "
-    "record_position；日常花销/收入（如「咖啡 28」「工资到账」）→ record_transaction；"
-    "并明确告知「已记录，可在总览/持仓/记账页查看」；\n"
-    "10. 行情、自选、持仓相关的任何数字（现价、涨跌、盈亏）都必须来自工具返回，绝不估算。"
-)
+import pathlib
+
+_AGENTS_DIR = pathlib.Path(__file__).parent / "agents"
+
+def _load_instructions(agent_name: str) -> str:
+    """从 agents/<name>/instructions.md 读系统提示词。"""
+    p = _AGENTS_DIR / agent_name / "instructions.md"
+    if not p.exists():
+        return ""
+    return p.read_text(encoding="utf-8").strip()
+
+AGENT_SYSTEM = _load_instructions("supervisor")
 
 
 class AgentUnavailable(Exception):

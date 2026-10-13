@@ -32,7 +32,10 @@ duckduckgo_search>=6.0,<7   # 通用搜索（替换 tools.py Bing HTML 抓取）
 
 # —— 通用层：直接接业界成熟开源，不重复造轮子（见 docs/ARCHITECTURE-v2.md）——
 mem0ai>=0.1,<1              # 长记忆层：抽取/去重/更新/rerank 全由 mem0 pipeline 做，替换自写 memory+reflections+BM25
-langfuse>=3.0,<4            # 可观测性：trace/prompt/eval/数据集一体，自托管 MIT，替换自写 audit_logger
+# langfuse 换成 Arize Phoenix（开源，单容器本地跑，不需要外部账号）
+opentelemetry-api>=1.27,<2
+opentelemetry-sdk>=1.27,<2
+opentelemetry-exporter-otlp-proto-http>=1.27,<2
 chromadb>=0.5,<1            # mem0 本地向量后端（零外部服务，SQLite 同级 local-first）
 langchain-litellm>=0.1,<1
 langchain-core>=0.3,<1
