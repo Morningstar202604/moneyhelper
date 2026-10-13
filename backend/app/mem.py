@@ -49,20 +49,21 @@ def _init() -> None:
                 "provider": "chroma",
                 "config": {"path": str(_data_dir()), "collection_name": "xiaoman_mem"},
             },
-            # llm/embedder 走 LiteLLM 默认端点（用户在设置里配的模型）
+            # llm 走 LiteLLM
             "llm": {
                 "provider": "litellm",
                 "config": {"model": os.getenv("LLM_MODEL", "deepseek/deepseek-chat")},
             },
+            # embedder 用 OpenAI（mem0 支持的 provider）
             "embedder": {
-                "provider": "litellm",
+                "provider": "openai",
                 "config": {"model": os.getenv("EMBED_MODEL", "text-embedding-3-small")},
             },
         }
         _client = Memory.from_config(cfg)
         log.info("mem.ready", path=str(_data_dir()))
     except Exception as e:  # pragma: no cover
-        log.warning("mem.init_failed", error=str(e))
+        log.warning("mem.init_failed: " + str(e))
         _client = None
 
 
