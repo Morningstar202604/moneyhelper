@@ -373,29 +373,60 @@ function BubbleInner({
                 </ReactMarkdown>
                 {streaming && m.text && <span className="stream-caret" aria-hidden="true" />}
               </div>
-              {/* 结构化数据卡：对话内嵌小卡，点"展开"唤起右侧产物面板 */}
+              {/* 结构化数据卡：对话内嵌小卡，点"展开"唤起 DataModal */}
               {m.cards && m.cards.length > 0 && (
                 <div className="mt-2.5 space-y-2">
-                  {m.cards.map((c, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2"
-                    >
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-primary">📊</span>
-                        <span className="font-medium text-foreground/90">
-                          {c.kind === "finance_snapshot" ? "财务快照" : c.kind}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => onNavigate(c.kind === "finance_snapshot" ? "overview" : "overview")}
-                        className="shrink-0 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1 text-[11px] text-primary transition-colors hover:bg-primary/10"
+                  {m.cards.map((c, i) => {
+                    const d = (c.data || {}) as Record<string, any>;
+                    const market = (d.market || {}) as Record<string, any>;
+                    const ledger = (d.ledger || {}) as Record<string, any>;
+                    return (
+                      <div
+                        key={i}
+                        className="rounded-lg border border-border bg-card p-3 shadow-soft"
                       >
-                        在右侧面板打开 →
-                      </button>
-                    </div>
-                  ))}
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-xs font-medium text-foreground/80 flex items-center gap-1.5">
+                            <span className="text-primary">📊</span>
+                            财务快照
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => onNavigate("overview")}
+                            className="text-[11px] text-primary hover:underline"
+                          >
+                            展开 →
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
+                            <div className="text-[10px] text-muted-foreground">总市值</div>
+                            <div className="text-sm font-semibold tabular-nums">
+                              {market.total_value ? `¥${(market.total_value / 10000).toFixed(1)}万` : "—"}
+                            </div>
+                          </div>
+                          <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
+                            <div className="text-[10px] text-muted-foreground">本月支出</div>
+                            <div className="text-sm font-semibold tabular-nums">
+                              {ledger.expense ? `¥${ledger.expense.toLocaleString()}` : "—"}
+                            </div>
+                          </div>
+                          <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
+                            <div className="text-[10px] text-muted-foreground">本月结余</div>
+                            <div className="text-sm font-semibold tabular-nums">
+                              {ledger.net ? `¥${ledger.net.toLocaleString()}` : "—"}
+                            </div>
+                          </div>
+                          <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
+                            <div className="text-[10px] text-muted-foreground">储蓄率</div>
+                            <div className="text-sm font-semibold tabular-nums">
+                              {ledger.savings_rate != null ? `${(ledger.savings_rate * 100).toFixed(0)}%` : "—"}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               {m.meta && m.meta.route !== "general" && m.meta.route !== "nl_add" && (
