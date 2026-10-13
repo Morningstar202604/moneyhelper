@@ -1,0 +1,31 @@
+# 小满 · Docker Compose 部署（服务名 xiaoman）
+# 用法：docker compose up -d --build   →  http://<服务器IP>:8787
+# 可选环境变量：
+#   API_TOKEN      访问口令（不设则仅限本机/内网 Host，需配合 ALLOWED_HOSTS）
+#   ALLOWED_HOSTS  开放 Host 白名单（逗号分隔，反代/Docker 外网访问时填写）
+#   LLM_BASE_URL / LLM_API_KEY / LLM_MODEL   AI 模型（也可在应用设置页里填）
+#   XIAOMAN_DISABLE_RATE_LIMIT=1   关闭 API 限流（默认开启，200次/分钟/IP）
+#   XIAOMAN_DB_PATH=/abs/db.db     数据库绝对路径（默认 backend/data/wealth.db，mount 自定义路径时填）
+services:
+  xiaoman:
+    build: .
+    container_name: xiaoman
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      - TZ=Asia/Shanghai
+      - API_TOKEN=${API_TOKEN:-}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - XIAOMAN_DISABLE_RATE_LIMIT=${XIAOMAN_DISABLE_RATE_LIMIT:-}
+      - XIAOMAN_DB_PATH=${XIAOMAN_DB_PATH:-}
+    volumes:
+      - xiaoman-data:/app/backend/data
+      - xiaoman-logs:/app/backend/logs
+
+volumes:
+  xiaoman-data:
+  xiaoman-logs:

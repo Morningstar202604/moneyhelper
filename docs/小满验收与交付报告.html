@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小满 Xiaoman · 验收与交付报告</title>
+<style>
+/* ========== Reset & Base ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { min-height: 100%; }
+body {
+  position: relative;
+  font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", "Noto Sans SC", sans-serif;
+  color: #1f2d3d;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 40px 24px;
+  background: linear-gradient(160deg, #f8fafc 0%, #ffffff 45%, #cfe0f5 100%);
+  min-height: 100vh;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 45% 35% at 18% 8%, rgba(255,255,255,0.55) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 88% 90%, rgba(255,255,255,0.45) 0%, transparent 55%);
+}
+body > * { position: relative; z-index: 1; }
+
+/* ========== 封面 Hero ========== */
+.title {
+  position: relative;
+  overflow: hidden;
+  padding: 52px 40px;
+  text-align: center;
+  background: linear-gradient(135deg, #1e3a5f 0%, #3b82f6 50%, #4f8ef7 100%);
+  color: #ffffff;
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+}
+.title::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 70% 55% at 18% 82%, rgba(255,255,255,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 82% 18%, rgba(255,255,255,0.08) 0%, transparent 55%);
+  pointer-events: none;
+}
+.title > * { position: relative; z-index: 1; }
+.title h1 { font-size: 28px; font-weight: 800; margin: 0 0 14px 0; letter-spacing: 1px; color: #ffffff; }
+.title .accent-line { width: 48px; height: 3px; background: rgba(255,255,255,0.85); margin: 0 auto 18px; border-radius: 2px; }
+.title p { font-size: 15px; color: rgba(255,255,255,0.88); margin: 0; line-height: 1.7; }
+
+/* ========== 章节标题 ========== */
+h1.heading { font-size: 26px; color: #0f1e33; margin: 40px 0 16px 0; font-weight: 700; border-left: 4px solid #3b82f6; padding-left: 16px; }
+h2.heading { font-size: 21px; color: #0f1e33; margin: 30px 0 12px; padding-bottom: 8px; border-bottom: 2px solid #c9d6f3; font-weight: 600; }
+
+/* ========== 指标卡 ========== */
+.stat-grid { display: flex; gap: 16px; margin: 0 0 16px 0; }
+.stat { flex: 1; text-align: center; padding: 24px; background: #ffffff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); border-top: 3px solid #3b82f6; }
+.stat .num { font-size: 30px; color: #2563eb; font-weight: 800; line-height: 1.1; }
+.stat .label { font-size: 12px; color: #5b6b80; margin-top: 6px; }
+
+/* ========== 卡片 ========== */
+.card { background: #ffffff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); padding: 24px; margin: 0 0 16px 0; }
+.card h3 { font-size: 18px; color: #0f1e33; margin: 0 0 12px 0; font-weight: 700; padding-bottom: 8px; border-bottom: 2px solid #c9d6f3; }
+
+/* ========== 图表组件（通用） ========== */
+.chart-row { display: flex; gap: 8px; align-items: flex-end; height: 96px; margin: 0 0 10px 0; }
+.chart-row .bar { flex: 1; border-radius: 4px 4px 0 0; min-height: 4px; background: linear-gradient(180deg, #3b82f6, #e8f0fe); }
+.chart-labels { display: flex; gap: 8px; margin-top: 2px; }
+.chart-labels span { flex: 1; text-align: center; font-size: 11px; color: #5b6b80; }
+.stat-inline { display: flex; gap: 20px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #dbe4ef; }
+.stat-inline .item .v { font-size: 20px; font-weight: 800; color: #0f1e33; }
+.stat-inline .item .l { font-size: 11px; color: #5b6b80; margin-top: 2px; }
+
+/* ========== 表格 ========== */
+.table-wrap { background: #ffffff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); overflow: hidden; margin: 0 0 16px 0; }
+.table-caption { padding: 14px 16px; background: linear-gradient(135deg, #c9d6f3, #e8f0fe); color: #0f1e33; font-size: 14px; font-weight: 600; text-align: center; border-bottom: 1px solid #dbe4ef; }
+table.table { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
+table.table thead th { padding: 12px 16px; text-align: left; background: #c9d6f3; color: #0f1e33; font-weight: 700; border-bottom: 2px solid #dbe4ef; word-break: break-word; }
+table.table tbody td { padding: 12px 16px; border-bottom: 1px solid #dbe4ef; color: #1f2d3d; word-break: break-word; }
+table.table tbody tr:last-child td { border-bottom: none; }
+.pill { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.pill-ok { background: #E8F5E9; color: #2E7D32; }
+.pill-info { background: #E3F2FD; color: #1565C0; }
+.pill-warn { background: #FFF3E0; color: #E65100; }
+
+/* ========== callout ========== */
+.callout { margin: 0 0 16px 0; padding: 16px 24px; border-radius: 8px; }
+.callout p { font-size: 15px; color: #1f2d3d; margin: 0; line-height: 1.8; }
+.callout[data-variant="tip"] { background: #E8F5E9; border-left: 4px solid #2E7D32; }
+.callout[data-variant="warning"] { background: #FFF3E0; border-left: 4px solid #E65100; }
+.callout[data-variant="quote"] { background: #eef5ff; border-left: 4px solid #3b82f6; }
+
+/* ========== 列表 ========== */
+ul.list { padding-left: 24px; line-height: 1.8; color: #1f2d3d; margin: 0 0 16px 0; }
+ol.list { padding-left: 24px; line-height: 1.8; color: #1f2d3d; margin: 0 0 16px 0; }
+
+/* ========== 响应式 ========== */
+@media screen and (max-width: 600px) {
+  body { padding: 16px !important; }
+  h1 { font-size: 22px !important; }
+  h2 { font-size: 18px !important; }
+  .stat-grid { flex-direction: column; }
+}
+
+/* ========== 打印优化 ========== */
+@media print {
+  body { padding: 0 !important; margin: 0 !important; background: #f4f7fb; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body::before { display: none; }
+  .title { border-radius: 0; box-shadow: none; }
+  .stat, .card, .table-wrap { box-shadow: none; border: 1px solid #dbe4ef; }
+  section { break-inside: auto !important; }
+}
+</style>
+</head>
+<body class="mode-dashboard" data-palette="ink-blue">
+
+  <!-- ===== 封面 ===== -->
+  <section class="title">
+    <h1>小满 Xiaoman · 验收与交付报告</h1>
+    <div class="accent-line"></div>
+    <p>对话优先的个人理财智能体 —— Agent 路线图 P0 / P1 / P2 全部落地验收<br>本地运行 × 云端能力 · 数据 100% 本地 · 多智能体编排 · 确定性内核</p>
+  </section>
+
+  <!-- ===== 验收结论 ===== -->
+  <aside class="callout" data-variant="tip">
+    <p><strong>验收结论：通过，可交付。</strong>本报告涵盖 Agent 路线图 P0/P1/P2 全部功能的实现验收、自动化测试与覆盖率、质量安全审计、真实 AI 模型端到端联调、压力测试及演示素材。后端 <strong>269 项测试全绿</strong>、总体覆盖率 <strong>77%</strong>（核心模块 90%+），前端生产构建通过。</p>
+  </aside>
+
+  <!-- ===== 核心指标 ===== -->
+  <div class="stat-grid" data-cols="4">
+    <div class="stat"><div class="num">269</div><div class="label">后端测试通过（42.8s 全量）</div></div>
+    <div class="stat"><div class="num">77%</div><div class="label">总体行覆盖率</div></div>
+    <div class="stat"><div class="num">90%+</div><div class="label">核心模块覆盖率</div></div>
+    <div class="stat"><div class="num">12.1s</div><div class="label">前端生产构建通过</div></div>
+  </div>
+
+  <!-- ===== 一、验收范围 ===== -->
+  <h1 class="heading">一、交付物与验收范围</h1>
+  <div class="card">
+    <h3>本次交付范围</h3>
+    <ul class="list">
+      <li><strong>对话中枢</strong>：记账 / 查行情 / 加自选 / 买卖持仓 / 晨报 / 体检 / 加密备份 / 改设置，一句话完成</li>
+      <li><strong>Agent 智能体</strong>：LangGraph 多智能体编排，supervisor 分类 → 专门节点 → 确定性内核</li>
+      <li><strong>Agent 路线 P0/P1/P2</strong>：长会话摘要压缩、记忆分层、经验库反思、主动遗忘、审计日志、MCP 客户端、附件上传问答</li>
+      <li><strong>确定性内核</strong>：所有金额 / 盈亏 / 风控指标由 analysis.py 统一计算，AI 只做分类与成文</li>
+      <li><strong>隐私安全</strong>：数据 100% 本地 SQLite；加密备份（PBKDF2 + Fernet）；agent 运行时仅暴露只读工具</li>
+    </ul>
+  </div>
+
+  <!-- ===== 二、Agent 能力地图 ===== -->
+  <h1 class="heading">二、Agent 能力地图（P0 / P1 / P2）</h1>
+  <div class="table-wrap">
+    <div class="table-caption">Agent 路线图能力实现状态</div>
+    <table class="table" data-caption="Agent 路线图能力实现状态">
+      <colgroup>
+        <col style="width:9%;"><col style="width:34%;"><col style="width:46%;"><col style="width:11%;">
+      </colgroup>
+      <thead>
+        <tr><th>阶段</th><th>能力</th><th>说明</th><th>状态</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>P0</td><td>长会话摘要压缩</td><td>上下文超限时摘要压缩历史，保持多轮对话连续性</td><td><span class="pill pill-ok">已落地</span></td></tr>
+        <tr><td>P0</td><td>模型点亮 / 可用性探测</td><td>运行时可探测模型端点可用性，失败自动降级确定性路径</td><td><span class="pill pill-ok">已落地</span></td></tr>
+        <tr><td>P1</td><td>记忆分层</td><td>会话 / 长期 / 经验 三层记忆分离，按需检索</td><td><span class="pill pill-ok">已落地</span></td></tr>
+        <tr><td>P1</td><td>语义检索</td><td>记忆检索（BM25 关键词，无 embedding Key 的确定性降级，可无缝升级向量检索）</td><td><span class="pill pill-ok">已落地</span></td></tr>
+        <tr><td>P1</td><td>经验库反思</td><td>对话中沉淀经验，问答自动参考</td><td><span class="pill pill-ok">已落地</span></td></tr>
+        <tr><td>P1</td><td>主动遗忘</td><td>长期记忆过期衰减 / 手动清理</td><td><span class="pill pill-ok">已落地</span></td></tr>
+        <tr><td>P2</td><td>审计日志</td><td>记录工具调用与数据变更，审计界面可查</td><td><span class="pill pill-ok">已落地</span></td></tr>
+        <tr><td>P2</td><td>多 Agent 编排</td><td>supervisor 分类 → 财务 / 通用 / 记忆 多节点条件路由</td><td><span class="pill pill-ok">已落地</span></td></tr>
+        <tr><td>P2</td><td>MCP 客户端</td><td>接入外部工具协议，可配置扩展</td><td><span class="pill pill-ok">已落地</span></td></tr>
+        <tr><td>P2</td><td>附件上传问答</td><td>文本 / CSV / PDF 附件提取后拼入上下文，AI 问答引用</td><td><span class="pill pill-ok">已落地</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===== 三、自动化测试 ===== -->
+  <h1 class="heading">三、自动化测试验收</h1>
+  <div class="card">
+    <h3>后端测试与覆盖率（本轮实测）</h3>
+    <div class="chart-row">
+      <div class="bar" style="height:97%;"></div>
+      <div class="bar" style="height:91%;"></div>
+      <div class="bar" style="height:90%;"></div>
+      <div class="bar" style="height:94%;"></div>
+      <div class="bar" style="height:87%;"></div>
+      <div class="bar" style="height:85%;"></div>
+      <div class="bar" style="height:80%;"></div>
+      <div class="bar" style="height:76%;"></div>
+      <div class="bar" style="height:75%;"></div>
+      <div class="bar" style="height:74%;"></div>
+    </div>
+    <div class="chart-labels">
+      <span>agent_graph</span><span>service</span><span>analysis</span><span>scheduler</span><span>csvimport</span><span>backup</span><span>nlparse</span><span>mcp_client</span><span>db</span><span>quotes</span>
+    </div>
+    <div class="stat-inline">
+      <div class="item"><div class="v">97%</div><div class="l">编排图</div></div>
+      <div class="item"><div class="v">91%</div><div class="l">问答服务</div></div>
+      <div class="item"><div class="v">90%</div><div class="l">分析内核</div></div>
+      <div class="item"><div class="v">75%</div><div class="l">数据层</div></div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <div class="table-caption">测试规模与执行结果</div>
+    <table class="table" data-caption="测试规模与执行结果">
+      <colgroup><col style="width:34%;"><col style="width:20%;"><col style="width:46%;"></colgroup>
+      <thead><tr><th>项</th><th>结果</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>后端 pytest 全量</td><td><span class="pill pill-ok">269 通过</span></td><td>42.8s 完成；此前 5–6 分钟，稳定化后显著提速</td></tr>
+        <tr><td>前端构建</td><td><span class="pill pill-ok">通过</span></td><td>tsc + vite build 12.1s；自动 bump SW 缓存版本</td></tr>
+        <tr><td>测试稳定化</td><td><span class="pill pill-ok">通过</span></td><td>conftest 注入 `_no_real_llm`，未显式 mock 的测试默认走确定性路径、不触网</td></tr>
+        <tr><td>降级路径覆盖</td><td><span class="pill pill-ok">通过</span></td><td>已接入模型但工具循环失败的降级场景亦有专门用例</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===== 四、质量与安全审计 ===== -->
+  <h1 class="heading">四、质量与安全审计</h1>
+  <div class="table-wrap">
+    <div class="table-caption">查漏补缺审计发现与修复</div>
+    <table class="table" data-caption="查漏补缺审计发现与修复">
+      <colgroup><col style="width:36%;"><col style="width:30%;"><col style="width:34%;"></colgroup>
+      <thead><tr><th>问题</th><th>风险</th><th>修复</th></tr></thead>
+      <tbody>
+        <tr><td>report.py HTML 注入</td><td>XSS / 展示异常</td><td>输出转义，杜绝注入</td></tr>
+        <tr><td>kb_remove 路径穿越</td><td>越权访问文件</td><td>校验路径，阻止穿越</td></tr>
+        <tr><td>codeindex 索引键错位</td><td>检索结果错乱</td><td>修正索引映射</td></tr>
+        <tr><td>空库降级误报「总市值 0 元」</td><td>新用户被劝退</td><td>降级前重判 has_data，空库走「还没有录入」引导</td></tr>
+        <tr><td>agent 越权写库</td><td>模型误改数据</td><td>只暴露读类工具 + 设置白名单</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===== 五、真实环境联调 ===== -->
+  <h1 class="heading">五、真实环境联调与压力测试</h1>
+  <div class="card">
+    <h3>真实 AI 模型端到端联调（agnes-3.0-flash）</h3>
+    <ul class="list">
+      <li>通用问答、财务多 Agent 工具链（search → quote → add_watchlist → record_position）</li>
+      <li>财务体检、一句话记账、长对话记忆回传、附件上传问答</li>
+      <li>失败自动降级确定性路径，服务不中断、不冒充模型结果</li>
+    </ul>
+  </div>
+  <div class="table-wrap">
+    <div class="table-caption">压力与健壮性测试</div>
+    <table class="table" data-caption="压力与健壮性测试">
+      <colgroup><col style="width:44%;"><col style="width:18%;"><col style="width:38%;"></colgroup>
+      <thead><tr><th>场景</th><th>结果</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>20 并发写入</td><td><span class="pill pill-ok">通过</span></td><td>无串写 / 无异常，SQLite 事务正确</td></tr>
+        <tr><td>15 并发混合读写</td><td><span class="pill pill-ok">通过</span></td><td>读路径与写路径互不阻塞</td></tr>
+        <tr><td>极端 / 恶意输入</td><td><span class="pill pill-ok">全 422 拦截</span></td><td>参数校验完备，不进入业务逻辑</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===== 六、演示素材 ===== -->
+  <h1 class="heading">六、演示素材</h1>
+  <div class="table-wrap">
+    <div class="table-caption">docs/demo/ 演示素材清单</div>
+    <table class="table" data-caption="docs/demo/ 演示素材清单">
+      <colgroup><col style="width:52%;"><col style="width:48%;"></colgroup>
+      <thead><tr><th>素材</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td>xiaoman-01…07.png（7 张截图）</td><td>首页 / AI 对话 / 审计 / AI 设置 / 记忆经验 / 总览 / 体检</td></tr>
+        <tr><td>xiaoman-ai-demo-20261004.mp4</td><td>真实 AI 联调录屏</td></tr>
+        <tr><td>xiaoman-features-20261004.mp4</td><td>功能特性录屏</td></tr>
+        <tr><td>xiaoman-demo.gif / .mp4</td><td>总览 → 资产 → 问答 → 主动建议动图</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===== 七、诚实边界与建议 ===== -->
+  <h1 class="heading">七、诚实边界与后续建议</h1>
+  <aside class="callout" data-variant="warning">
+    <p><strong>本地沙箱可验证边界已全量覆盖，以下需真实生产环境进一步评估（超出本地能力）：</strong></p>
+  </aside>
+  <ul class="list">
+    <li><strong>真实生产部署</strong>：多实例 / 反向代理 / 容器编排下的实际行为</li>
+    <li><strong>多用户并发基准</strong>：面向真实多用户场景的并发承载与延迟基线</li>
+    <li><strong>高数据量</strong>：数万条流水规模下的查询与渲染性能</li>
+    <li><strong>安全渗透测试</strong>：由专业团队对鉴权 / 上传 / 注入做系统化渗透验证</li>
+    <li><strong>国产模型 Key</strong>：AI 问答由用户自行在设置页配置，本报告联调基于 agnes-3.0-flash 验证通过</li>
+  </ul>
+
+  <!-- ===== 尾页 ===== -->
+  <section class="title end_page">
+    <h1>验收完成 · 可交付</h1>
+    <div class="accent-line"></div>
+    <p>Agent P0 / P1 / P2 全部落地 · 269 项测试全绿 · 覆盖 77%（核心 90%+）· 真实模型联调通过<br>2026-10-04</p>
+  </section>
+
+</body>
+</html>

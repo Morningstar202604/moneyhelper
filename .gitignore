@@ -1,0 +1,27 @@
+# 依赖与产物
+backend/.venv/
+backend/__pycache__/
+**/__pycache__/
+frontend/node_modules/
+frontend/dist/
+# 密钥（模型端点凭据）
+backend/.env
+.aqg/
+
+# 运行时数据（含个人持仓/审计链；seed 在代码里重建）
+backend/data/
+# 运行日志
+backend/server*.log
+backend/logs/
+# 临时/后台任务产物
+.temp/
+backend/.temp/
+# 覆盖率产物
+.coverage
+backend/.coverage
+# 构建/缓存
+frontend/*.tsbuildinfo
+.pytest_cache/
+.ruff_cache/
+
+# 对话触发/手动生成的加密备份包（在 data 卷内，随 backend/data/ 一并忽略）

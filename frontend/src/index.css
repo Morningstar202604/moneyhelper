@@ -1,0 +1,268 @@
+@import "tailwindcss";
+
+/* 类名切换暗色（App/theme.tsx 在 <html> 上切换 .dark） */
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Tailwind v4：语义令牌映射。
+ * inline = 保留 var() 引用，运行时 CSS 变量变化（.dark / [data-brand] 品牌切换）即时生效。
+ * 与旧 tailwind.config.js 的 theme.extend 一一对应，视觉零变化。
+ */
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-brand: hsl(var(--brand));
+  --color-brand-gold: hsl(var(--brand-gold));
+  --color-up: #dc2626;   /* 涨/盈 = 红（中国市场惯例） */
+  --color-down: #059669; /* 跌/亏 = 绿 */
+  --color-success: #059669; /* 状态语义（达标/完成/健康），与涨跌色分离 */
+  --color-danger: #dc2626;
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Consolas, monospace;
+
+  --shadow-soft: 0 1px 2px rgb(16 42 67 / 0.05), 0 6px 20px -6px rgb(16 42 67 / 0.10);
+  --shadow-lift: 0 2px 4px rgb(16 42 67 / 0.06), 0 12px 32px -8px rgb(16 42 67 / 0.14);
+
+  --animate-fade-in: fade-in 0.35s ease-out both;
+  --animate-pulse-ring: pulse-ring 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* 涨跌颜色主题（设置中心可自定义）：cn 红涨绿跌（A股惯例，默认）；us 绿涨红跌（海外惯例）。
+   @theme inline 保留 var() 引用，此覆盖即时作用于全部 text-up/text-down 等涨跌色类。 */
+:root[data-scheme="us"] {
+  --color-up: #059669;
+  --color-down: #dc2626;
+}
+
+@layer base {
+  :root {
+    /* 语义令牌：ChatGPT 式中性灰底 + 单一墨绿主色（小满节气的青绿色）。
+       告别米黄/橙双色混搭，回到干净的对话工具感。 */
+    --background: 0 0% 97.6%;      /* #f7f7f8 */
+    --foreground: 0 0% 13%;        /* #212121 */
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 13%;
+
+    --primary: 168 76% 24%;         /* 墨绿 teal-800 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 20%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 168 40% 95%;
+    --accent-foreground: 168 76% 20%;
+
+    --border: 0 0% 90%;
+    --input: 0 0% 88%;
+    --ring: 168 76% 35%;
+
+    --radius: 0.75rem;
+    --card-pad: 1rem;
+
+    --brand: 168 76% 24%;
+    --brand-gold: 168 76% 35%;
+  }
+
+  .dark {
+    /* 暗色：ChatGPT 式中性深灰（#171717 底，#212121 卡片） */
+    --background: 0 0% 9%;
+    --foreground: 0 0% 92%;
+
+    --card: 0 0% 13%;
+    --card-foreground: 0 0% 92%;
+
+    --primary: 168 70% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 17%;
+    --secondary-foreground: 0 0% 90%;
+
+    --muted: 0 0% 17%;
+    --muted-foreground: 0 0% 55%;
+
+    --accent: 168 30% 20%;
+    --accent-foreground: 168 70% 70%;
+
+    --border: 0 0% 22%;
+    --input: 0 0% 22%;
+    --ring: 168 70% 45%;
+
+    --brand: 168 70% 50%;
+    --brand-gold: 168 70% 60%;
+  }
+  /* 边框默认色 = --border（v3 行为；v4 裸 border 宽度工具默认 currentColor，这里显式兜底） */
+  * {
+    border-color: hsl(var(--border));
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  /* 系统级「减弱动效」：替代已砍的手动动效开关 */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
+}
+
+@layer components {
+  .glass {
+    background: hsl(var(--card) / 0.82);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .card-surface {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+  }
+}
+
+@layer utilities {
+  .scroll-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--border) / 0.7);
+    border-radius: 9999px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.4);
+  }
+  .scroll-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border) / 0.7) transparent;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* 骨架屏 */
+  .skeleton {
+    @apply bg-muted;
+    border-radius: calc(var(--radius) - 2px);
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, hsl(var(--card) / 0.6), transparent);
+    animation: shimmer 1.6s infinite;
+  }
+
+  /* 数字滚动淡入 */
+  .num-in {
+    animation: num-in 0.5s ease-out both;
+  }
+
+  /* 页面切换淡入（配合 motion 开关） */
+  .view-enter {
+    animation: fade-in 0.28s ease-out both;
+  }
+}
+
+/* 动画关键帧（独立定义，任何 raw animation 引用都能生效） */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 8px hsl(var(--primary) / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes num-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 流式生成末尾的光标：对标 ChatGPT/Claude 的输入态提示 */
+.stream-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: currentColor;
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* 历史跳转定位高亮：短暂的边缘光圈提示用户“就是这一条” */
+@keyframes locate-flash {
+  0% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.35); }
+  60% { box-shadow: 0 0 0 6px hsl(var(--primary) / 0.15); }
+  100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0); }
+}
+[data-run-id].locate-flash {
+  border-radius: 12px;
+  animation: locate-flash 1.6s ease-out;
+}

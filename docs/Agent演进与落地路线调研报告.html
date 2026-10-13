@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Agent 演进与落地路线调研报告（2024–2026）</title>
+<style>
+  :root{
+    --primary:#0f1e33; --accent:#3b82f6; --bg:#f4f7fb; --bg_deep:#e6edf6;
+    --card:#ffffff; --text:#1f2d3d; --text2:#5b6b80; --border:#dbe4ef;
+    --pLight:#c9d6f3; --aLight:#e8f0fe; --pDark:#0a1626; --aDark:#2563eb;
+    --aBg:#eef5ff; --grad1:#1e3a5f; --grad2:#4f8ef7; --ok:#16a34a; --warn:#d97706;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);line-height:1.8;font-size:15px;}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 28px 80px;}
+  .title{background:linear-gradient(135deg,var(--grad1) 0%,var(--grad2) 100%);color:#fff;border-radius:16px;padding:56px 40px;text-align:center;margin-bottom:32px;}
+  .title h1{font-size:30px;font-weight:800;margin-bottom:10px;}
+  .title p{font-size:14px;opacity:.9;}
+  .title .meta{margin-top:14px;font-size:12px;opacity:.85;letter-spacing:1px;}
+  .stat-grid{display:flex;gap:14px;flex-wrap:wrap;margin:0 0 24px;}
+  .stat{flex:1;min-width:150px;background:var(--card);border-radius:12px;padding:20px 18px;text-align:center;box-shadow:0 2px 10px rgba(15,30,51,.06);border:1px solid var(--border);}
+  .stat .n{font-size:30px;font-weight:800;color:var(--accent);}
+  .stat .l{font-size:12px;color:var(--text2);margin-top:4px;}
+  h1.heading{font-size:24px;color:var(--primary);border-left:4px solid var(--accent);padding-left:14px;margin:34px 0 16px;}
+  h2.heading{font-size:19px;color:var(--primary);margin:24px 0 12px;}
+  h3.heading{font-size:16px;color:var(--aDark);margin:16px 0 8px;}
+  .paragraph{font-size:15px;color:var(--text);margin-bottom:12px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:16px;box-shadow:0 2px 10px rgba(15,30,51,.05);}
+  .card h3{font-size:16px;color:var(--primary);margin-bottom:8px;}
+  table.table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px;background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  table.table th{background:var(--bg_deep);color:var(--primary);padding:9px 10px;text-align:left;font-weight:600;border-bottom:2px solid var(--border);}
+  table.table td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--text);}
+  table.table tr:last-child td{border-bottom:none;}
+  ol.timeline{list-style:none;padding-left:0;margin:12px 0;}
+  ol.timeline li{border-left:2px solid var(--aLight);padding:2px 0 14px 20px;margin-left:6px;position:relative;}
+  ol.timeline li::before{content:"";position:absolute;left:-6px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--accent);}
+  ol.timeline li b{color:var(--aDark);display:block;font-size:14px;}
+  ol.timeline li span{font-size:12px;color:var(--text2);display:block;}
+  ol.timeline li p{font-size:13.5px;color:var(--text);margin-top:2px;}
+  aside.callout{background:var(--aLight);border-left:4px solid var(--accent);padding:12px 16px;border-radius:8px;margin:14px 0;font-size:14px;}
+  aside.callout[data-variant="warning"]{background:#fff7ed;border-left-color:var(--warn);}
+  aside.callout[data-variant="tip"]{background:#f0fdf4;border-left-color:var(--ok);}
+  ul.list{padding-left:22px;margin:8px 0;}
+  ul.list li{margin-bottom:6px;font-size:14.5px;}
+  .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;}
+  .pill.p0{background:#dcfce7;color:#166534;}
+  .pill.p1{background:#fef9c3;color:#854d0e;}
+  .pill.p2{background:#dbeafe;color:#1e40af;}
+  .src-id{color:var(--accent);font-weight:600;}
+  .cite{font-size:11px;vertical-align:super;color:var(--accent);text-decoration:none;margin:0 1px;}
+  a{color:var(--aDark);}
+  .source-list ol{font-size:12.5px;color:var(--text2);padding-left:20px;}
+  .source-list li{margin-bottom:5px;}
+  .grid2{display:flex;gap:14px;flex-wrap:wrap;}
+  .grid2 .card{flex:1;min-width:280px;}
+  .end_page{background:linear-gradient(135deg,var(--primary) 0%,var(--grad2) 100%);color:#fff;border-radius:16px;padding:44px 32px;text-align:center;margin-top:36px;}
+  .end_page h1{font-size:24px;font-weight:800;margin-bottom:8px;}
+  .end_page p{font-size:14px;opacity:.9;}
+  .tag{display:inline-block;background:var(--aBg);color:var(--aDark);border:1px solid var(--aLight);padding:2px 9px;border-radius:6px;font-size:12px;margin:2px 3px 2px 0;}
+  @media (max-width:680px){.stat-grid{flex-direction:column}.stat{min-width:100%}}
+</style>
+</head>
+<body class="mode-doc" data-palette="ink-blue">
+<div class="wrap">
+
+<section class="title">
+  <h1>AI Agent 演进与落地路线调研报告</h1>
+  <p>2024–2026 大模型智能体：问题清单 · 关键论文 · 大厂方案 · 小满落地路线图</p>
+  <div class="meta">调研时间：2026-10 · 聚焦记忆 / 上下文压缩 / 多轮任务 / 编码与长程能力 / 模型选型</div>
+</section>
+
+<div class="stat-grid">
+  <div class="stat"><div class="n">89%</div><div class="l">企业级 Agent 在 50 轮以上或跨周任务出现信息遗忘<a class="cite" href="#source-1">[1]</a></div></div>
+  <div class="stat"><div class="n">78%</div><div class="l">Agent 多步推理因上下文丢失失败率超 40%<a class="cite" href="#source-2">[2]</a></div></div>
+  <div class="stat"><div class="n">80%</div><div class="l">OpenAI 内部 AI 生成代码占比（2026）<a class="cite" href="#source-4">[4]</a></div></div>
+  <div class="stat"><div class="n">75%</div><div class="l">谷歌内部 AI 生成代码占比<a class="cite" href="#source-5">[5]</a></div></div>
+</div>
+
+<h1 class="heading" data-level="1">一、执行摘要</h1>
+<p class="paragraph">2024 年被称为大模型的“奇迹之年”，2025 年则被业界公认为 AI Agent 的“工程落地元年”，到 2026 年，Agent 已从“被动问答”转向“主动干活”，并开始接管企业级长周期任务与代码生产<a class="cite" href="#source-9">[9]</a>。然而，行业在规模化落地中反复踩中同一个核心痛点——<b>连续性</b>：上一轮谈过什么、偏好和边界是否继承、任务推进到哪一步能否复盘。多轮对话超长、跨周任务、工具调用链越长，模型越容易“失忆”、指令遵循退化、推理成本指数上升<a class="cite" href="#source-1">[1]</a>。</p>
+<p class="paragraph">本报告系统梳理 2024–2026 年 Agent 的演进时间线与高频问题（按阶段归类），罗列业界关键论文与处理方案，汇总 OpenAI、Anthropic、Google、字节/DeepSeek、腾讯等大厂实践，并给出面向小满（对话优先个人理财智能体）的<strong>模型选型建议</strong>与<strong>分层落地路线图</strong>，重点补齐记忆、上下文压缩、长程任务与安全治理能力。</p>
+
+<h1 class="heading" data-level="1">二、Agent 演进时间线（2024–2026）与阶段性问题</h1>
+<p class="paragraph">按时间轴梳理关键节点与每阶段暴露的问题，问题类型用标签标注（<span class="tag">上下文</span><span class="tag">记忆</span><span class="tag">规划</span><span class="tag">工具</span><span class="tag">成本</span><span class="tag">安全</span>）。</p>
+<ol class="timeline">
+  <li><b>2023 · 奠基（背景）</b><span>ReAct（推理+行动）、Generative Agents（记忆/反思小镇模拟）、AutoGPT/BabyAGI、MemGPT（OS 分页式记忆）</span><p>问题：单步推理可但长程无记忆、规划漂移。</p></li>
+  <li><b>2024H1 · 框架爆发</b><span>Reflexion（语言自反思）、DSPy（编程化 prompt）、AutoGen/MetaGPT/AgentScope 多智能体、检索增强 RAG 普及</span><p>问题：<span class="tag">记忆</span>会话隔离、<span class="tag">工具</span> 调用不可靠、<span class="tag">规划</span> 长任务漂移。</p></li>
+  <li><b>2024H2 · 推理拐点</span><span>2024-09 o1 发布，OpenAI 推出 o1/o3 系列、Agent 开始具备“深思熟虑”</span><p>问题：<span class="tag">成本</span> 长链思考 token 成本飙升、<span class="tag">上下文</span> 窗口仍是硬约束。</p></li>
+  <li><b>2024-11 · 协议标准开启</span><span>Anthropic 发布 MCP（Model Context Protocol），统一“模型↔工具/数据”接口，被誉为“Agent 界的 USB-C”<a class="cite" href="#source-3">[3]</a></span><p>问题：<span class="tag">工具</span> 接口碎片化。</p></li>
+  <li><b>2025 · Agent 元年 / 编码 Agent 爆发</span><span>Claude Code、OpenAI Codex、Cursor 等编码 Agent 成熟；推理模型成标配；MCP 成为工具层事实标准（开源 1 万+ Server，SDK 月下载近 1 亿次）<a class="cite" href="#source-3">[3]</a>；A2A/SCP 协议补充</span><p>问题：<span class="tag">记忆</span> 长会话/跨任务遗忘（上下文流失）、<span class="tag">成本</span> 长上下文昂贵、<span class="tag">安全</span> 权限与审计。</p></li>
+  <li><b>2025-12 · 记忆转向“记忆资产”</span><span>业界共识从“堆窗口”转向“独立 Memory 层 / 认知架构”，Agent 护城河从工具转向记忆资产<a class="cite" href="#source-10">[10]</a></span><p>问题：<span class="tag">记忆</span> 记忆缺失成为交付卡点。</p></li>
+  <li><b>2026 · 长上下文标配与反思</span><span>百万 Token 窗口成标配，但“长上下文即万能”迷思被打破；<strong>结构化记忆工程</strong>、分层存储、语义索引、主动遗忘成为主流；多 Agent 产品化（OpenAI DevDay 2026 Dots）；金融 Agent 密集落地（Anthropic 金融模板、Google Gemini 金融版、腾讯 WorkBuddy 金融版）<a class="cite" href="#source-9">[9]</a></span><p>问题：<span class="tag">上下文</span> 注意力稀释/大海捞针失效、<span class="tag">记忆</span> 高保真召回、<span class="tag">安全</span> 金融级准入/审计/熔断。</p></li>
+</ol>
+
+<aside class="callout" data-variant="warning">结论：业界已从“无限堆 Token”转向“上下文工程 + 结构化记忆”，关键是让 Agent 记住、找准、忘得掉——这正是小满需要补的核心能力。</aside>
+
+<h1 class="heading" data-level="1">三、关键论文与解决方案</h1>
+<p class="paragraph">按“问题域 → 代表工作 → 处理思路”归纳（覆盖记忆、上下文、规划、工具、评测）。</p>
+<table class="table" data-caption="Agent 关键论文与处理方案">
+  <thead><tr><th style="width:16%">问题域</th><th style="width:26%">代表论文 / 工作</th><th style="width:34%">核心思路</th><th style="width:24%">解决的痛点</th></tr></thead>
+  <tbody>
+    <tr><td>记忆分层</td><td>Generative Agents（2023）、Agent 记忆综述（Atkinson-Shiffrin 五类记忆）<a class="cite" href="#source-8">[8]</a></td><td>感知/工作/情景/语义/程序 五类记忆分层，各司其职</td><td>记忆缺失、长期连续性</td></tr>
+    <tr><td>上下文寻址</td><td>MemGPT（2023，OS 分页记忆）、RAPTOR（2024 多层摘要树）、MemoRAG<a class="cite" href="#source-11">[11]</a></td><td>context=主存、向量库=磁盘，自动 page in/out；检索增强长上下文</td><td>上下文有限、大海捞针失败</td></tr>
+    <tr><td>上下文工程</td><td>LangChain/LangGraph：write/select/compress/isolate 四策略<a class="cite" href="#source-7">[7]</a></td><td>把上下文当第一等工程对象：写入、选择、压缩、隔离</td><td>上下文污染、信号衰减</td></tr>
+    <tr><td>自我修正</td><td>Reflexion（2023）</td><td>用语言反馈自我反思、在记忆里保留失败教训</td><td>重复踩坑、长程规划漂移</td></tr>
+    <tr><td>规划与执行</td><td>ReAct、Tree-of-Thoughts、DSPy、AutoGen/MetaGPT</td><td>推理-行动交替、多智能体协作、可编程 prompt</td><td>规划不稳、单一 Agent 能力边界</td></tr>
+    <tr><td>遗忘策略</td><td>记忆综述-主动遗忘 / 衰减策略<a class="cite" href="#source-8">[8]</a></td><td>分层存储 + 语义索引 + 主动遗忘（“忘得掉”）</td><td>记忆污染、过期信息误导</td></tr>
+    <tr><td>长程上下文评估</td><td>Gartner 调研 / NeurIPS 评测<a class="cite" href="#source-1">[1]</a><a class="cite" href="#source-2">[2]</a></td><td>50 轮 / 跨周任务测评、多步推理失败率监控</td><td>“看似能跑，实则遗忘”</td></tr>
+  </tbody>
+</table>
+
+<h1 class="heading" data-level="1">四、大厂与主流方案盘点</h1>
+<div class="grid_page">
+  <div class="card"><h3>OpenAI</h3><p>推理模型 o1/o3；<strong>Agents SDK</strong>（多智能体协作）；Agent 模式浏览器；DevDay 2026 多 Agent（Dots）产品化<a class="cite" href="#source-4">[4]</a>；金融版 ChatGPT。</p></div>
+  <div class="card"><h3>Anthropic</h3><p><strong>MCP</strong>（工具标准，2025-12 捐赠 Linux 基金会）<a class="cite" href="#source-3">[3]</a>；Claude Code 编码 Agent；金融 Agent 模板；Claude in Chrome 跨页执行。</p></div>
+  <div class="card"><h3>Google / 阿里 / 字节</h3><p>Gemini 金融版；阿里“企业上下文 + 数字员工 + QwenNote”；豆包 1.8 增强 Agent 支持与 OS Agent；千问接入多家券商。</p></div>
+  <div class="card"><h3>DeepSeek</h3><p>V4 开源、原生 1M 上下文、三档思考；代码与数学推理强、推理成本低<a class="cite" href="#source-6">[6]</a>；适配国产芯片。</p></div>
+  <div class="card"><h3>开源框架</h3><p>LangGraph（上下文工程/记忆），AutoGen、CrewAI 多智能体；<strong>Pi</strong> 极简 harness（只给 bash 反而赢）启示：工具宜少而精、保持 agent 简单可控。</p></div>
+  <div class="card"><h3>Agent 安全治理</h3><p>NVIDIA 开放智能体安全平台：Agent 持续运行、调外部 API、动态行动链 → 需要权限划分、操作审计、熔断机制。</p></div>
+</div>
+
+<h1 class="heading" data-level="1">五、最近热门方案 / 共识</h1>
+<ul class="list">
+  <li><b>协议栈收敛</b>：MCP（Agent↔工具）、A2A（Agent↔Agent）、上下文协议，分层协议栈趋于收敛<a class="cite" href="#source-12">[12]</a>。</li>
+  <li><b>从“复杂系统”到“合适的系统”</b>：行业共识转向“构建最合适的系统”，而非堆最复杂。</li>
+  <li><b>记忆资产化</b>：Agent 护城河 = 记忆资产 + 认知架构（分层存储/语义索引/主动遗忘）。<a class="cite" href="#source-10">[10]</a></li>
+  <li><b>编码 Agent 成熟</b>：Claude Code / Codex / Cursor 已成为生产级；用模型选型看重“编码 + 工具调用 + 长上下文”。</li>
+  <li><b>Agent 安全合规</b>：金融等高信任行业对 Agent 做准入、权限、审计与熔断的工业级标准。<a class="cite" href="#source-9">[9]</a></li>
+</ul>
+
+<h1 class="heading" data-level="1">六、小满现状 vs 业界已应用（未应用盘点）</h1>
+<table class="table" data-caption="小满已具备 vs 业界已应用但小满尚未覆盖">
+  <thead><tr><th style="width:30%">能力</th><th style="width:36%">业界主流做法</th><th style="width:34%">小满现状</th></tr></thead>
+  <tbody>
+    <tr><td>多轮上下文</td><td>上下文工程 write/select/compress/isolate；会话摘要压缩</td><td>✅ 每请求独立携带；❌ 无跨会话记忆、无长会话摘要压缩</td></tr>
+    <tr><td>长期记忆</td><td>分层记忆 + 语义索引 + 主动遗忘</td><td>❌ 有“长期记忆”入口，但仅关键词、无向量语义检索、无遗忘</td></tr>
+    <tr><td>反思 / 自我修正</td><td>Reflexion 语言自反思</td><td>❌ 未实现</td></tr>
+    <tr><td>工具标准化</td><td>MCP 统一接口</td><td>❌ 用自有工具，未接 MCP</td></tr>
+    <tr><td>多 Agent / 子 Agent</td><td>LangGraph 子图、子 Agent 分工</td><td>❌ 单 Agent（LangGraph 图）</td></tr>
+    <tr><td>模型选型</td><td>长上下文 + 编码 + 工具能力 + 成本</td><td>❌ 目前 .env 缺有效 key（用户自填）；默认 DeepSeek 兼容</td></tr>
+    <tr><td>安全 / 审计</td><td>准入、权限、审计、熔断</td><td>✅ 已有 HITL 写动作确认、API_TOKEN、日志门禁；❌ 无操作审计与熔断</td></tr>
+  </tbody>
+</table>
+
+<h1 class="heading" data-level="1">七、模型选型建议（兼顾长期能力与编码）</h1>
+<p class="paragraph">小满是金融数据分析 + 对话 Agent，需要<b>可靠工具调用、数学/数据分析、长上下文、成本可控</b>。综合业界对比，推荐优先级：</p>
+<ul class="list">
+  <li><b>主用 DeepSeek（推荐）</b>：开源、数学/代码强、1M 上下文、推理成本可控，适配国产环境<a class="cite" href="#source-6">[6]</a>。适合小满做报表/分析/编码辅助。</li>
+  <li><b>备选通义千问（qwen-plus）</b>：国产稳定、长文本好，接口兼容。</li>
+  <li><b>进阶 Claude / Gemini / GPT</b>：若预算充足且偏重复杂编码，可用官方或中转 API；但成本较高。</li>
+</ul>
+<aside class="callout" data-variant="tip">落地：小满在设置页已支持 OpenAI 兼容端点，用户填 key + base + model 即可切换；输入区也加了“模型快捷切换”下拉。给用户配好 DeepSeek key 即点亮。</aside>
+
+<h1 class="heading" data-level="1">八、小满落地路线图</h1>
+<h2 class="heading" data-level="2">P0 · 地基（立刻做）</h2>
+<p class="paragraph">① 模型点亮（用户填 key）+ ② 长会话摘要压缩（compress 策略）：当会话历史超过阈值，用 LLM 把旧轮次折叠成摘要，保持上下文健康、控制成本、防失忆。</p>
+<h2 class="heading" data-level="2">P1 · 记忆分层（近期）</h2>
+<p class="paragraph">③ 分层记忆：工作记忆（会话）＋长期记忆（已有关键词）→ 升级为向量语义检索（embedding）+ 主动遗忘；④ 反思：失败/低置信回答记入“经验库”，下次避免重复踩坑。</p>
+<h2 class="heading" data-level="2">P2 · 扩展（中期）</h2>
+<p class="paragraph">⑤ 工具标准化（可选接入 MCP）；⑥ 多智能体/子任务分工（复杂分析拆解）；⑦ 审计日志 + 熔断，对齐金融级治理。</p>
+
+<table class="table" data-caption="路线图（季度视图）">
+  <thead><tr><th style="width:22%">阶段</th><th style="width:14%">26Q4</th><th style="width:14%">27Q1</th><th style="width:14%">27Q2</th><th style="width:14%">27Q3</th><th style="width:22%">交付物</th></tr></thead>
+  <tbody>
+    <tr><td>P0 · 地基</td><td style="background:var(--aLight)">★★ 摘要压缩 + 模型点亮</td><td>—</td><td>—</td><td>—</td><td>长会话稳定可用</td></tr>
+    <tr><td>P1 · 集团</td><td>—</td><td style="background:var(--aLight)">★ 分层记忆(向量)</td><td style="background:var(--aLight)">★ 反思/遗忘</td><td>—</td><td>长期连续+可复盘</td></tr>
+    <tr><td>P2 · 扩展</td><td>—</td><td>—</td><td>—</td><td style="background:var(--aLight)">★ MCP/多Agent/审计</td><td>金融级治理</td></tr>
+  </tbody>
+</table>
+
+<aside class="callout" data-variant="warning">关键判断：小满当前最大缺口不在“再聪明一点”，而在<b>“记得住、接得上、忘得掉”</b>。优先补 P0（摘要压缩）与 P1（分层记忆），把长程任务做稳，再谈多 Agent 与 MCP 扩展。</aside>
+
+<div class="source-list">
+  <h1 class="heading">主要数据来源</h1>
+  <ol class="list">
+    <li id="source-1"><span class="src-id">[1]</span> Gartner 调研：约 89% 企业级 Agent 在对话超 50 轮或跨周任务出现信息遗忘、指令退化、成本飙升（引自腾讯云/技术综述，2026）。</li>
+    <li id="source-2"><span class="src-id">[2]</span> NeurIPS 研究：约 78% Agent 多步推理因上下文丢失失败率超 40%（腾讯云综述，2026）。</li>
+    <li id="source-3"><span class="src-id">[3]</span> Anthropic：2024-11 发布 MCP；2025-12 捐给 Linux 基金会，MCP Server 公开超 1 万个、SDK 月下载约 9700 万次。</li>
+    <li id="source-4"><span class="src-id">[4]</span> OpenAI：2026 AI Ascent 透露 AI 写代码比例从 2025-12 约 20% 增至约 80%；DevDay 2026 多 Agent 产品化（Dots）。</li>
+    <li id="source-5"><span class="src-id">[5]</span> 谷歌 CEO：内部 AI 生成代码比例从 2024 年约 25% 升至约 75%。</li>
+    <li id="source-6"><span class="src-id">[6]</span> DeepSeek：2026-04 开源 V4 系列，原生支持 1M 上下文与三档思考；DeepSeek 代码/数学推理强（CSDN/公开资料）。</li>
+    <li id="source-7"><span class="src-id">[7]</span> LangChain：Context Engineering——write/select/compress/isolate 四策略（LangGraph 设计）。</li>
+    <li id="source-8"><span class="src-id">[8]</span> Agent 记忆综述（Atkinson-Shiffrin 五类记忆）与“23 篇记忆典型论文”综述。</li>
+    <li id="source-9"><span class="src-id">[9]</span> 大厂 AI 办公/金融 Agent：OpenAI 金融版、Anthropic 金融模板、Google Gemini 金融版、腾讯 WorkBuddy 金融版等（公开报道）。</li>
+    <li id="source-10"><span class="src-id">[10]</span> “Agent 真正的护城河从工具转向记忆资产”公开评论（2026）。</li>
+    <li id="source-11"><span class="src-id">[11]</span> MemoRAG：GlobalMemory-Enhanced Retrieval Augmentation（2026）。</li>
+    <li id="source-12"><span class="src-id">[12]</span> 2026 AI Agent 框架现状与趋势：MCP 获事实标准，A2A 补齐互操作（阿里云天池，2026）。</li>
+  </ol>
+</div>
+
+<section class="title end_page">
+  <h1>让 Agent 记得住 · 接得上 · 忘得掉</h1>
+  <p>面向小满（本地智能理财 Agent）的演进路线：先地基（摘要压缩）→ 集团（分层记忆+反思）→ 扩展（MCP/多 Agent/审计）。</p>
+</section>
+
+</div>
+</body>
+</html>

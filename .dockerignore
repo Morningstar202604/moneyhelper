@@ -1,0 +1,17 @@
+# Docker 构建上下文排除（避免把本地依赖/数据/密钥打进镜像上下文）
+.git
+**/.venv
+**/node_modules
+**/dist
+**/__pycache__
+backend/data
+docs
+*.log
+
+# 密钥/本地配置：绝对不进镜像层（即使构建者本地有，也不 COPY）
+.env
+.env*
+.env.*.local
+backend/.env
+backend/.env*
+docker-compose.override.yml

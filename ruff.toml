@@ -1,0 +1,26 @@
+line-length = 88
+target-version = "py312"
+extend-exclude = [".venv", "backend/.venv", "node_modules", "dist", ".aqg"]
+
+[lint]
+select = [
+  "E",
+  "F",
+  "I",
+  "B",
+  "UP",
+  "SIM",
+  "RUF",
+]
+ignore = [
+  # 中文 docstring/日志串天然易超 88
+  "E501",
+  # 代码按审计习惯保留 `# noqa: BLE001`；BLE 未进 select，避免 RUF100 误杀
+  "RUF100",
+  "RUF001",
+  "RUF002",
+  "RUF003",
+  "SIM105",
+  "UP017",
+  "UP041",
+]

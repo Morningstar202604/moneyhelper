@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小满 Xiaoman · 对话优先的个人理财智能体</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold: #b8891f;
+  --gold-light: #d4a84b;
+  --gold-dark: #8b6914;
+  --bg: #0f0e0c;
+  --bg2: #1a1814;
+  --fg: #f0e6d0;
+  --fg-muted: #a89b82;
+  --accent: #e8a838;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Noto Serif SC', serif;
+  background: var(--bg);
+  color: var(--fg);
+  overflow-x: hidden;
+}
+
+/*Hero Section */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: radial-gradient(ellipse at center, rgba(184,137,31,0.08) 0%, transparent 70%),
+              var(--bg);
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 100px,
+    rgba(184,137,31,0.015) 100px,
+    rgba(184,137,31,0.015) 101px
+  );
+  animation: drift 60s linear infinite;
+}
+@keyframes drift {
+  to { transform: translate(100px, 100px); }
+}
+.hero-badge {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.3em;
+  color: var(--gold);
+  text-transform: uppercase;
+  margin-bottom: 2rem;
+  opacity: 0.8;
+}
+.hero-title {
+  font-size: clamp(3rem, 10vw, 8rem);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  text-align: center;
+  background: linear-gradient(135deg, var(--gold-light), var(--gold), var(--gold-dark));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 1.5rem;
+}
+.hero-subtitle {
+  font-size: clamp(1rem, 2.5vw, 1.5rem);
+  color: var(--fg-muted);
+  font-weight: 400;
+  text-align: center;
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.05em;
+}
+.hero-tagline {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--gold);
+  opacity: 0.6;
+  letter-spacing: 0.15em;
+  margin-bottom: 3rem;
+}
+.hero-stats {
+  display: flex;
+  gap: 3rem;
+  margin-top: 2rem;
+}
+.stat {
+  text-align: center;
+}
+.stat-num {
+  font-family: 'Space Mono', monospace;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--gold-light);
+}
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  letter-spacing: 0.1em;
+  margin-top: 0.25rem;
+}
+
+/* Section styling */
+.section {
+  padding: 6rem 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  position: relative;
+}
+.section-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.25em;
+  color: var(--gold);
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+.section-title {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  line-height: 1.2;
+}
+.section-body {
+  font-size: 1.1rem;
+  color: var(--fg-muted);
+  line-height: 1.8;
+  max-width: 600px;
+}
+
+/* Feature grid */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 3rem;
+}
+.feature-card {
+  background: var(--bg2);
+  border: 1px solid rgba(184,137,31,0.15);
+  border-radius: 12px;
+  padding: 2rem;
+  transition: all 0.4s ease;
+  position: relative;
+  overflow: hidden;
+}
+.feature-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.feature-card:hover {
+  border-color: rgba(184,137,31,0.4);
+  transform: translateY(-4px);
+}
+.feature-card:hover::before { opacity: 1; }
+.feature-icon {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+.feature-card h3 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: var(--fg);
+}
+.feature-card p {
+  font-size: 0.9rem;
+  color: var(--fg-muted);
+  line-height: 1.6;
+}
+
+/* Screenshot showcase */
+.screenshot-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-top: 3rem;
+  perspective: 1000px;
+}
+.screenshot-frame {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(184,137,31,0.2);
+  background: var(--bg2);
+  transition: all 0.5s ease;
+  position: relative;
+}
+.screenshot-frame:hover {
+  transform: scale(1.02);
+  border-color: rgba(184,137,31,0.5);
+  box-shadow: 0 20px 60px rgba(184,137,31,0.1);
+}
+.screenshot-frame img {
+  width: 100%;
+  display: block;
+}
+.screenshot-label {
+  padding: 1rem;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  color: var(--gold);
+  text-transform: uppercase;
+  border-top: 1px solid rgba(184,137,31,0.1);
+}
+
+/* Tech specs */
+.tech-stack {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-top: 3rem;
+}
+.tech-item {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  background: var(--bg2);
+  border: 1px solid rgba(184,137,31,0.1);
+  border-radius: 8px;
+}
+.tech-name {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--gold-light);
+  font-weight: 700;
+}
+.tech-desc {
+  font-size: 0.7rem;
+  color: var(--fg-muted);
+  margin-top: 0.25rem;
+}
+
+/* CTA Section */
+.cta {
+  text-align: center;
+  padding: 8rem 2rem;
+  background: linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+  position: relative;
+}
+.cta::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  height: 80px;
+  background: linear-gradient(to bottom, transparent, var(--gold));
+}
+.cta h2 {
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 900;
+  margin-bottom: 1rem;
+  background: linear-gradient(135deg, var(--gold-light), var(--gold));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.cta p {
+  color: var(--fg-muted);
+  font-size: 1.1rem;
+  margin-bottom: 2rem;
+}
+.cta-links {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.cta-btn {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.85rem;
+  padding: 0.9rem 2rem;
+  border-radius: 50px;
+  border: 1px solid var(--gold);
+  color: var(--gold-light);
+  background: transparent;
+  text-decoration: none;
+  letter-spacing: 0.1em;
+  transition: all 0.3s;
+}
+.cta-btn:hover {
+  background: var(--gold);
+  color: var(--bg);
+}
+.cta-btn.primary {
+  background: var(--gold);
+  color: var(--bg);
+}
+.cta-btn.primary:hover {
+  background: var(--gold-light);
+  border-color: var(--gold-light);
+}
+
+/* Footer */
+.footer {
+  text-align: center;
+  padding: 3rem 2rem;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--fg-muted);
+  letter-spacing: 0.1em;
+  border-top: 1px solid rgba(184,137,31,0.1);
+}
+.footer a {
+  color: var(--gold);
+  text-decoration: none;
+}
+
+/* Animations */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate {
+  opacity: 0;
+  animation: fadeUp 0.8s ease forwards;
+}
+.animate-d1 { animation-delay: 0.1s; }
+.animate-d2 { animation-delay: 0.2s; }
+.animate-d3 { animation-delay: 0.3s; }
+.animate-d4 { animation-delay: 0.4s; }
+.animate-d5 { animation-delay: 0.5s; }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-badge animate">v1.4.0 · 开源 · 本地优先</div>
+  <h1 class="hero-title animate animate-d1">小满</h1>
+  <p class="hero-subtitle animate animate-d2">对话优先的个人理财智能体</p>
+  <p class="hero-tagline animate animate-d3">ONE ENTRY, ONE QUESTION</p>
+  <div class="hero-stats animate animate-d4">
+    <div class="stat">
+      <div class="stat-num">17</div>
+      <div class="stat-label">Agent 工具</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">346</div>
+      <div class="stat-label">测试用例行</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">8</div>
+      <div class="stat-label">AI 模型对接</div>
+    </div>
+  </div>
+</section>
+
+<!-- PHILOSOPHY -->
+<section class="section">
+  <div class="section-label">Philosophy</div>
+  <h2 class="section-title">记一笔，问一句<br>财富管理本该如此</h2>
+  <p class="section-body">
+    小满把记账、持仓、目标、体检、晨报——这些分散在各个 App 里的财务动作——统一到一个对话界面。
+    你说"买一杯咖啡 28 元"，它写进流水；你说"帮我看看这个月花多了吗"，它跑一遍体检报告。
+    数据 100% 留在本地，AI 模型随便换。
+  </p>
+</section>
+
+<!-- FEATURES -->
+<section class="section">
+  <div class="section-label">Capabilities</div>
+  <h2 class="section-title">一个对话框<br>顶一柜子理财 App</h2>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">💰</div>
+      <h3>一句话记账</h3>
+      <p>"早餐 15、地铁 8、发工资 12k"——一句多笔，金额/分类/日期自动解析，支持中文大写数字。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📊</div>
+      <h3>持仓管理</h3>
+      <p>A 股代码直接加减仓，成本均价自动核算，行业集中度风控，贵提示、便宜也给信号。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🎯</div>
+      <h3>财务目标</h3>
+      <p>设目标、每月自动算需存多少，进度条可视化。超额已完成的目标金色高亮。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔬</div>
+      <h3>5 维体检</h3>
+      <p>月收支、流动性、集中度、目标、订阅——五维度体检 + 短板建议 + 一键行动按钮。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📰</div>
+      <h3>每日晨报</h3>
+      <p>自选行情 + 预算执行 + 临近目标互动——每天早上自动生成，了解今天的财务全貌。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔒</div>
+      <h3>加密备份</h3>
+      <p>PBKDF2 + Fernet 全量加密备份，口令零存储；恢复时错一字节都拒绝并回滚。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🧠</div>
+      <h3>分层记忆</h3>
+      <p>会话记忆 + 长期记忆 + 经验库。BM25 语义检索，经验反思，主动遗忘。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">↩️</div>
+      <h3>全局撤回</h3>
+      <p>SQLite 快照式 undo，Cmd+K 列出最近可撤回操作，点一下恢复。零新依赖。</p>
+    </div>
+  </div>
+</section>
+
+<!-- SCREENSHOTS -->
+<section class="section">
+  <div class="section-label">Screenshots</div>
+  <h2 class="section-title">所见即所得</h2>
+  <div class="screenshot-row">
+    <div class="screenshot-frame">
+      <img src="screenshots/01-overview.png" alt="小满主界面" />
+      <div class="screenshot-label">主界面 · 对话 + 快捷操作</div>
+    </div>
+    <div class="screenshot-frame">
+      <img src="screenshots/chat-zh.png" alt="聊天对话" />
+      <div class="screenshot-label">Agent 对话 · 流式输出</div>
+    </div>
+    <div class="screenshot-frame">
+      <img src="screenshots/05-features-dashboard.png" alt="总览面板" />
+      <div class="screenshot-label">总览 · 预算 + 目标 + 订阅</div>
+    </div>
+  </div>
+  <div class="screenshot-row" style="margin-top:1.5rem;">
+    <div class="screenshot-frame">
+      <img src="screenshots/holdings-zh.png" alt="持仓管理" />
+      <div class="screenshot-label">持仓 · 分组 + 集中度风控</div>
+    </div>
+    <div class="screenshot-frame">
+      <img src="screenshots/07-settings.png" alt="设置中心" />
+      <div class="screenshot-label">设置 · 中英双语 + 高度自定义</div>
+    </div>
+    <div class="screenshot-frame">
+      <img src="screenshots/06-chat-with-input.png" alt="一句话记账" />
+      <div class="screenshot-label">对话记账 · 自然语言输入</div>
+    </div>
+  </div>
+</section>
+
+<!-- TECH -->
+<section class="section">
+  <div class="section-label">Tech Stack</div>
+  <h2 class="section-title">成熟的库<br>拧成一股绳</h2>
+  <p class="section-body" style="margin-bottom:1rem;">
+    能用现成轮子绝不重复造。LangGraph 编排、LiteLLM 统一模型接入、FastAPI 承载、React 19 渲染——全是主流开源。
+  </p>
+  <div class="tech-stack">
+    <div class="tech-item"><div class="tech-name">LangGraph</div><div class="tech-desc">Agent 编排</div></div>
+    <div class="tech-item"><div class="tech-name">LiteLLM</div><div class="tech-desc">8+ AI 模型</div></div>
+    <div class="tech-item"><div class="tech-name">FastAPI</div><div class="tech-desc">HTTP + SSE</div></div>
+    <div class="tech-item"><div class="tech-name">React 19</div><div class="tech-desc">TanStack Query</div></div>
+    <div class="tech-item"><div class="tech-name">Vite 7</div><div class="tech-desc">构建 + HMR</div></div>
+    <div class="tech-item"><div class="tech-name">Tailwind 4</div><div class="tech-doc">原子样式</div></div>
+    <div class="tech-item"><div class="tech-name">SQLite + WAL</div><div class="tech-desc">本地存储</div></div>
+    <div class="tech-item"><div class="tech-name">PBKDF2 + Fernet</div><div class="tech-desc">加密备份</div></div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta">
+  <h2>一次部署，开箱即用</h2>
+  <p>开源免费 · MIT 协议 · 数据 100% 本地</p>
+  <div class="cta-links">
+    <a href="https://gitcode.com/badhope/xiaoman" class="cta-btn primary">GitHub / GitCode</a>
+    <a href="#" class="cta-btn">快速开始</a>
+  </div>
+</section>
+
+<div class="footer">
+  小满 Xiaoman · Open Source Personal Finance Agent · MIT License<br />
+  Built with React 19 · FastAPI · LangGraph · LiteLLM
+</div>
+
+<script>
+// Intersection Observer for animation on scroll
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.style.opacity = '1';
+      entry.target.style.transform = 'translateY(0)';
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.section, .feature-card, .screenshot-frame, .tech-item').forEach(el => {
+  el.style.opacity = '0';
+  el.style.transform = 'translateY(30px)';
+  el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+  observer.observe(el);
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: 安装依赖
+        run: pip install -q -r backend/requirements.txt
+      - name: 静态检查（ruff）
+        run: cd backend && python -m ruff check app tests
+      - name: 单元测试（pytest）
+        env:
+          XIAOMAN_DISABLE_RATE_LIMIT: "1"
+          VAULT_PASSPHRASE: "ci-test-passphrase-12345678"
+        run: cd backend && python -m pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: 安装依赖
+        run: cd frontend && npm ci --no-audit --no-fund --include=dev
+      - name: 类型检查（tsc --noEmit）
+        run: cd frontend && npx tsc --noEmit
+      - name: 单元测试（vitest）
+        run: cd frontend && npx vitest run
+      - name: 构建验证
+        run: cd frontend && npx vite build

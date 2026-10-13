@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="use-iframe" content="true">
+<meta name="html-box-height-mode" content="auto">
+<meta name="description" content="数据流冗余定位：前端双请求 /api/budgets、agent 图两节点重复取持仓行情、quotes 五个分散缓存，三处冗余的位置与影响">
+<title>小满冗余定位</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#fff;color:#1F2329;width:100%;max-width:100%;padding:4px}
+  .wrap{width:100%;border:1px solid #DEE3E8;border-radius:8px;overflow:hidden}
+  .head{background:#F5F7FA;padding:10px 12px;border-bottom:1px solid #DEE3E8}
+  .head b{font-size:15px;color:#1A2B4A}
+  .head span{display:block;font-size:12px;color:#758092;margin-top:2px}
+  .row{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:1px solid #EEF1F5}
+  .row:last-child{border-bottom:none}
+  .side{flex:0 0 118px;text-align:center}
+  .node{display:inline-block;border:1px solid #DEE3E8;border-radius:6px;padding:6px 10px;font-size:12.5px;background:#F8FAFC;color:#1F2329;line-height:1.4}
+  .node b{display:block;font-size:12.5px}
+  .node span{font-size:11px;color:#758092}
+  .flow{flex:1;display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+  .arrow{color:#BABFC9;font-size:16px}
+  .api{display:inline-block;border:1px solid #B8C4D8;border-radius:6px;padding:6px 10px;font-size:12px;background:#EEF3FA;color:#1A2B4A;font-family:ui-monospace,Menlo,monospace}
+  .tag{display:inline-block;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600}
+  .dup{background:#FDECEA;color:#C0392B;border:1px solid #F3C9C2}
+  .ok{background:#EEF5EE;color:#2E6B4F;border:1px solid #C9E0CE}
+  .note{flex:0 0 300px;font-size:12px;color:#646A73;line-height:1.5;border-left:2px solid #DEE3E8;padding-left:10px}
+  .note b{color:#1F2329}
+  @media (max-width:640px){.row{flex-direction:column;align-items:flex-start}.note{flex-basis:auto;border-left:none;padding-left:0;border-top:1px solid #EEF1F5;padding-top:6px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head"><b>三处可合并的数据流冗余</b><span>同一批数据在一条路径上被取了两次；位置与影响如下，均为本地库/本地进程，合并不改行为</span></div>
+
+  <div class="row">
+    <div class="side"><span class="node"><b>总览页 Dashboard</b><span>组件</span></span></div>
+    <div class="flow">
+      <span class="arrow">→</span><span class="api">/api/budgets</span><span class="arrow">→</span>
+      <span class="tag dup">重复请求</span>
+    </div>
+    <div class="flow">
+      <span class="api">/api/budgets</span><span class="arrow">→</span>
+      <span class="node"><b>BudgetCard</b><span>组件</span></span>
+    </div>
+    <div class="note"><b>第 1 处：</b>Dashboard 主组件与 BudgetCard 各调一次 /api/budgets（Dashboard.tsx 523 / 410 行）。同一页面两次请求同一接口。<b>改法：</b>数据提升到 Dashboard 传 props，或 BudgetCard 复用。</div>
+  </div>
+
+  <div class="row">
+    <div class="side"><span class="node"><b>collect_market</b><span>LangGraph 节点</span></span></div>
+    <div class="flow">
+      <span class="arrow">→</span><span class="api">db.list_positions</span><span class="arrow">→</span><span class="api">live_quotes</span>
+      <span class="tag dup">重复取数</span>
+    </div>
+    <div class="flow">
+      <span class="arrow">→</span><span class="api">db.list_positions</span><span class="arrow">→</span><span class="api">live_quotes</span>
+      <span class="node"><b>collect_ledger</b><span>LangGraph 节点</span></span>
+    </div>
+    <div class="note"><b>第 2 处：</b>agent_graph.py 中两个收集节点各自执行 list_positions + live_quotes（124–165 行）。顺序边执行，第二次查询属重复。<b>改法：</b>market 结果经 state 传给 ledger，ledger 不再重查。</div>
+  </div>
+
+  <div class="row">
+    <div class="side"><span class="node"><b>quotes.py</b><span>行情层</span></span></div>
+    <div class="flow">
+      <span class="api">_cache</span><span class="arrow">→</span><span class="api">_kline_cache</span><span class="arrow">→</span><span class="api">_indices_cache</span>
+    </div>
+    <div class="flow">
+      <span class="api">_today_pnl_cache</span><span class="arrow">→</span><span class="api">_quote_cache</span>
+      <span class="tag dup">5 个分散缓存</span>
+    </div>
+    <div class="note"><b>第 3 处：</b>5 个模块级 dict 各管一种缓存，invalidate_quotes_cache 需手动清 5 处（230–235 行）。<b>改法：</b>统一缓存注册表或装饰器；不动行为，只收管理面。</div>
+  </div>
+
+  <div class="row">
+    <div class="side"><span class="node"><b>记账页 EntryView</b><span>组件</span></span></div>
+    <div class="flow">
+      <span class="api">tab=positions</span><span class="arrow">→</span>
+      <span class="node"><b>PositionsTable</b><span>内嵌</span></span>
+      <span class="tag dup">重复入口</span>
+    </div>
+    <div class="flow">
+      <span class="arrow">→</span>
+      <span class="node"><b>持仓页 HoldingsView</b><span>独立页签</span></span>
+    </div>
+    <div class="note"><b>第 4 处：</b>5 页签导航已有独立持仓页，记账页内仍保留 positions tab（EntryView.tsx 706 行）。<b>改法：</b>删除该 tab，负债/订阅/目标 tab 保留。</div>
+  </div>
+
+  <div class="row">
+    <div class="side"><span class="node"><b>问AI ChatView</b><span>组件</span></span></div>
+    <div class="flow">
+      <span class="api">chips 快捷指令</span><span class="tag ok">常驻</span>
+      <span class="arrow">+</span>
+      <span class="api">suggestions 空态建议</span><span class="tag dup">并存</span>
+    </div>
+    <div class="note"><b>第 5 处：</b>输入区常驻 chips 与空会话建议 suggestions 并存，入口语义重叠（可关）。<b>改法：</b>保留 chips 为唯一快捷入口，suggestions 默认关。</div>
+  </div>
+</div>
+</body>
+</html>

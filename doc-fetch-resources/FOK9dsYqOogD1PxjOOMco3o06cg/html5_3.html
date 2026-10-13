@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="use-iframe" content="true">
+<meta name="html-box-height-mode" content="auto">
+<meta name="description" content="行动时间线：P0 立即清理6项、P1 本周迭代8项、P2 后续演进6项，按批次推进的顺序与完成标志">
+<title>小满行动时间线</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#fff;color:#1F2329;width:100%;max-width:100%;padding:4px}
+  .wrap{width:100%;border:1px solid #DEE3E8;border-radius:8px;overflow:hidden}
+  .head{background:#F5F7FA;padding:10px 12px;border-bottom:1px solid #DEE3E8}
+  .head b{font-size:15px;color:#1A2B4A}
+  .head span{display:block;font-size:12px;color:#758092;margin-top:2px}
+  .bar{display:flex;gap:0;border-bottom:1px solid #EEF1F5}
+  .phase{flex:1;min-width:0}
+  .ptag{padding:9px 10px;font-size:13px;font-weight:600;color:#fff}
+  .ptag.p0{background:#C0392B}.ptag.p1{background:#B7791F}.ptag.p2{background:#7D93B2}
+  .ptag small{display:block;font-weight:400;font-size:11px;opacity:.9}
+  .items{padding:8px 10px;display:flex;flex-direction:column;gap:6px;background:#FBFCFE}
+  .it{font-size:12.5px;line-height:1.4;color:#1F2329}
+  .it .n{font-weight:600;color:#1A2B4A}
+  .it .d{color:#646A73;font-size:11.5px;display:block}
+  .fin{border-top:2px dashed #BABFC9;padding:8px 10px;font-size:11.5px;color:#646A73}
+  .fin b{color:#1F2329}
+  @media (max-width:600px){.bar{flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head"><b>行动时间线：三批推进，每批有完成标志</b><span>先清残留（今天可完成）→ 再合并冗余（本周）→ 后做安全与架构整理（迭代期）</span></div>
+  <div class="bar">
+    <div class="phase">
+      <div class="ptag p0">P0 · 立即清理<small>今天，纯删除与改文案，无行为风险</small></div>
+      <div class="items">
+        <div class="it"><span class="n">1</span> 删记账页 positions tab <span class="d">EntryView.tsx 706–738 行</span></div>
+        <div class="it"><span class="n">2</span> 删 scripts/agnes_stress.py <span class="d">无关第三方压测</span></div>
+        <div class="it"><span class="n">3</span> 删 docs/preview 旧截图 <span class="d">10 张改版前 UI</span></div>
+        <div class="it"><span class="n">4</span> 清 i18n 死 keys <span class="d">zh/en 各约 30 个，脚本核对</span></div>
+        <div class="it"><span class="n">5</span> 修 README 三处失真 <span class="d">ui-checks / 测试数 / 首页定位</span></div>
+        <div class="it"><span class="n">6</span> 改 Dockerfile 旧名 <span class="d">wealth-office → xiaoman</span></div>
+      </div>
+      <div class="fin"><b>完成标志：</b>tsc + build 通过，页面无报错；README 命令全部可执行</div>
+    </div>
+    <div class="phase">
+      <div class="ptag p1">P1 · 本周迭代<small>合并冗余，代码行为不变</small></div>
+      <div class="items">
+        <div class="it"><span class="n">7</span> budget 单请求 <span class="d">Dashboard 传 props 给 BudgetCard</span></div>
+        <div class="it"><span class="n">8</span> agent 图合取数 <span class="d">market 结果经 state 传给 ledger</span></div>
+        <div class="it"><span class="n">9</span> 测试缓存隔离 <span class="d">换 symbol 或独立缓存</span></div>
+        <div class="it"><span class="n">10</span> service.py 注释同步 <span class="d">删 “_legacy” 提法</span></div>
+        <div class="it"><span class="n">11</span> 负债/订阅/目标 tab 改名 <span class="d">记账页保留为唯一管理入口</span></div>
+        <div class="it"><span class="n">12</span> agent 双文件分工注释 <span class="d">避免误判重复</span></div>
+        <div class="it"><span class="n">13</span> chips / suggestions 合并 <span class="d">suggestions 默认关</span></div>
+        <div class="it"><span class="n">14</span> 本地 commit 基线 <span class="d">30+ 改动先落库</span></div>
+      </div>
+      <div class="fin"><b>完成标志：</b>pytest 179 全绿、前端构建通过；网络抓包确认 budget 单请求</div>
+    </div>
+    <div class="phase">
+      <div class="ptag p2">P2 · 后续演进<small>安全与架构整理，随服务器计划排期</small></div>
+      <div class="items">
+        <div class="it"><span class="n">15</span> 导出默认加密 <span class="d">加服务器前 /api/export 强制口令</span></div>
+        <div class="it"><span class="n">16</span> 快照价标注离线估值 <span class="d">行情页脚注来源与口径</span></div>
+        <div class="it"><span class="n">17</span> quotes 缓存统一 <span class="d">注册表 / 装饰器收口</span></div>
+        <div class="it"><span class="n">18</span> README 重写精简 <span class="d">适配本地运行 × 云端能力定位</span></div>
+        <div class="it"><span class="n">19</span> 晨报归档隔离 <span class="d">cron 报告不混入对话历史</span></div>
+        <div class="it"><span class="n">20</span> 截图重截 + 模板文件取舍 <span class="d">docs 与新 UI 对齐</span></div>
+      </div>
+      <div class="fin"><b>完成标志：</b>无明文导出路径；行情来源口径全覆盖；仓库自文档化</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
