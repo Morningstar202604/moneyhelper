@@ -316,9 +316,39 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
 
 
 async def record(state: AgentState) -> dict[str, Any]:
-    """记账 agent：把一句话记账指令确定性入账并回执（复用 service._try_nl_add 唯一实现）。"""
+    """记账 agent：把一句话记账指令确定性入账并回执（复用 service._try_nl_add 唯一实现）。
+
+    大额审批：单笔金额 > 5000 元时先不入账，返回 pending 状态让前端弹确认框。
+    用户确认后带 confirm=true 再发一次请求，这次真正入账。
+    """
     parsed = state["parsed"]
     assert parsed is not None
+    amount = abs(float(parsed.get("amount", 0)))
+    confirm = state.get("confirm", False)
+
+    # 大额审批：>5000 元先确认
+    if amount > 5000 and not confirm:
+        direction = "收入" if float(parsed.get("amount", 0)) > 0 else "支出"
+        answer = (
+            f"这笔{direction} {amount:,.0f} 元金额较大，确认要记吗？\n\n"
+            f"记的是：{parsed.get('item', '未命名')}（{parsed.get('category', '其他')}）\n"
+            f"回复「确认」就入账，回复「取消」就不记。"
+        )
+        result = {
+            "answer": answer,
+            "level": "待确认",
+            "route": "nl_pending",
+            "route_reason": f"大额{direction}审批：{amount:,.0f} 元",
+            "metrics": {},
+            "flags": [],
+            "llm": "template",
+            "tools": [],
+            "actions": [],
+            "pending_token": "",
+            "pending_summary": f"{direction} {amount:,.0f} 元",
+        }
+        return {"result": result}
+
     result = await service._try_nl_add(state["question"], state["reason"], _emit, state.get("lang", "zh"))
     assert result is not None
     result.setdefault("actions", [{"tab": "ledger"}])
