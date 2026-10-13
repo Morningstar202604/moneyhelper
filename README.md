@@ -1,5 +1,17 @@
 # 小满 Xiaoman · 慢慢存，小满即富
 
+> **v2 更新** —— 对话主导重构 + 业界成熟方案全接入
+
+🆕 **v2 新增：**
+- 🤖 **多 Agent 架构** —— agents/ 目录，supervisor / bookkeeping / portfolio 三个 agent 各自独立提示词与工具
+- ⚙️ **Agent 配置系统** —— 角色 / skills / 工具开关，设置页可视化改
+- 📊 **对话内嵌数据卡** —— 4 宫格小卡直接嵌在对话流里，点展开看完整数据
+- 🎯 **对话主导布局** —— 95% 屏幕留给对话，财务数据按需弹出，不挤占空间
+- 🔍 **Arize Phoenix 可观测性** —— OpenTelemetry 标准，本地单容器跑，不需要外部账号
+- 🧠 **mem0 长记忆** —— 用户偏好、家庭背景自动记住，下次对话直接用
+- 📦 **EXE 单文件打包** —— 双击就能跑，不需要装 Python / Node
+- ✨ **thinking-dots 动效** —— 对标 ChatGPT 的思考中三个点动画
+
 > **记一笔，问一句** —— 对话优先的个人理财智能体 · 企业级多用户 · 数据 100% 本地 · AI 可用国产/海外任意模型 · 开源 MIT
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
