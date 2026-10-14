@@ -29,7 +29,7 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from . import db, llm, mcp_client, tools
+from . import agent_config, db, llm, mcp_client, tools
 
 # 写类工具已被确定性分支覆盖（记账/记忆/买卖/设置/备份/晨报都有前置 action/record/memory
 # 节点拦截），agent 模式只暴露读类 + 自选维护工具，防止模型在追问/分析语境里越权落库。
@@ -283,7 +283,9 @@ async def run_agent(
         )
     # 长期记忆预注入（用户主动要求记住的）：模型无需先调工具即可参考用户背景。
     # 仅财务分支注入（inject_memories=True）；通用 agent 分支不注入，隐私边界不变。
-    memories = await db.list_memory() if inject_memories else []
+    # 「设置 → Agent」关闭长期记忆技能后同样不注入（技能开关真正生效）。
+    long_mem_on = await agent_config.is_skill_enabled("long_memory")
+    memories = await db.list_memory() if (inject_memories and long_mem_on) else []
     if memories:
         mem_text = "\n".join(f"- {m['content']}" for m in memories[:5])
         messages.append(
@@ -293,6 +295,11 @@ async def run_agent(
                 + mem_text[:400],
             }
         )
+    # 自定义技能（设置页 AI 生成并启用）：注入个性化指令，仅财务分支（通用分支保持领域无关）
+    if inject_memories:
+        skill_text = await agent_config.custom_skill_prompt()
+        if skill_text:
+            messages.append({"role": "system", "content": skill_text[:800]})
     messages.append({"role": "user", "content": question})
 
     steps: list[dict[str, Any]] = []
@@ -305,12 +312,18 @@ async def run_agent(
 
     tool_schemas = tools_list if tools_list is not None else READ_TOOLS
     tool_map = impl_map if impl_map is not None else ALLOWED_IMPL
+    if tools_list is None:
+        # 技能开关真正生效：被关闭技能对应的工具从工具面移除（与 react 路径同口径）
+        disabled_tools = await agent_config.disabled_tool_names()
+        if disabled_tools:
+            tool_schemas = [t for t in READ_TOOLS if t["function"]["name"] not in disabled_tools]
+            tool_map = {k: v for k, v in ALLOWED_IMPL.items() if k not in disabled_tools}
     # P2 MCP：把已配置 MCP 服务器提供的工具动态合并进工具列表（仅财务分支，通用分支不接外部工具）
     mcp_schemas: list[dict[str, Any]] = []
     if tools_list is None:
         try:
             mcp_schemas = await mcp_client.refresh()
-            tool_schemas = READ_TOOLS + mcp_schemas
+            tool_schemas = tool_schemas + mcp_schemas
         except Exception:  # noqa: BLE001 — MCP 异常不影响主流程
             pass
     for _turn in range(turn_cap):

@@ -284,9 +284,33 @@ async def _try_save_memory(question: str, emit: Emit, lang: str = "zh") -> dict[
     """对话内记忆指令：规则提取内容 → 存长期记忆 → 回执（无需模型）。
 
     提取「记住/记得」之后的内容；提取不到有效内容（如单独一个「记住」）返回 None。
+    技能「长期记忆」在设置中关闭时：不写入，并明确回执（不静默、不冒充已记住）。
     """
     if not _looks_like_memory(question):
         return None
+    from . import agent_config
+
+    if not await agent_config.is_skill_enabled("long_memory"):
+        return {
+            "answer": (
+                "长期记忆已在「设置 → Agent 与技能」中关闭，这条我没有记。"
+                "需要我记住的话，打开开关后再告诉我一次。"
+                if lang == "zh"
+                else "Long-term memory is turned off in Settings → Agents & skills, so I didn't save this. "
+                "Turn it on and tell me again if you want me to remember it."
+            ),
+            "level": "",
+            "route": "memory",
+            "route_reason": (
+                "识别为记忆指令，但「长期记忆」技能已关闭"
+                if lang == "zh"
+                else "Memory instruction, but the long-term memory skill is disabled"
+            ),
+            "metrics": {},
+            "flags": [],
+            "llm": "template",
+            "memory_deduped": False,
+        }
     content = re.sub(
         rf"^(?:帮我|请|麻烦|要|我想)*?(?:{'|'.join(MEMORY_VERBS)})[:：]?",
         "",

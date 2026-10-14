@@ -72,6 +72,51 @@ async def is_skill_enabled(skill_name: str) -> bool:
     return skill_cfg.get("enabled", True)
 
 
+# 内置技能（default_config.json 预置）；其余为用户/AI 生成的「自定义技能」。
+BUILTIN_SKILLS = frozenset(
+    {"risk_analysis", "goals_tracking", "morning_report", "long_memory"}
+)
+
+# 内置技能 → 运行时能力映射（技能开关真正生效的落点）：
+# 关闭某技能 → 对应工具从 agent 工具面移除（agent / react 两条路径都过滤）。
+_SKILL_TOOLS: dict[str, set[str]] = {
+    "risk_analysis": {"get_risk_flags", "get_health_check"},
+    "goals_tracking": {"get_goals"},
+    "long_memory": {"get_user_memory"},
+}
+
+
+async def disabled_tool_names() -> set[str]:
+    """按已关闭的内置技能，返回应从 agent 工具面移除的工具名集合。"""
+    cfg = await get_config()
+    skills = cfg.get("skills", {})
+    out: set[str] = set()
+    for skill, tool_names in _SKILL_TOOLS.items():
+        if not skills.get(skill, {}).get("enabled", True):
+            out |= tool_names
+    return out
+
+
+async def custom_skill_prompt() -> str:
+    """启用中的「自定义技能」（非内置）→ 注入 agent 的个性化指令块。
+
+    这一块让「设置 → Agent → AI 生成技能」真正生效：生成的技能以
+    「名称：描述」形式进入系统提示，模型会在相关场景遵循。
+    """
+    cfg = await get_config()
+    lines: list[str] = []
+    for sid, s in (cfg.get("skills") or {}).items():
+        if sid in BUILTIN_SKILLS or not s.get("enabled", True):
+            continue
+        name = str(s.get("name") or sid).strip()
+        desc = str(s.get("description") or "").strip()
+        if name:
+            lines.append(f"- {name}：{desc}" if desc else f"- {name}")
+    if not lines:
+        return ""
+    return "用户自定义技能（用户主动启用，请在相关场景遵循）：\n" + "\n".join(lines[:10])
+
+
 async def generate_suggestion(kind: str, prompt: str, agent_name: str = "") -> dict[str, Any] | None:
     """按自然语言描述生成配置建议（skill 或某 agent 的名称/描述）。
 

@@ -274,8 +274,12 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
         # claim 失败（已被并发回执消费）或原句不可解析：落回常规路由，不重复入账
 
     # 长记忆 recall：把用户历史相关记忆注入 state，供后续节点参考
-    # （mem0 不可用——如无 embedding 凭据——自动降级为旧 user_memory 表检索）
-    mem_hits = await mem.recall(q)
+    # （mem0 不可用——如无 embedding 凭据——自动降级为旧 user_memory 表检索；
+    #  技能开关关闭时不召回，隐私与开关口径一致）
+    from . import agent_config
+
+    long_mem_on = await agent_config.is_skill_enabled("long_memory")
+    mem_hits = await mem.recall(q) if long_mem_on else []
     if mem_hits:
         log.info("mem.recalled count=%s sample=%s", len(mem_hits), mem_hits[0].get("memory", "")[:60])
 
@@ -295,8 +299,10 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
     # 记忆指令其次（先于记账）：「记住/记得 …」明确是记忆意图，
     # 否则「记住我下个月要交房租 5000」会被一句话记账当成支出入账。
     if service._looks_like_memory(q):
-        # 真正写入 mem0 长记忆（不是只返回路由，而是真存）
-        mem.remember(q)
+        # 真正写入 mem0 长记忆（不是只返回路由，而是真存）；技能关闭时跳过写入，
+        # 由 memory 节点产出「已关闭」的明确回执（见 service._try_save_memory）
+        if long_mem_on:
+            mem.remember(q)
         reason_mem = (
             "Recognized as a memory instruction — saving to long-term memory"
             if state.get("lang") == "en"

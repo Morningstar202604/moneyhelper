@@ -76,19 +76,22 @@ async def _build_finance_tools(agent_name: str = "supervisor") -> list[Structure
     }
     allowed = AGENT_TOOLS.get(agent_name, set())
     # 读用户配置（缺行时回落内置默认）；配置为具体列表时与内置分组取交集
+    disabled: set[str] = set()
     try:
         from . import agent_config
 
         configured = await agent_config.get_agent_tools(agent_name)
         if isinstance(configured, list):
             allowed = set(configured) if not allowed else (allowed & set(configured))
+        # 技能开关真正生效：被关闭技能对应的工具从工具面移除
+        disabled = await agent_config.disabled_tool_names()
     except Exception:  # noqa: BLE001 — 配置读取失败回落内置默认
         pass
 
     lc_tools: list[StructuredTool] = []
     for t in tools.TOOLS:
         fname = t["function"]["name"]
-        if fname in agent.WRITE_EXCLUDED:
+        if fname in agent.WRITE_EXCLUDED or fname in disabled:
             continue
         # 按 agent 分组过滤（supervisor 不过滤）
         if allowed and fname not in allowed:
@@ -127,11 +130,17 @@ async def run_react_agent(question: str, system_prompt: str, lang: str = "zh", a
 
     lc_tools = await _build_finance_tools(agent_name)
 
-    # 长期记忆注入
-    memories = await db.list_memory()
+    # 长期记忆注入（技能关闭时不注入，与手写 loop 路径同口径）
+    from . import agent_config
+
     mem_text = ""
-    if memories:
-        mem_text = "\n用户长期记忆（用户主动要求记住的）：\n" + "\n".join(f"- {m['content']}" for m in memories[:5])
+    if await agent_config.is_skill_enabled("long_memory"):
+        memories = await db.list_memory()
+        if memories:
+            mem_text = "\n用户长期记忆（用户主动要求记住的）：\n" + "\n".join(f"- {m['content']}" for m in memories[:5])
+    skill_text = await agent_config.custom_skill_prompt()
+    if skill_text:
+        mem_text += "\n" + skill_text
 
     lang_rule = "请用简体中文回答用户的问题。" if lang == "zh" else "Answer in English."
     full_system = f"{system_prompt}\n{lang_rule}{mem_text}"

@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
+import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { useToast } from "@/lib/toast";
 import { AiGenerate } from "./ai-generate";
+
+/** 内置技能 id（与后端 agent_config.BUILTIN_SKILLS 同口径）：有运行时落点，不可删除；其余为自定义技能 */
+const BUILTIN_SKILL_IDS = new Set(["risk_analysis", "goals_tracking", "morning_report", "long_memory"]);
 
 interface AgentConfig {
   version: string;
@@ -135,25 +139,50 @@ export function AgentSection() {
             }
           />
         </div>
+        <div className="mb-1.5 text-xs text-muted-foreground">
+          内置技能的开关会真正改变 AI 能力（如关闭「长期记忆」后不再记忆/召回）；AI 生成的自定义技能会作为指令注入助手。
+        </div>
         <div className="space-y-2">
           {Object.entries(config.skills).map(([key, skill]) => (
-            <div key={key} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-              <div>
-                <div className="text-sm">{skill.name}</div>
+            <div key={key} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
+              <div className="min-w-0">
+                <div className="text-sm">
+                  {skill.name}
+                  {!BUILTIN_SKILL_IDS.has(key) && (
+                    <span className="ml-1.5 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">自定义</span>
+                  )}
+                </div>
                 <div className="text-xs text-muted-foreground">{skill.description}</div>
               </div>
-              <button
-                type="button"
-                onClick={() =>
-                  setConfig({
-                    ...config,
-                    skills: { ...config.skills, [key]: { ...skill, enabled: !skill.enabled } },
-                  })
-                }
-                className={`relative h-6 w-11 rounded-full transition-colors ${skill.enabled ? "bg-primary" : "bg-muted"}`}
-              >
-                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${skill.enabled ? "translate-x-5" : "translate-x-0.5"}`} />
-              </button>
+              <span className="flex shrink-0 items-center gap-1.5">
+                {!BUILTIN_SKILL_IDS.has(key) && (
+                  <button
+                    type="button"
+                    aria-label={`删除技能 ${skill.name}`}
+                    className="rounded p-1 text-muted-foreground hover:bg-red-500/10 hover:text-red-600"
+                    onClick={() => {
+                      const next = { ...config.skills };
+                      delete next[key];
+                      setConfig({ ...config, skills: next });
+                    }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  aria-label={`${skill.enabled ? "关闭" : "启用"}技能 ${skill.name}`}
+                  onClick={() =>
+                    setConfig({
+                      ...config,
+                      skills: { ...config.skills, [key]: { ...skill, enabled: !skill.enabled } },
+                    })
+                  }
+                  className={`relative h-6 w-11 rounded-full transition-colors ${skill.enabled ? "bg-primary" : "bg-muted"}`}
+                >
+                  <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${skill.enabled ? "translate-x-5" : "translate-x-0.5"}`} />
+                </button>
+              </span>
             </div>
           ))}
         </div>
