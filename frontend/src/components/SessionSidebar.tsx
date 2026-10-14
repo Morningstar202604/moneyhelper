@@ -58,6 +58,19 @@ export function SessionSidebar({
     { key: "older", labelKey: "sidebar.older" },
   ];
 
+  // 相对时间（今天显示时:分，更早显示 M/D）：会话标题下的一行轻量元信息，
+  // 帮助在一串同名「新会话」里快速定位（对标 ChatGPT 侧栏的时间辅助）
+  const relTime = (iso: string): string => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    if (sameDay) {
+      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    }
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  };
+
   const renderSession = (s: SessionItem) => (
     <div
       key={s.id}
@@ -94,7 +107,14 @@ export function SessionSidebar({
         />
       ) : (
         <>
-          <span className="min-w-0 flex-1 truncate text-[13px]">{s.title}</span>
+          <span className="min-w-0 flex-1 flex flex-col">
+            <span className="truncate text-[13px] leading-tight">{s.title}</span>
+            {relTime(s.updated_at) && (
+              <span className="text-[11px] text-muted-foreground/70 leading-tight tabular-nums">
+                {relTime(s.updated_at)}
+              </span>
+            )}
+          </span>
           <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
             <button
               type="button"

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
-  Brain, BrainCog, KeyRound, Newspaper, PiggyBank, ScrollText, ShieldCheck, SlidersHorizontal, Wallet,
+  Bot, Brain, BrainCog, KeyRound, Newspaper, PiggyBank, ScrollText, ShieldCheck, SlidersHorizontal, Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDashboard } from "@/lib/store";
@@ -17,12 +17,14 @@ import { DataSection } from "@/components/settings/DataSection";
 import { TokenSection } from "@/components/settings/TokenSection";
 import { LogsSection } from "@/components/settings/LogsSection";
 import { AuditSection } from "@/components/settings/AuditSection";
+import { AgentSection } from "@/components/settings/AgentSection";
 
 const SECTIONS: { id: SectionId; labelKey: string; icon: typeof Wallet }[] = [
   { id: "prefs", labelKey: "settings.navPrefs", icon: SlidersHorizontal },
   { id: "rules", labelKey: "settings.navRules", icon: Wallet },
   { id: "budget", labelKey: "settings.navBudget", icon: PiggyBank },
   { id: "ai", labelKey: "settings.navAi", icon: Brain },
+  { id: "agent", labelKey: "settings.navAgent", icon: Bot },
   { id: "report", labelKey: "settings.navReport", icon: Newspaper },
   { id: "memory", labelKey: "settings.navMemory", icon: BrainCog },
   { id: "data", labelKey: "settings.navData", icon: ShieldCheck },
@@ -111,6 +113,8 @@ export function SettingsView() {
         {active === "report" && (
           <ReportSection form={form} onField={set} scheduler={bootstrap.scheduler} />
         )}
+
+        {active === "agent" && <AgentSection />}
 
         {active === "memory" && <MemorySection />}
 

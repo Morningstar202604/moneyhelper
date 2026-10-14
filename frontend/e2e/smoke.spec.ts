@@ -75,4 +75,20 @@ test.describe("应用启动 & 冒烟", () => {
     await page.getByRole("radio", { name: "墨绿（默认）" }).click();
     await expect.poll(primaryVar).toBe("168 76% 24%");
   });
+
+  test("四个设置区都有 AI 生成入口（预算/规则/晨报/Agent）", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "设置" }).first().click();
+
+    // 一键建议型：点「生成建议」；Agent 区是"先描述再生成"型：入口为「AI 生成」
+    const expectAi = async (section: string, entry: RegExp) => {
+      await page.getByText(section, { exact: true }).first().click();
+      await expect(page.getByRole("button", { name: entry }).first()).toBeVisible({ timeout: 10_000 });
+    };
+
+    await expectAi("预算", /生成建议/);
+    await expectAi("账本规则", /生成建议/);
+    await expectAi("每日晨报", /生成建议/);
+    await expectAi("Agent 与技能", /^AI 生成$/);
+  });
 });
