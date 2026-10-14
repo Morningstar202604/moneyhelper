@@ -47,12 +47,12 @@ from . import (
     llm,
     mem,
     nlparse,
+    quotes,
     react_agent,
     service,
     tools,
 )
 from .logging_utils import get_logger
-from .quotes import live_quotes
 
 log = get_logger(__name__)
 
@@ -274,7 +274,8 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
         # claim 失败（已被并发回执消费）或原句不可解析：落回常规路由，不重复入账
 
     # 长记忆 recall：把用户历史相关记忆注入 state，供后续节点参考
-    mem_hits = mem.recall(q)
+    # （mem0 不可用——如无 embedding 凭据——自动降级为旧 user_memory 表检索）
+    mem_hits = await mem.recall(q)
     if mem_hits:
         log.info("mem.recalled count=%s sample=%s", len(mem_hits), mem_hits[0].get("memory", "")[:60])
 
@@ -304,14 +305,27 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
         return {"route": "memory", "reason": reason_mem, "mode": "deterministic"}
 
     # 一句话记账：短句 + 能解析出金额 → 记账 agent（规则秒回，不调模型）
+    # 「自选」类指令先排除：股票代码（600519）会被 nlparse 当成金额，走 60 万大额审批（实测）
     parsed = None
-    if service._looks_like_record(q):
+    if service._looks_like_record(q) and not service._looks_like_watchlist(q):
         parsed = nlparse.parse(q)
     if parsed is not None:
         return {"route": "bookkeeping", "reason": reason, "parsed": parsed}
 
     if route == "general":
-        return {"route": "general", "reason": reason, "mode": "deterministic"}
+        # 规则未命中且模型可用：让模型兜底判一次是否其实是理财问题（如「茅台现在多少钱」）
+        if await llm.llm_available():
+            llm_route = await service.classify_question_llm(q, state.get("lang", "zh"))
+            if llm_route in ("market", "ledger", "both", "goal"):
+                route = llm_route
+                reason = (
+                    "Model recognized this as a finance question"
+                    if en_lang else "模型判定这是理财问题"
+                )
+            else:
+                return {"route": "general", "reason": reason, "mode": "deterministic"}
+        else:
+            return {"route": "general", "reason": reason, "mode": "deterministic"}
 
     mode = "agent" if await llm.llm_available() else "deterministic"
     # goal 路由（目标/体检）需要完整财务数据：市场 + 账本都查
@@ -538,7 +552,7 @@ async def collect_market(state: AgentState) -> dict[str, Any]:
         await _emit({"type": "tool", "data": {"id": "market", "name": "get_market_view", "status": "running", "node": "collect_market", "ts": time.time() * 1000}})
     started = time.monotonic()
     positions = await db.list_positions()
-    live = await live_quotes(positions)
+    live = await quotes.live_quotes(positions)
     market = analysis.market_view(positions, live)
     duration_ms = int((time.monotonic() - started) * 1000)
     if det:
@@ -571,7 +585,7 @@ async def collect_ledger(state: AgentState) -> dict[str, Any]:
         positions = await db.list_positions()
     live = state.get("live")
     if live is None:
-        live = await live_quotes(positions)
+        live = await quotes.live_quotes(positions)
     settings = await db.get_settings()
     ledger = analysis.ledger_view(
         await db.list_transactions(),
@@ -662,7 +676,7 @@ async def finalize(state: AgentState) -> dict[str, Any]:
                 result = await agent.run_agent(q, _emit, history, state.get("lang", "zh"))
             live = state.get("live")
             if live is None:
-                live = await live_quotes(positions)
+                live = await quotes.live_quotes(positions)
             m = analysis.market_view(positions, live) if "market" in routes else market
             led = (
                 analysis.ledger_view(

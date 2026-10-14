@@ -537,6 +537,78 @@ async def test_chat_nl_concurrent_confirm_records_once(client) -> None:
     assert sum(1 for t in tx if t["amount"] == 9000.0) == 1
 
 
+async def test_watchlist_command_not_hijacked_by_bookkeeping(client) -> None:
+    """「把 600519 加入自选」不得被记账解析劫持（6 位代码会被 nlparse 当成 60 万金额）。"""
+    before = len((await client.get("/api/dashboard")).json()["transactions"])
+    final = await _ask(client, "把 600519 加入自选")
+    assert final["route"] not in ("nl_add", "nl_pending", "bookkeeping")
+    assert len((await client.get("/api/dashboard")).json()["transactions"]) == before
+
+
+@pytest.mark.parametrize("question", ["600519 最近走势怎么样？", "看看茅台的走势"])
+async def test_market_keyword_routes_market(client, question) -> None:
+    """走势类问句路由到 market（此前落 general，模型只能答「无法联网」）。"""
+    final = await _ask(client, question)
+    assert final["route"] == "market"
+
+
+async def test_llm_classify_fallback(monkeypatch) -> None:
+    """规则未命中时的模型兜底分类：合法 JSON 采纳，非法/越界一律 None。"""
+
+    async def good(system: str, user: str, timeout: float = 20.0) -> dict:
+        return {"route": "market"}
+
+    monkeypatch.setattr(service.llm, "json_complete", good)
+    assert await service.classify_question_llm("茅台现在多少钱") == "market"
+
+    async def bad(system: str, user: str, timeout: float = 20.0) -> dict:
+        return {"route": "not-a-route"}
+
+    monkeypatch.setattr(service.llm, "json_complete", bad)
+    assert await service.classify_question_llm("随便聊聊") is None
+
+
+async def test_mem_legacy_recall_fallback(client) -> None:
+    """mem0 不可用（无 embedding 凭据）时，记忆检索降级为 user_memory 关键词检索。"""
+    from app import mem
+
+    await client.post("/api/memory", json={"content": "用户每个月 10 号要还房贷 6000"})
+    await client.post("/api/memory", json={"content": "用户偏好稳健型投资"})
+    hits = await mem._legacy_recall("还房贷是几号", 5)
+    assert hits and "房贷" in hits[0]["memory"]
+    assert all("memory" in h for h in hits)
+
+
+async def test_agent_config_generate_endpoint(client, monkeypatch) -> None:
+    """AI 生成端点：未接入模型友好报错；模型可用时返回建议且不落库。"""
+    # 未接入模型（conftest 的 _no_real_llm autouse 已置空 llm._cfg）
+    r = await client.post(
+        "/api/agent-config/generate", json={"kind": "skill", "prompt": "每周提醒检查定投"}
+    )
+    d = r.json()
+    assert d["ok"] is False and "模型" in d["error"]
+
+    # 模拟模型可用 + 返回合法 JSON（service.llm 与 main 内引用的 llm 是同一模块对象）
+    async def fake_json(system: str, user: str, timeout: float = 20.0) -> dict:
+        return {"id": "weekly_check", "name": "定投检查", "description": "每周提醒检查定投计划"}
+
+    async def fake_avail() -> bool:
+        return True
+
+    monkeypatch.setattr(service.llm, "json_complete", fake_json)
+    monkeypatch.setattr(service.llm, "llm_available", fake_avail)
+    r = await client.post(
+        "/api/agent-config/generate", json={"kind": "skill", "prompt": "每周提醒检查定投"}
+    )
+    d = r.json()
+    assert d["ok"] is True
+    assert d["suggestion"]["id"] == "weekly_check"
+    assert d["suggestion"]["enabled"] is True
+    # 只产出建议、不落库
+    cfg = (await client.get("/api/agent-config")).json()["config"]
+    assert "weekly_check" not in cfg.get("skills", {})
+
+
 @pytest.mark.parametrize(
     "question",
     ["我这个月花了3000怎么办", "昨天打车32元花了吗", "这个月餐饮预算应该定多少"],

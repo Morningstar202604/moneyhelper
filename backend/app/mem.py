@@ -17,6 +17,7 @@ mem0 自带：事实抽取、去重、更新、rerank、metadata filtering。
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -80,20 +81,57 @@ def remember(text: str, user_id: str = "default") -> bool:
         return False
 
 
-def recall(query: str, user_id: str = "default", limit: int = 5) -> list[dict]:
-    """按 query 检索相关记忆。返回 [{memory, score, ...}]。"""
+async def recall(query: str, user_id: str = "default", limit: int = 5) -> list[dict]:
+    """按 query 检索相关记忆。返回 [{memory, score, ...}]。
+
+    mem0 可用时走向量检索；不可用（无 embedding 凭据等）自动降级为
+    旧 user_memory 表（service._try_save_memory 写入）的关键词近似检索。
+    """
     _init()
-    if not query or _client is None:
-        return []
+    if _client is not None:
+        try:
+            res = _client.search(query, user_id=user_id, limit=limit)
+            # mem0 返回格式可能是 list[dict] 或带 results 字段，统一成 list
+            if isinstance(res, dict) and "results" in res:
+                res = res["results"]
+            return list(res or [])[:limit]
+        except Exception as e:  # pragma: no cover
+            log.warning("mem.search_failed: %s", e)
+    return await _legacy_recall(query, limit)
+
+
+async def _legacy_recall(query: str, limit: int) -> list[dict]:
+    """无向量环境的关键词近似检索：字符二元组重叠打分（个人记忆量级足够）。"""
     try:
-        res = _client.search(query, user_id=user_id, limit=limit)
-        # mem0 返回格式可能是 list[dict] 或带 results 字段，统一成 list
-        if isinstance(res, dict) and "results" in res:
-            res = res["results"]
-        return list(res or [])[:limit]
+        from . import db
+
+        rows = await db.list_memory()
     except Exception as e:  # pragma: no cover
-        log.warning("mem.search_failed: %s", e)
+        log.warning("mem.legacy_recall_failed: %s", e)
         return []
+    q = (query or "").strip()
+    if not q:
+        return [{"memory": str(r.get("content") or ""), "score": 0.0} for r in rows[:limit]]
+    scored: list[dict] = []
+    for r in rows:
+        content = str(r.get("content") or "")
+        score = _bigram_overlap(q, content)
+        if score > 0:
+            scored.append({"memory": content, "score": round(score, 3)})
+    scored.sort(key=lambda x: -float(x["score"]))
+    return scored[:limit]
+
+
+def _bigram_overlap(a: str, b: str) -> float:
+    """a 的字符二元组有多少比例出现在 b 中（0-1）。中文短句下的廉价近似检索。"""
+    def grams(s: str) -> set[str]:
+        s = re.sub(r"\s+", "", s)
+        return {s[i : i + 2] for i in range(len(s) - 1)} or ({s} if s else set())
+
+    ga, gb = grams(a), grams(b)
+    if not ga or not gb:
+        return 0.0
+    return len(ga & gb) / len(ga)
 
 
 def forget(memory_id: str, user_id: str = "default") -> bool:

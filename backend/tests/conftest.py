@@ -26,6 +26,9 @@ async def temp_db(tmp_path, monkeypatch):
     from app import db
 
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "wealth.db")
+    # 连接缓存陷阱：db._db 为模块级单连接，若上一个测试遗留了真实库连接，
+    # init_db 会直接复用导致本测试写进真实库——先强制关闭再按临时路径重开
+    await db.close_db()
     await db.init_db()
     await db.reset_to_seed()
     yield

@@ -25,7 +25,7 @@ from . import db, llm, nlparse
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
 
-MARKET_WORDS = ("股票", "基金", "持仓", "仓位", "组合", "收益", "亏", "涨", "跌", "etf", "市值", "资产", "集中度", "配置", "自选", "加自选")
+MARKET_WORDS = ("股票", "基金", "持仓", "仓位", "组合", "收益", "亏", "涨", "跌", "etf", "市值", "资产", "集中度", "配置", "自选", "加自选", "走势", "k线", "股价", "现价", "行情")
 LEDGER_WORDS = ("花", "消费", "支出", "记账", "账", "预算", "订阅", "会员", "还款", "负债", "房贷", "信用卡", "现金流", "存", "省", "应急金", "储蓄", "收入", "余额", "工资")
 # 目标/体检专用词：命中即按「市场+账本」全量财务路由（体检与目标进度需要完整数据）。
 # 刻意不用「目标」「进度」这类宽泛词，避免「人生目标」这类非财务问法被误伤（宁缺毋滥）。
@@ -252,6 +252,32 @@ def _looks_like_memory(question: str) -> bool:
     if any(m in q for m in QUESTION_MARKS):
         return False
     return any(v in q for v in MEMORY_VERBS)
+
+
+def _looks_like_watchlist(question: str) -> bool:
+    """含「自选」字样（加自选 / 移除自选 / 看自选）→ 归持仓-行情域，绝不进记账解析。
+
+    「把 600519 加入自选」里的 6 位代码会被 nlparse 当成金额（实测 600519 → 走 60 万大额审批），
+    必须在记账检测之前拦截。
+    """
+    return "自选" in question
+
+
+async def classify_question_llm(question: str, lang: str = "zh") -> str | None:
+    """规则未命中时的模型兜底分类：market / ledger / both / goal / general。
+
+    只管「是否理财问题及其域」，宁缺毋滥；模型不可用 / 输出非法一律返回 None（调用方保持 general）。
+    """
+    system = (
+        "你是意图分类器。只输出 JSON：{\"route\": \"market|ledger|both|goal|general\"}。"
+        "market=股票/基金/持仓/行情/走势/某个标的价格；ledger=收支/记账/预算/负债；"
+        "both=同时涉及持仓与收支；goal=财务体检/储蓄目标进度；general=其它（写作/闲聊/编程等）。"
+    )
+    out = await llm.json_complete(system, question, timeout=12.0)
+    if not isinstance(out, dict):
+        return None
+    route = str(out.get("route") or "").strip().lower()
+    return route if route in ("market", "ledger", "both", "goal", "general") else None
 
 
 async def _try_save_memory(question: str, emit: Emit, lang: str = "zh") -> dict[str, Any] | None:
