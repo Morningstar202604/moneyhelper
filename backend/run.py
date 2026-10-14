@@ -16,8 +16,8 @@ from pathlib import Path
 # 确保 app 目录在 path 里
 sys.path.insert(0, str(Path(__file__).parent))
 
-from app.main import app  # noqa: E402
 import uvicorn  # noqa: E402
+from app.main import app  # noqa: E402
 
 
 def open_browser_later(delay: float = 1.5):

@@ -10,7 +10,7 @@ cn2an>=0.5.24,<0.6           # 中文数字金额（三千块 / 一万二 / 五�
 python-dotenv>=1.0,<2
 apscheduler>=3.10,<4         # 定时晨报（替代自研 asyncio 循环）
 cryptography>=44,<45         # 本地加密备份（口令派生 Fernet）
-pydantic>=2.13,<3            # 请求体校验（FastAPI 自带依赖，显式登记）
+pydantic>=2.14,<2.15          # 请求体校验（FastAPI 自带依赖）；2.14 起 eval_type_backport 移除，需与 mcp>=1.30 搭配（全量测试锁定）
 pyjwt>=2.9,<3               # JWT 令牌（用户体系无状态鉴权）
 passlib[bcrypt]>=1.7,<2      # bcrypt 密码哈希（用户注册/登录）
 alembic>=1.13,<2             # 数据库迁移（版本化 schema 演进）
@@ -40,4 +40,3 @@ opentelemetry-exporter-otlp-proto-http>=1.27,<2
 chromadb>=0.5,<1            # mem0 本地向量后端（零外部服务，SQLite 同级 local-first）
 langchain-litellm>=0.1,<1
 langchain-core>=0.3,<1
-pydantic>=2.13,<3
