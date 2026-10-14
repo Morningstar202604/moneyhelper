@@ -16,12 +16,14 @@ test.describe("数据浮层", () => {
   });
 
   test("从对话跳转持仓浮层：种子持仓可见", async ({ page }) => {
+    // 已接入模型的机器上该问答走 agent 路径，给足超时
+    test.setTimeout(60_000);
     await page.goto("/");
     const field = page.getByPlaceholder(/问点什么/);
     await field.fill("我的持仓怎么样");
     await field.press("Enter");
-    // 确定性市场回答带「去持仓页」chip
-    await page.getByRole("button", { name: "去持仓页" }).first().click({ timeout: 10_000 });
-    await expect(page.getByText(/贵州茅台/).first()).toBeVisible({ timeout: 10_000 });
+    // 确定性/模型回答都带「去持仓页」chip
+    await page.getByRole("button", { name: "去持仓页" }).first().click({ timeout: 45_000 });
+    await expect(page.getByText(/贵州茅台/).first()).toBeVisible({ timeout: 15_000 });
   });
 });

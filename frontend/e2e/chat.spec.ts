@@ -47,7 +47,13 @@ test.describe("问答流程", () => {
     await expect(page.getByText(/8,000/).last()).toBeVisible();
   });
 
-  test("未配置模型时仍回显友好提示（无页面异常）", async ({ page }) => {
+  test("未配置模型时仍回显友好提示（无页面异常）", async ({ page, request }) => {
+    const health = (await (await request.get("http://127.0.0.1:8788/api/health")).json()) as {
+      llm_configured?: boolean;
+    };
+    // 本机已接入模型时该离线兜底文案不适用：本用例只在未配模型环境（CI）运行
+    test.skip(Boolean(health.llm_configured), "已接入模型，跳过离线兜底断言");
+
     const errors: string[] = [];
     page.on("pageerror", (err) => errors.push(String(err)));
     await page.goto("/");
