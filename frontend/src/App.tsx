@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { MotionConfig, AnimatePresence } from "framer-motion";
+import { MotionConfig } from "framer-motion";
 import { PanelLeftOpen, X } from "lucide-react";
 import { SessionSidebar } from "@/components/SessionSidebar";
 import { Onboarding } from "@/components/Onboarding";
@@ -257,16 +257,13 @@ export default function App() {
             </div>
           </div>
 
-          {/* 数据浮层：点击卡片才弹出，居中 modal，不是常驻侧栏 */}
-          <AnimatePresence>
-            {dataModal.open && (
-              <DataModal
-                kind={dataModal.kind}
-                onKindChange={(k) => setDataModal({ open: true, kind: k })}
-                onClose={() => setDataModal({ ...dataModal, open: false })}
-              />
-            )}
-          </AnimatePresence>
+          {/* 数据工具侧面板：按需从右侧滑出，不遮挡对话（自管理开合动画） */}
+          <DataModal
+            open={dataModal.open}
+            kind={dataModal.kind}
+            onKindChange={(k) => setDataModal({ open: true, kind: k })}
+            onClose={() => setDataModal({ ...dataModal, open: false })}
+          />
 
           {/* 设置页：全屏 overlay */}
           {settingsOpen && (

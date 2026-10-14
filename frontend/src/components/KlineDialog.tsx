@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import * as Dialog from "@radix-ui/react-dialog";
 import { Loader2 } from "lucide-react";
+import { SidePanel } from "@/components/ui/side-panel";
 import { cn } from "@/lib/utils";
 import { fmtMoney } from "@/lib/format";
 import { api } from "@/lib/api";
@@ -15,8 +15,8 @@ export interface KlinePoint {
   pct_change?: number | null;
 }
 
-/** K 线弹层：近 60 日收盘价走势（A股/ETF；其他标的会提示不可用）。
- *  持仓表与行情页自选共用。 */
+/** K 线侧面板：近 60 日收盘价走势（A股/ETF；其他标的会提示不可用）。
+ *  持仓表与行情页自选共用；右侧滑出，不遮挡对话。 */
 export function KlineDialog({
   symbol,
   name,
@@ -104,52 +104,37 @@ export function KlineDialog({
   useEChart(ref, points.length ? option : null, [points, resolved, colorTick]);
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm data-[state=open]:animate-fade-in" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(94vw,34rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-card p-4 shadow-lift data-[state=open]:animate-fade-in">
-          <div className="flex items-center justify-between">
-            <Dialog.Title className="text-sm font-semibold">
-              {name}
-              <span className="text-xs text-muted-foreground ml-2 tabular-nums">{symbol}</span>
-            </Dialog.Title>
-            <Dialog.Close asChild>
-              <button
-                type="button"
-                className="rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-accent"
-                aria-label={tr("pos.close")}
-              >
-                ✕
-              </button>
-            </Dialog.Close>
+    <SidePanel
+      open={open}
+      onClose={() => onOpenChange(false)}
+      title={`${name} ${symbol}`}
+      z="z-50"
+    >
+      <div>
+        {klineQuery.isPending ? (
+          <div className="flex h-52 items-center justify-center text-xs text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin mr-2" /> {tr("pos.loading")}
           </div>
-          <div className="mt-3">
-            {klineQuery.isPending ? (
-              <div className="flex h-52 items-center justify-center text-xs text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin mr-2" /> {tr("pos.loading")}
-              </div>
-            ) : error || !points.length ? (
-              <div className="flex h-52 items-center justify-center text-xs text-muted-foreground px-4 text-center">
-                {error || tr("pos.noKline")}
-              </div>
-            ) : (
-              <>
-                <div ref={ref} className="h-56 w-full" />
-                <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                  <span>
-                    {tr("pos.klineInfo", { n: points.length })} · {source === "snapshot" ? tr("pos.snapshot") : tr("pos.realtime")}
-                  </span>
-                  {points.length >= 2 && (
-                    <span className={cn("tabular-nums", points[points.length - 1].close >= points[0].close ? "text-up" : "text-down")}>
-                      {fmtMoney(points[points.length - 1].close)}
-                    </span>
-                  )}
-                </div>
-              </>
-            )}
+        ) : error || !points.length ? (
+          <div className="flex h-52 items-center justify-center text-xs text-muted-foreground px-4 text-center">
+            {error || tr("pos.noKline")}
           </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+        ) : (
+          <>
+            <div ref={ref} className="h-56 w-full" />
+            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+              <span>
+                {tr("pos.klineInfo", { n: points.length })} · {source === "snapshot" ? tr("pos.snapshot") : tr("pos.realtime")}
+              </span>
+              {points.length >= 2 && (
+                <span className={cn("tabular-nums", points[points.length - 1].close >= points[0].close ? "text-up" : "text-down")}>
+                  {fmtMoney(points[points.length - 1].close)}
+                </span>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </SidePanel>
   );
 }

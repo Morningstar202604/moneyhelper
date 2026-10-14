@@ -75,3 +75,59 @@ async def put_budgets(payload: dict) -> dict:
         username="system",
     )
     return {"ok": True, "month": month, "count": len(clean)}
+
+
+@router.post("/api/budgets/suggest")
+async def suggest_budgets() -> dict:
+    """AI 按近两月实际支出给月度预算建议（只产出建议不落库；未接模型时友好报错）。"""
+    from datetime import datetime, timedelta
+
+    from .. import llm
+
+    if not await llm.llm_available():
+        return {"ok": False, "error": "未接入模型 —— 先到「设置 → AI 回答」配置模型端点"}
+
+    # 近 60 天支出按类别聚合（只统计支出：amount < 0）
+    txns = await db.list_transactions()
+    cutoff = (datetime.now().astimezone().date() - timedelta(days=60)).isoformat()
+    by_cat: dict[str, float] = {}
+    total = 0.0
+    for t in txns:
+        d = str(t.get("date") or "")
+        amt = float(t.get("amount") or 0)
+        if d >= cutoff and amt < 0:
+            cat = str(t.get("category") or "其他")
+            by_cat[cat] = by_cat.get(cat, 0.0) + abs(amt)
+            total += abs(amt)
+    if total <= 0:
+        return {"ok": False, "error": "近两个月没有支出记录，先记几笔再来"}
+
+    summary = (
+        "近约两个月（60 天）实际支出分类汇总（元）："
+        + "，".join(f"{k} {round(v)}" for k, v in sorted(by_cat.items(), key=lambda x: -x[1])[:15])
+        + f"。总支出 {round(total)} 元。"
+    )
+    system = (
+        "你是理财预算顾问。根据用户近两月支出明细，给出下个月预算建议。只输出 JSON："
+        '{"total": 整数, "categories": {"分类名": 整数}}。'
+        "规则：分类名沿用输入中的中文名；金额取整；建议值贴近实际并留一点余量；分类不超过 8 个。"
+    )
+    out = await llm.json_complete(system, summary, timeout=25.0)
+    if not isinstance(out, dict):
+        return {"ok": False, "error": "生成失败，请稍后重试"}
+    try:
+        total_v = int(float(out.get("total") or 0))
+        cats = {
+            str(k)[:12]: int(float(v))
+            for k, v in (out.get("categories") or {}).items()
+            if float(v or 0) > 0
+        }
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "生成结果不可用，请重试"}
+    if total_v <= 0 or not cats:
+        return {"ok": False, "error": "生成结果不可用，请重试"}
+    return {
+        "ok": True,
+        "suggestion": {"total": total_v, "categories": cats},
+        "based_on": {"days": 60, "spent": round(total)},
+    }

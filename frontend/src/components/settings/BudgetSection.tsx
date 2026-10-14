@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { useMutate } from "@/lib/use-mutate";
+import { useToast } from "@/lib/toast";
 import { useI18n } from "@/lib/i18n";
 import { fmtMoney } from "@/lib/format";
 import { Section, inputCls, labelCls } from "./shared";
@@ -19,8 +21,43 @@ function parseCats(text: string): { name: string; amount: number }[] {
 /** 预算编辑（总额 + 分类行），状态与保存逻辑已下沉到本组件 */
 export function BudgetSection() {
   const { t } = useI18n();
+  const { toast } = useToast();
   const [budgetTotal, setBudgetTotal] = useState("");
   const [budgetCats, setBudgetCats] = useState("");
+  // AI 建议预算：只产出建议，采用后填进表单，仍走既有「保存预算」落库
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiSugg, setAiSugg] = useState<{ total: number; categories: Record<string, number> } | null>(null);
+  const [aiBased, setAiBased] = useState(60);
+
+  const suggest = async () => {
+    setAiBusy(true);
+    setAiSugg(null);
+    try {
+      const d = await api<{
+        ok: boolean;
+        suggestion?: { total: number; categories: Record<string, number> };
+        based_on?: { days: number };
+        error?: string;
+      }>("/api/budgets/suggest", { method: "POST", body: JSON.stringify({}) });
+      if (d.ok && d.suggestion) {
+        setAiSugg(d.suggestion);
+        setAiBased(d.based_on?.days ?? 60);
+      } else {
+        toast(String(d.error || t("settings.budgetAiFail")), "error");
+      }
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), "error");
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const applySuggestion = () => {
+    if (!aiSugg) return;
+    setBudgetTotal(String(aiSugg.total));
+    setBudgetCats(Object.entries(aiSugg.categories).map(([k, v]) => `${k} ${v}`).join("\n"));
+    toast(t("settings.budgetAiApplied"), "ok");
+  };
 
   const save = useMutate<{ category: string; amount: number }[], void>({
     fn: async (items) => {
@@ -81,6 +118,43 @@ export function BudgetSection() {
             placeholder={t("settings.budgetCatsPh")}
           />
         </div>
+        {/* AI 建议预算：按近两月实际支出生成，采用后填入上方表单（人工确认再保存） */}
+        <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-sm">{t("settings.budgetAi")}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">{t("settings.budgetAiHint")}</div>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => void suggest()} disabled={aiBusy}>
+              <Sparkles className="w-3.5 h-3.5" /> {aiBusy ? t("settings.budgetAiBusy") : t("settings.budgetAiBtn")}
+            </Button>
+          </div>
+          {aiSugg && (
+            <div className="mt-2 rounded-md border border-border bg-card p-2.5">
+              <div className="text-xs text-muted-foreground">{t("settings.budgetAiBased", { n: aiBased })}</div>
+              <div className="mt-1 text-sm font-medium">
+                {t("settings.budgetAiTotal")} {fmtMoney(aiSugg.total)}
+              </div>
+              <ul className="mt-1 space-y-0.5">
+                {Object.entries(aiSugg.categories).map(([k, v]) => (
+                  <li key={k} className="flex justify-between text-xs">
+                    <span>{k}</span>
+                    <span className="tabular-nums">{fmtMoney(v)}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-2 flex gap-1.5">
+                <Button size="sm" onClick={applySuggestion}>
+                  {t("settings.budgetAiAdopt")}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => void suggest()}>
+                  {t("settings.budgetAiAgain")}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">
             {budgetTotal ? `${t("settings.budgetTotalLabel")} ${fmtMoney(previewTotal)}` : t("settings.budgetNone")} · {t("settings.budgetCatCount", { n: previewCats.length })}

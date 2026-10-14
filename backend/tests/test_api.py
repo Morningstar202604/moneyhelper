@@ -609,6 +609,36 @@ async def test_agent_config_generate_endpoint(client, monkeypatch) -> None:
     assert "weekly_check" not in cfg.get("skills", {})
 
 
+async def test_budgets_suggest_endpoint(client, monkeypatch) -> None:
+    """AI 预算建议：未接入模型友好报错；模型可用时按支出汇总给出建议且不落库。"""
+    # 未接入模型
+    r = await client.post("/api/budgets/suggest", json={})
+    d = r.json()
+    assert d["ok"] is False and "模型" in d["error"]
+
+    # 有支出记录 + 模型可用
+    await client.post("/api/transactions", json={"date": "2026-10-01", "item": "午餐", "category": "餐饮", "amount": -50})
+    await client.post("/api/transactions", json={"date": "2026-10-02", "item": "打车", "category": "交通", "amount": -30})
+
+    async def fake_json(system: str, user: str, timeout: float = 25.0) -> dict:
+        assert "餐饮" in user  # 汇总里应包含真实分类
+        return {"total": 3000, "categories": {"餐饮": 1500, "交通": 800}}
+
+    async def fake_avail() -> bool:
+        return True
+
+    monkeypatch.setattr(service.llm, "json_complete", fake_json)
+    monkeypatch.setattr(service.llm, "llm_available", fake_avail)
+    r = await client.post("/api/budgets/suggest", json={})
+    d = r.json()
+    assert d["ok"] is True
+    assert d["suggestion"]["total"] == 3000
+    assert d["suggestion"]["categories"]["餐饮"] == 1500
+    # 不落库：预算仍需用户确认后走 PUT /api/budgets
+    budgets = (await client.get("/api/budgets")).json()["budgets"]
+    assert not any(b["amount"] == 3000 for b in budgets)
+
+
 @pytest.mark.parametrize(
     "question",
     ["我这个月花了3000怎么办", "昨天打车32元花了吗", "这个月餐饮预算应该定多少"],
