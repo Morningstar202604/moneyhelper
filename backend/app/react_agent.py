@@ -53,12 +53,14 @@ def _make_langchain_tool(name: str, description: str, impl: Any, param_schema: d
     )
 
 
-def _build_finance_tools(agent_name: str = "supervisor") -> list[StructuredTool]:
+async def _build_finance_tools(agent_name: str = "supervisor") -> list[StructuredTool]:
     """把财务读类工具包装成 LangChain 工具，按 agent 分组过滤。
 
     每个 agent 只看到自己该用的工具，减少 token 消耗。
+    设置页的 agent 配置（设置 → Agent → 工具开关）在此真正生效：
+    配置为工具名列表时取交集（写工具始终被 WRITE_EXCLUDED 排除，只读不变量不变）。
     """
-    # 按 agent 分组的工具名
+    # 按 agent 分组的默认工具名
     AGENT_TOOLS: dict[str, set[str]] = {
         "bookkeeping": {
             "get_ledger_view", "get_budget", "get_trend", "record_transaction",
@@ -73,6 +75,15 @@ def _build_finance_tools(agent_name: str = "supervisor") -> list[StructuredTool]
         },
     }
     allowed = AGENT_TOOLS.get(agent_name, set())
+    # 读用户配置（缺行时回落内置默认）；配置为具体列表时与内置分组取交集
+    try:
+        from . import agent_config
+
+        configured = await agent_config.get_agent_tools(agent_name)
+        if isinstance(configured, list):
+            allowed = set(configured) if not allowed else (allowed & set(configured))
+    except Exception:  # noqa: BLE001 — 配置读取失败回落内置默认
+        pass
 
     lc_tools: list[StructuredTool] = []
     for t in tools.TOOLS:
@@ -114,7 +125,7 @@ async def run_react_agent(question: str, system_prompt: str, lang: str = "zh", a
         request_timeout=60,
     )
 
-    lc_tools = _build_finance_tools(agent_name)
+    lc_tools = await _build_finance_tools(agent_name)
 
     # 长期记忆注入
     memories = await db.list_memory()

@@ -1790,6 +1790,28 @@ async def update_agent_config(payload: dict) -> dict:
     return {"ok": True}
 
 
+@app.post("/api/agent-config/generate")
+async def generate_agent_config(payload: dict) -> dict:
+    """AI 一键生成：按自然语言描述生成 skill / 角色描述（设置页「AI 生成」按钮）。
+
+    只产出建议不落库，由用户在设置页确认后随既有保存流程写入。
+    未接入模型或模型输出不可用 → 200 + {"ok": false, "error": ...}（fail-closed）。
+    """
+    from . import agent_config, llm
+
+    kind = str((payload or {}).get("kind") or "skill").strip()
+    prompt = str((payload or {}).get("prompt") or "").strip()
+    agent_name = str((payload or {}).get("agent") or "").strip()
+    if not prompt:
+        return {"ok": False, "error": "请先描述你想要的效果"}
+    if not await llm.llm_available():
+        return {"ok": False, "error": "未接入模型 —— 先到「设置 → AI 回答」配置模型端点"}
+    suggestion = await agent_config.generate_suggestion(kind, prompt, agent_name)
+    if suggestion is None:
+        return {"ok": False, "error": "生成失败，请换个描述再试"}
+    return {"ok": True, "suggestion": suggestion}
+
+
 # ---------------------------------------------------------------------------
 # 静态前端托管（同域单端口）
 # ---------------------------------------------------------------------------

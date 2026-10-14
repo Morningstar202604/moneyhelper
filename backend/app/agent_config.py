@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
+import uuid
 from typing import Any
 
 from . import db
@@ -68,3 +70,39 @@ async def is_skill_enabled(skill_name: str) -> bool:
     cfg = await get_config()
     skill_cfg = cfg.get("skills", {}).get(skill_name, {})
     return skill_cfg.get("enabled", True)
+
+
+async def generate_suggestion(kind: str, prompt: str, agent_name: str = "") -> dict[str, Any] | None:
+    """按自然语言描述生成配置建议（skill 或某 agent 的名称/描述）。
+
+    只产出建议、不落库——由用户在设置页确认后随既有保存流程写入。
+    模型不可用 / 输出非法一律返回 None（fail-closed，调用方给出友好错误）。
+    """
+    from . import llm
+
+    if kind == "skill":
+        system = (
+            "你是财务助手的功能技能设计器。根据用户描述生成一个 JSON："
+            '{"id": "snake_case_ascii 唯一短 id", "name": "4-6 字中文名", '
+            '"description": "一句话说明这个技能做什么（中文，40 字以内）"}。只输出 JSON，不要多余文字。'
+        )
+    elif kind == "agent":
+        system = (
+            f"你是财务助手中 {agent_name or '某个'} 角色的设计器。根据用户描述生成 JSON："
+            '{"name": "4-8 字中文角色名", "description": "一句话职责说明（中文，40 字以内）"}。只输出 JSON。'
+        )
+    else:
+        return None
+
+    out = await llm.json_complete(system, prompt, timeout=20.0)
+    if not isinstance(out, dict):
+        return None
+    name = str(out.get("name") or "").strip()[:20]
+    desc = str(out.get("description") or "").strip()[:80]
+    if not name or not desc:
+        return None
+    if kind == "skill":
+        raw_id = str(out.get("id") or "").strip().lower()
+        sid = re.sub(r"[^a-z0-9_]+", "_", raw_id).strip("_") or f"skill_{uuid.uuid4().hex[:8]}"
+        return {"id": sid, "name": name, "description": desc, "enabled": True}
+    return {"name": name, "description": desc}

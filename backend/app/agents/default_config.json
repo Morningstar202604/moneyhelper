@@ -37,7 +37,7 @@
     "morning_report": {
       "name": "每日晨报",
       "description": "每天早上推送持仓和行情概览",
-      "enabled": false
+      "enabled": true
     },
     "long_memory": {
       "name": "长期记忆",

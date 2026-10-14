@@ -8,25 +8,37 @@
 
 from __future__ import annotations
 
-from app import agent, react_agent
+import json
+
+from app import agent, agent_config, db, react_agent
 
 
-def test_build_finance_tools_supervisor_gets_readonly_tools() -> None:
+async def test_build_finance_tools_supervisor_gets_readonly_tools(temp_db) -> None:
     """supervisor 拿到全量只读工具，写工具一律不暴露。"""
-    names = {t.name for t in react_agent._build_finance_tools("supervisor")}
+    names = {t.name for t in await react_agent._build_finance_tools("supervisor")}
     assert len(names) >= 10
     assert not (names & agent.WRITE_EXCLUDED), "运行时只暴露只读工具"
 
 
-def test_build_finance_tools_bookkeeping_subset() -> None:
+async def test_build_finance_tools_bookkeeping_subset(temp_db) -> None:
     """bookkeeping 只看账本类只读工具（record_transaction 是写工具，须被排除）。"""
-    names = {t.name for t in react_agent._build_finance_tools("bookkeeping")}
+    names = {t.name for t in await react_agent._build_finance_tools("bookkeeping")}
     assert names == {"get_ledger_view", "get_budget", "get_trend"}
 
 
-def test_build_finance_tools_portfolio_includes_market() -> None:
-    names = {t.name for t in react_agent._build_finance_tools("portfolio")}
+async def test_build_finance_tools_portfolio_includes_market(temp_db) -> None:
+    names = {t.name for t in await react_agent._build_finance_tools("portfolio")}
     assert {"get_market_view", "get_quote", "search_symbol"} <= names
+
+
+async def test_build_finance_tools_honors_agent_config(temp_db) -> None:
+    """设置页的工具开关真正生效：配置为子集时只暴露交集（写工具仍被排除）。"""
+    cfg = await agent_config.get_config()
+    cfg.setdefault("agents", {}).setdefault("portfolio", {})["tools"] = ["get_quote", "sell_position"]
+    await db.set_setting("agent_config", json.dumps(cfg, ensure_ascii=False))
+    names = {t.name for t in await react_agent._build_finance_tools("portfolio")}
+    # get_quote 保留；sell_position 是写工具被 WRITE_EXCLUDED 排除
+    assert names == {"get_quote"}
 
 
 def test_make_langchain_tool_required_args_schema() -> None:

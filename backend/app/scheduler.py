@@ -209,6 +209,11 @@ def _reschedule() -> None:
     if _sched is None:
         return
     _sched.remove_all_jobs()
+    # skill 开关（设置→Agent）真正生效：morning_report 关闭时不再注册定时晨报
+    # （手动「生成今日晨报」走 action 路径，不受影响）
+    if not _state.get("report_enabled", True):
+        _state["next_run_at"] = "（晨报已在设置中关闭）"
+        return
     hm = _parse_time(_state.get("report_time"))
     if hm is None:
         _sched.add_job(_cron_job, trigger="interval", minutes=1440, id="morning_report")
@@ -231,9 +236,15 @@ async def _cron_job() -> None:
 
 
 async def notify_settings_changed() -> None:
-    """设置保存后调用：读最新报告时间并重排。"""
+    """设置保存后调用：读最新报告时间与晨报开关，并重排。"""
     st = await db.get_settings()
     _state["report_time"] = st.get("report_time", "08:00")
+    try:
+        from . import agent_config
+
+        _state["report_enabled"] = await agent_config.is_skill_enabled("morning_report")
+    except Exception:  # noqa: BLE001 — 配置读取失败按开启处理（宁多报不漏报）
+        _state["report_enabled"] = True
     _reschedule()
 
 
@@ -243,6 +254,12 @@ async def start() -> None:
         return
     st = await db.get_settings()
     _state["report_time"] = st.get("report_time", "08:00")
+    try:
+        from . import agent_config
+
+        _state["report_enabled"] = await agent_config.is_skill_enabled("morning_report")
+    except Exception:  # noqa: BLE001
+        _state["report_enabled"] = True
     _sched = AsyncIOScheduler(timezone="Asia/Shanghai")
     _reschedule()
     _sched.start()
