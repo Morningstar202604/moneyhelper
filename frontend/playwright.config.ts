@@ -26,6 +26,7 @@ export default defineConfig({
   reporter: process.env.CI ? "github" : [["list"]],
   use: {
     baseURL: "http://127.0.0.1:5198",
+    locale: "zh-CN",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },

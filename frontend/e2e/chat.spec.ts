@@ -1,34 +1,61 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * 问答页核心交互：输入回车发送 → 气泡出现 → 空库未配模型时回退提示可见。
- * 不依赖真实 LLM：未配置模型时前端显示确定性回退徽标/提示，仍能验证整条链路。
+ * 问答流程：回车发送 → 气泡 → 一句话记账离线闭环（含大额待确认审批）。
+ * 不依赖真实 LLM：未配模型时走确定性模板，整条链路（SSE + 入账 + 跳转）仍可验证。
  */
 
 test.describe("问答流程", () => {
   test("输入框中回车发出消息，气泡立刻出现", async ({ page }) => {
     await page.goto("/");
-    const input = page.getByRole("textbox").or(page.getByPlaceholder(/问点什么/));
-    const field = input.first();
+    const field = page.getByPlaceholder(/问点什么/);
     await field.fill("本月餐饮花了多少");
     await field.press("Enter");
-
-    // 追加的用户气泡
-    await expect(page.getByText("本月餐饮花了多少")).toBeVisible();
+    await expect(page.getByText("本月餐饮花了多少").first()).toBeVisible();
   });
 
-  test("未配置模型时仍回显友好提示（不报网络错误）", async ({ page }) => {
-    // 这是 demo 数据但无模型配置：bootstrap.health.llm_configured=false
-    // 前端应当要么显示"未接入模型"要么显示确定性回退，不能是白屏或 JS 异常。
-    page.on("pageerror", (err) => {
-      throw err;
-    });
+  test("一句话记账离线闭环：回执 + 去记账页联动", async ({ page }) => {
     await page.goto("/");
-    const input = page.getByRole("textbox").or(page.getByPlaceholder(/问点什么/));
-    await input.fill("你好");
+    const field = page.getByPlaceholder(/问点什么/);
+    await field.fill("午饭 35 元");
+    await field.press("Enter");
 
-    // 关键断言：页面 title 没变成错误的，并且没有 [Object object] / 堆栈泄露
-    const bodyText = await page.locator("body").innerText();
-    expect(bodyText).not.toContain("[object Object]");
+    // 确定性回执（无需模型）
+    await expect(page.getByText(/已记一笔/).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/35/).first()).toBeVisible();
+
+    // 回执带「去记账页」跳转 chip → 打开记账浮层
+    await page.getByRole("button", { name: "去记账页" }).first().click();
+    await expect(page.getByText("记账").first()).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: "关闭" }).first().click();
+  });
+
+  test("大额待确认：回复「确认」后入账", async ({ page }) => {
+    await page.goto("/");
+    const field = page.getByPlaceholder(/问点什么/);
+    await field.fill("工资 8000 已到账");
+    await field.press("Enter");
+    // 大额审批先待确认，不入账
+    await expect(page.getByText(/确认要记吗/).first()).toBeVisible({ timeout: 10_000 });
+
+    // 等本轮流式回答完全结束（停止按钮消失），再发确认，避免被 busy 早退静默丢弃
+    await expect(page.getByRole("button", { name: "停止回答" })).toHaveCount(0);
+    await field.fill("确认");
+    await field.press("Enter");
+    // 确认后入账
+    await expect(page.getByText(/已记一笔/).last()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/8,000/).last()).toBeVisible();
+  });
+
+  test("未配置模型时仍回显友好提示（无页面异常）", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(String(err)));
+    await page.goto("/");
+    const field = page.getByPlaceholder(/问点什么/);
+    await field.fill("你好");
+    await field.press("Enter");
+    // 确定性兜底文案，不是白屏 / JS 崩溃
+    await expect(page.getByText(/没有接入模型|未接入模型/).first()).toBeVisible({ timeout: 10_000 });
+    expect(errors).toEqual([]);
   });
 });

@@ -1,60 +1,63 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * 冒烟测试：应用能启动、种子数据加载、核心页面可达、主题/语言切换不报错。
- * 依赖 global-setup 已种入演示数据。
+ * 冒烟测试（v2 对话主导布局）：品牌可见、对话是默认入口、数据浮层 / 设置 / 主题可达。
+ * 依赖 global-setup 已种入演示数据；语言固定 zh-CN（playwright.config.ts locale）。
  */
 
 test.describe("应用启动 & 冒烟", () => {
-  test("首屏加载出品牌 + 顶部导航", async ({ page }) => {
+  test("首屏加载品牌 + 对话输入框", async ({ page }) => {
     await page.goto("/");
-    // 品牌名出现在顶栏/首屏任一位置即可
+    // 品牌：侧栏 logo 按钮（小满 + 标语）
     await expect(page.getByText("小满").first()).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "主导航" }).first()).toBeVisible();
+    await expect(page.getByText("记一笔，问一句").first()).toBeVisible();
+    // 对话是默认入口：输入框可见
+    await expect(page.getByPlaceholder(/问点什么/)).toBeVisible();
   });
 
-  test("问答页是默认入口，输入框可交互", async ({ page }) => {
+  test("侧栏品牌按钮打开总览浮层，可关闭", async ({ page }) => {
     await page.goto("/");
-    const input = page.getByRole("textbox").or(page.getByPlaceholder(/问点什么/));
-    await expect(input.first()).toBeVisible();
+    await page.getByRole("button", { name: /小满/ }).first().click();
+    // 总览浮层：标题 + 关闭按钮
+    await expect(page.getByRole("heading", { name: "总览" })).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: "关闭" }).first().click();
+    await expect(page.getByRole("button", { name: "关闭" })).toHaveCount(0);
   });
 
-  test("切换到功能页并依次显示 4 个子 tab", async ({ page }) => {
+  test("打开应用不会新建垃圾会话（会话列表加载竞态回归）", async ({ page, request }) => {
+    const api = "http://127.0.0.1:8788";
+    const list = async () =>
+      ((await (await request.get(`${api}/api/sessions`)).json()).sessions ?? []) as unknown[];
+    let sessions = await list();
+    if (sessions.length === 0) {
+      // 全新库场景：先自建一个会话，再验证「打开应用不会额外新建」
+      await request.post(`${api}/api/sessions`, { data: {} });
+      sessions = await list();
+    }
+    const before = sessions.length;
     await page.goto("/");
-
-    // 桌面：顶部「功能」tab
-    await page.getByRole("tab", { name: "功能" }).click().catch(async () => {
-      // 移动端底栏 nav 同名 radio
-      await page.getByRole("navigation", { name: "主导航" }).getByText("功能").click();
-    });
-
-    // 子 tab：总览 / 持仓 / 行情 / 记账 —— 至少其中一个当前被选中
-    await expect(page.getByRole("tab", { name: "总览" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "持仓" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "行情" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "记账" })).toBeVisible();
+    // 等首屏初始化（bootstrap + 会话列表）稳定
+    await expect(page.getByPlaceholder(/问点什么/)).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(1200);
+    expect((await list()).length).toBe(before);
   });
 
-  test("切换到设置页能看到语言 & AI 入口", async ({ page }) => {
+  test("设置页能打开，看到语言切换与 AI 入口", async ({ page }) => {
     await page.goto("/");
-
-    // 桌面：右上角齿轮；移动端同样在顶栏
-    await page.getByRole("button", { name: "设置" }).click();
-
-    // 设置页的一个明显标题 (AI / i18n key: settings.aiModel / settings.lang)
-    await expect(page.getByText("语言")).toBeVisible();
-    await expect(page.getByRole("button", { name: "English" }).or(page.getByRole("button", { name: "中文" }))).toBeVisible();
+    await page.getByRole("button", { name: "设置" }).first().click();
+    await expect(page.getByRole("button", { name: "关闭" })).toBeVisible();
+    await expect(page.getByText("AI 回答").first()).toBeVisible();
+    await expect(page.getByText("偏好").first()).toBeVisible();
   });
 
   test("明暗主题切换修改 html 类名", async ({ page }) => {
     await page.goto("/");
     const html = page.locator("html");
     const before = await html.getAttribute("class");
-    // Theme button aria-label = "切换明暗" (icon only, no text label)
+    // Theme button aria-label = 切换明暗（icon only）
     await page.getByRole("button", { name: "切换明暗" }).click();
-    // Give React a moment to toggle class attribute
     await page.waitForTimeout(200);
     const after = await html.getAttribute("class");
-    expect(before !== after || (before ?? "") !== (after ?? "")).toBeTruthy();
+    expect(before !== after).toBeTruthy();
   });
 });

@@ -1,49 +1,27 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * 数据页（功能 → 四个子页）正常渲染种子数据，不抛错。
- * 真实数值来自 /api/portfolio/reset 种入的演示数据，这里只断言图表容器 / 表格存在。
+ * 数据浮层（v2：对话主导，数据按需弹出）：总览种子数据 + 从对话 chip 跳转持仓。
+ * 依赖 global-setup 已种入演示数据（贵州茅台 / 沪深300ETF 等）。
  */
 
-test.describe("功能页渲染", () => {
-  test("总览页包含资产相关文案", async ({ page }) => {
+test.describe("数据浮层", () => {
+  test("总览浮层包含资产相关文案（种子数据）", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("tab", { name: "功能" }).click().catch(async () => {
-      await page.getByRole("navigation", { name: "主导航" }).getByText("功能").click();
-    });
-    await expect(page.getByRole("tab", { name: "总览" })).toBeVisible();
-    // 资产/储蓄 相关 section 标题
-    await expect(page.getByText("总资产").or(page.getByText("本月净现金流"))).toBeVisible();
+    await page.getByRole("button", { name: /小满/ }).first().click();
+    await expect(page.getByRole("heading", { name: "总览" })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("资产分布").first()).toBeVisible();
+    // 净值卡：负债明细可见（dict 契约的前端消费回归）
+    await expect(page.getByText("信用卡分期").first()).toBeVisible({ timeout: 10_000 });
   });
 
-  test("持仓页存在可点击的持仓行（种子数据 >= 1 条）", async ({ page }) => {
+  test("从对话跳转持仓浮层：种子持仓可见", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("tab", { name: "功能" }).click().catch(async () => {
-      await page.getByRole("navigation", { name: "主导航" }).getByText("功能").click();
-    });
-    await page.getByRole("tab", { name: "持仓" }).click();
-    // 种子数据至少有 1 条 600519 类的持仓（表格容器可见）
-    await expect(page.getByText("持仓").first()).toBeVisible();
-  });
-
-  test("行情页能打开搜索框（自选列表交互）", async ({ page }) => {
-    await page.goto("/");
-    await page.getByRole("tab", { name: "功能" }).click().catch(async () => {
-      await page.getByRole("navigation", { name: "主导航" }).getByText("功能").click();
-    });
-    await page.getByRole("tab", { name: "行情" }).click();
-    await expect(page.getByPlaceholder(/搜代码或名称/)).toBeVisible();
-  });
-
-  test("记账页存在空引导或最近流水区", async ({ page }) => {
-    await page.goto("/");
-    await page.getByRole("tab", { name: "功能" }).click().catch(async () => {
-      await page.getByRole("navigation", { name: "主导航" }).getByText("功能").click();
-    });
-    await page.getByRole("tab", { name: "记账" }).click();
-    // 「本月」或「最近」或「记一笔」至少一个出现
-    await expect(
-      page.getByText("本月").or(page.getByText("最近")).or(page.getByText("记一笔")),
-    ).toBeVisible();
+    const field = page.getByPlaceholder(/问点什么/);
+    await field.fill("我的持仓怎么样");
+    await field.press("Enter");
+    // 确定性市场回答带「去持仓页」chip
+    await page.getByRole("button", { name: "去持仓页" }).first().click({ timeout: 10_000 });
+    await expect(page.getByText(/贵州茅台/).first()).toBeVisible({ timeout: 10_000 });
   });
 });
