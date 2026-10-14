@@ -69,7 +69,7 @@ export function ReturnsCard({ months = 6 }: { months?: number }) {
         />
       </div>
 
-      <div className="mt-2 text-[10px] text-muted-foreground tabular-nums">
+      <div className="mt-2 text-[11px] text-muted-foreground tabular-nums">
         {tr("returns.txCount")}: {data.transaction_count}
       </div>
     </Card>
@@ -81,7 +81,7 @@ function ReturnStat({ label, value, pct }: { label: string; value: string; pct: 
   const tone = pct === null ? "neutral" : pct >= 0 ? "up" : "down";
   return (
     <div className="rounded-lg bg-muted/30 px-2 py-1.5 text-center">
-      <div className="text-[10px] text-muted-foreground mb-0.5">{label}</div>
+      <div className="text-[11px] text-muted-foreground mb-0.5">{label}</div>
       <div className={`text-sm font-bold tabular-nums ${pnlClass(tone === "up" ? 1 : tone === "down" ? -1 : 0)}`}>
         {value}
       </div>

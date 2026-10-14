@@ -54,7 +54,7 @@ export function MorningReportDialog({
               {t("report.title")}
               {state.level && (
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
                     isLevelAlert(state.level)
                       ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
                       : "bg-primary/10 text-primary"

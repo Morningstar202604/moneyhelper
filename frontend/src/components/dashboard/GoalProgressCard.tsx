@@ -90,7 +90,7 @@ export function GoalProgressCard() {
                 colorClass={isDone ? "bg-success" : !g.on_track ? "bg-red-500" : g.progress_pct >= 75 ? "bg-emerald-500" : g.progress_pct >= 40 ? "bg-primary" : "bg-amber-500"}
                 className="h-1.5"
               />
-              <div className="mt-0.5 text-[10px] text-muted-foreground flex items-center justify-between">
+              <div className="mt-0.5 text-[11px] text-muted-foreground flex items-center justify-between">
                 <span>{fmtMoney(g.current_amount, false)} / {fmtMoney(g.target_amount, false)}</span>
                 {!isDone && g.months_remaining !== null && g.months_remaining <= 3 && (
                   <span className={!g.on_track ? "text-red-500 font-medium" : ""}>

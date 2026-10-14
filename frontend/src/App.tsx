@@ -217,12 +217,17 @@ export default function App() {
               )}
             </aside>
 
-            {/* 中间对话区：占满，绝对主角 */}
-            <div className="flex flex-1 min-w-0 flex-col">
+            {/* 中间对话区：占满，绝对主角；数据面板展开时（lg+）让位而不被遮挡 */}
+            <div
+              className={cn(
+                "flex flex-1 min-w-0 flex-col transition-[margin] duration-200",
+                dataModal.open && "lg:mr-[440px]",
+              )}
+            >
               <TopBar onOpenSettings={() => setSettingsOpen(true)} />
 
               <main className="flex-1 min-h-0">
-                <div className="mx-auto w-full max-w-2xl h-full flex flex-col pb-20 md:pb-0 view-enter">
+                <div className="mx-auto w-full max-w-3xl h-full flex flex-col pb-20 md:pb-0 view-enter">
                   <Suspense
                     fallback={
                       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -257,6 +262,7 @@ export default function App() {
             {dataModal.open && (
               <DataModal
                 kind={dataModal.kind}
+                onKindChange={(k) => setDataModal({ open: true, kind: k })}
                 onClose={() => setDataModal({ ...dataModal, open: false })}
               />
             )}

@@ -112,7 +112,7 @@ export function MemorySection() {
             <li key={m.id} className="flex items-start justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5 text-sm">
               <span className="min-w-0 flex-1">
                 <span className="block break-words">{m.content}</span>
-                <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                <span className="mt-0.5 block text-xs text-muted-foreground">
                   {m.kind !== "fact" ? `${m.kind} · ` : ""}{t("settings.memUpdated")} {fmtDate(m.updated_at)}
                 </span>
               </span>
@@ -178,7 +178,7 @@ export function MemorySection() {
             </Button>
           )}
         </div>
-        <p className="mt-0.5 text-[11px] text-muted-foreground/70">{t("settings.reflectionsDesc")}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground/70">{t("settings.reflectionsDesc")}</p>
         {reflections == null ? (
           <div className="mt-2 text-xs text-muted-foreground">{t("settings.loading")}</div>
         ) : reflections.length === 0 ? (
@@ -188,8 +188,8 @@ export function MemorySection() {
             {reflections.map((r) => (
               <li key={r.id} className="flex items-start justify-between gap-2 rounded-lg border border-amber-400/30 bg-amber-50/40 px-2.5 py-1.5 text-sm">
                 <span className="min-w-0 flex-1">
-                  <span className="block break-words"><span className="font-mono text-[11px] text-amber-700">{r.tool}</span> · {r.lesson}</span>
-                  <span className="mt-0.5 block text-[11px] text-muted-foreground">{fmtDate(r.created_at)}</span>
+                  <span className="block break-words"><span className="font-mono text-xs text-amber-700">{r.tool}</span> · {r.lesson}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">{fmtDate(r.created_at)}</span>
                 </span>
                 <button
                   className="shrink-0 text-muted-foreground hover:text-green-600"

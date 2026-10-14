@@ -110,7 +110,7 @@ export const ChatInput = memo(({
               >
                 <Icon className="w-4 h-4 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">{tr(it.key)}</span>
-                <kbd className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <kbd className="rounded border border-border bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground">
                   ↵
                 </kbd>
               </button>

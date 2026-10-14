@@ -96,7 +96,7 @@ export function PositionsTable({
                     aria-label={tr("pos.viewK", { name: r.name })}
                   >
                     <span className="font-medium text-foreground group-hover:text-primary">{r.name}</span>
-                    <span className="text-[10px] text-muted-foreground">{r.symbol}</span>
+                    <span className="text-[11px] text-muted-foreground">{r.symbol}</span>
                     <LineChart className="w-3 h-3 text-muted-foreground/50 group-hover:text-primary" />
                   </button>
                 </td>

@@ -23,7 +23,7 @@ export function TokenSection() {
           {t("settings.save")}
         </Button>
       </div>
-      <div className="mt-2 text-[11px] text-muted-foreground">
+      <div className="mt-2 text-xs text-muted-foreground">
         {t("settings.tokenHint")}
       </div>
     </Section>

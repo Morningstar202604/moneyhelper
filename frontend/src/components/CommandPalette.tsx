@@ -167,7 +167,7 @@ export function CommandPalette({
                   >
                     <Undo2 className="w-4 h-4" />
                     <span className="truncate">{u.label}</span>
-                    <span className="ml-auto text-[10px] text-muted-foreground">{u.created_at.slice(5, 16)}</span>
+                    <span className="ml-auto text-[11px] text-muted-foreground">{u.created_at.slice(5, 16)}</span>
                   </Command.Item>
                 ))}
               </Command.Group>

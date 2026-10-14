@@ -129,7 +129,7 @@ function ToolSteps({ tools }: { tools: AgentToolStep[] }) {
                 <b className="text-foreground/80">{toolLabel(tr, t.name)}</b>
                 {t.summary ? <span className="ml-1">{t.summary}</span> : null}
                 {t.duration_ms != null && (
-                  <span className="ml-1 text-[10px] text-muted-foreground/70">{t.duration_ms}ms</span>
+                  <span className="ml-1 text-[11px] text-muted-foreground/70">{t.duration_ms}ms</span>
                 )}
               </span>
             </div>
@@ -203,7 +203,7 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
   return (
     <div className="code-block relative my-3 overflow-hidden rounded-lg border border-border">
       {lang && (
-        <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
           <span>{lang}</span>
           <button
             type="button"
@@ -286,7 +286,7 @@ function BubbleInner({
     return (
       <div className="flex justify-end">
         <div className="max-w-[85%]">
-          <div className="inline-block rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-2 text-sm shadow-xs">
+          <div className="inline-block rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-2 text-[15px] leading-relaxed shadow-xs">
             {m.text}
           </div>
         </div>
@@ -304,7 +304,7 @@ function BubbleInner({
           ) : (
             <>
               <div className="flex items-center justify-between gap-2 mb-1.5">
-                <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-2 text-xs text-muted-foreground">
                   {m.meta?.llm === "llm" && <Badge variant="default">{tr("chat.badgeAi")}</Badge>}
                   {m.meta?.llm === "template" && <Badge variant="muted">{tr("chat.badgeRule")}</Badge>}
                   {m.agentStatus === "running" && (
@@ -316,10 +316,10 @@ function BubbleInner({
                   <span>{m.created_at ? fmtDate(m.created_at) : tr("chat.justNow")}</span>
                 </span>
                 {/* 操作按钮：移动端常显（无悬停），桌面端悬停/聚焦才出现 */}
-                <span className="flex items-center gap-0.5 opacity-70 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+                <span className="flex items-center gap-1 opacity-70 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                   <button
                     type="button"
-                    className="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                    className="p-2 -m-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
                     aria-label={tr("chat.regenerate")}
                     title={tr("chat.regenerate")}
                     disabled={busy}
@@ -331,7 +331,7 @@ function BubbleInner({
                     <>
                       <button
                         type="button"
-                        className="p-1.5 text-muted-foreground hover:text-foreground"
+                        className="p-2 -m-1 text-muted-foreground hover:text-foreground"
                         aria-label={tr("chat.copyMd")}
                         onClick={() => onExport(m, "copy")}
                       >
@@ -339,7 +339,7 @@ function BubbleInner({
                       </button>
                       <button
                         type="button"
-                        className="p-1.5 text-muted-foreground hover:text-foreground"
+                        className="p-2 -m-1 text-muted-foreground hover:text-foreground"
                         aria-label={tr("chat.downloadMd")}
                         onClick={() => onExport(m, "download")}
                       >
@@ -356,7 +356,7 @@ function BubbleInner({
                   <Loader2 className="w-4 h-4 animate-spin" /> {tr("chat.analyzing")}
                 </div>
               )}
-              <div className="max-w-none text-sm leading-relaxed text-foreground">
+              <div className="max-w-none text-[15px] leading-relaxed text-foreground">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   // AI 生成内容不可信：sanitize 过滤危险节点/协议（script/iframe/on* 事件、javascript: 等）；
@@ -405,25 +405,25 @@ function BubbleInner({
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
-                            <div className="text-[10px] text-muted-foreground">总市值</div>
+                            <div className="text-[11px] text-muted-foreground">总市值</div>
                             <div className="text-sm font-semibold tabular-nums">
                               {market.total_value ? `¥${(market.total_value / 10000).toFixed(1)}万` : "—"}
                             </div>
                           </div>
                           <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
-                            <div className="text-[10px] text-muted-foreground">本月支出</div>
+                            <div className="text-[11px] text-muted-foreground">本月支出</div>
                             <div className="text-sm font-semibold tabular-nums">
                               {ledger.expense ? `¥${ledger.expense.toLocaleString()}` : "—"}
                             </div>
                           </div>
                           <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
-                            <div className="text-[10px] text-muted-foreground">本月结余</div>
+                            <div className="text-[11px] text-muted-foreground">本月结余</div>
                             <div className="text-sm font-semibold tabular-nums">
                               {ledger.net ? `¥${ledger.net.toLocaleString()}` : "—"}
                             </div>
                           </div>
                           <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
-                            <div className="text-[10px] text-muted-foreground">储蓄率</div>
+                            <div className="text-[11px] text-muted-foreground">储蓄率</div>
                             <div className="text-sm font-semibold tabular-nums">
                               {ledger.savings_rate != null ? `${(ledger.savings_rate * 100).toFixed(0)}%` : "—"}
                             </div>
@@ -501,7 +501,7 @@ function BubbleInner({
                 <div className="mt-3">
                   <button
                     type="button"
-                    className="text-xs text-muted-foreground inline-flex items-center gap-1 hover:text-foreground"
+                    className="text-xs text-muted-foreground inline-flex items-center gap-1 py-2 -my-1 hover:text-foreground"
                     onClick={onToggleSteps}
                   >
                     {tr("chat.viewSteps")}

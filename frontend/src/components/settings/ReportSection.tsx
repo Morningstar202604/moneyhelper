@@ -92,7 +92,7 @@ export function ReportSection({
           </div>
         )}
       </details>
-      <div className="mt-2 text-[11px] text-muted-foreground">{t("notAdvice")}</div>
+      <div className="mt-2 text-xs text-muted-foreground">{t("notAdvice")}</div>
     </Section>
   );
 }

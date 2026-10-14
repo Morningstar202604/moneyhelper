@@ -89,7 +89,7 @@ export function TopHoldings({ dashboard }: { dashboard: DashboardData }) {
         <span className="text-sm font-medium">{tr("dash.topHoldings")}</span>
         <span className="flex items-center gap-2">
           {isSnapshot && (
-            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground">
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-none text-muted-foreground">
               {tr("dash.offlineValuation")}
             </span>
           )}
@@ -432,7 +432,7 @@ export function BudgetCard({
           <CreditCard className="w-4 h-4 text-primary" />
           <span>{tr("budget.usageTitle", { month: budget.month })}</span>
           {u.over && (
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-500/15 text-red-500">{tr("budget.overBadge")}</span>
+            <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-red-500/15 text-red-500">{tr("budget.overBadge")}</span>
           )}
         </div>
         <span className={`text-xs font-mono ${u.over ? "text-red-500" : "text-muted-foreground"}`}>{u.total_pct}%</span>
@@ -452,7 +452,7 @@ export function BudgetCard({
                 colorClass={c.over ? "bg-red-500" : c.pct >= 85 ? "bg-amber-500" : c.pct >= 60 ? "bg-amber-400" : "bg-emerald-500"}
                 className="flex-1 h-1.5"
               />
-              <span className="text-[10px] text-muted-foreground shrink-0 w-16 text-right">
+              <span className="text-[11px] text-muted-foreground shrink-0 w-16 text-right">
                 {fmtMoney(c.spent)} / {fmtMoney(c.budget)}
               </span>
             </div>
@@ -498,7 +498,7 @@ export function SubscriptionsCard({
                 <span className="text-muted-foreground"> · {fmtMoney(r.monthly)}</span>
               </span>
               <span
-                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${
+                className={`text-[11px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${
                   r.days_until === 0
                     ? "bg-red-500/15 text-red-500"
                     : r.days_until <= 2

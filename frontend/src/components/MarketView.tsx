@@ -214,7 +214,7 @@ export function MarketView() {
                     <span className="flex shrink-0 items-center gap-3 tabular-nums">
                       <span className="w-16 text-right">{w.price != null ? fmtMoney(w.price, false, true) : "—"}</span>
                       {(w as { quote_source?: string }).quote_source === "snapshot" && (
-                        <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium leading-none text-muted-foreground">
+                        <span className="rounded bg-muted px-1 py-0.5 text-[11px] font-medium leading-none text-muted-foreground">
                           {t("market.offline")}
                         </span>
                       )}

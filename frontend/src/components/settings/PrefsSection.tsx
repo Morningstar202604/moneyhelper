@@ -39,7 +39,7 @@ export function PrefsSection({
       {/* 品牌主题色：本机持久化（localStorage），不改服务端设置 */}
       <div className="mt-3">
         <div className="text-sm">{t("settings.brandColor")}</div>
-        <div className="text-[11px] text-muted-foreground mt-0.5">{t("settings.brandColorHint")}</div>
+        <div className="text-xs text-muted-foreground mt-0.5">{t("settings.brandColorHint")}</div>
         <div className="mt-2 flex flex-wrap items-center gap-2" role="radiogroup" aria-label={t("settings.brandColor")}>
           {[
             { id: DEFAULT_PRESET, color: BRAND_DEFAULT_ACCENT },
@@ -65,14 +65,14 @@ export function PrefsSection({
       <div className="mt-3 flex items-center justify-between">
         <div>
           <div className="text-sm">{t("settings.voice")}</div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">{t("settings.voiceHint")}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">{t("settings.voiceHint")}</div>
         </div>
         <Switch checked={form.voice_input === "on"} onChange={() => onToggle("voice_input")} label={t("settings.voice")} />
       </div>
       <div className="mt-3 flex items-center justify-between">
         <div>
           <div className="text-sm">{t("settings.language")}</div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">{t("settings.languageHint")}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">{t("settings.languageHint")}</div>
         </div>
         <div className="flex gap-1.5">
           {(["en", "zh"] as const).map((l) => (
@@ -94,7 +94,7 @@ export function PrefsSection({
       <div className="mt-3 flex items-center justify-between">
         <div>
           <div className="text-sm">{t("settings.colorScheme")}</div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">{t("settings.colorSchemeHint")}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">{t("settings.colorSchemeHint")}</div>
         </div>
         <Segmented
           value={form.color_scheme ?? "cn"}
@@ -109,7 +109,7 @@ export function PrefsSection({
       <div className="mt-3 flex items-center justify-between">
         <div>
           <div className="text-sm">{t("settings.defaultTab")}</div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">{t("settings.defaultTabHint")}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">{t("settings.defaultTabHint")}</div>
         </div>
         <Segmented
           value={form.default_tab ?? "chat"}

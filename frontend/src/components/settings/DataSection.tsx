@@ -123,7 +123,7 @@ export function DataSection({
             className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
             maxLength={64}
           />
-          <p className="text-[11px] text-muted-foreground/70">{t("settings.backupPassHint")}</p>
+          <p className="text-xs text-muted-foreground/70">{t("settings.backupPassHint")}</p>
         </div>
         <div className="flex items-center justify-between gap-2">
           <div className="text-xs text-muted-foreground">{t("settings.exportHint")}</div>

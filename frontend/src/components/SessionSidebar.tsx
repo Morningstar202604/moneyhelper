@@ -159,7 +159,7 @@ export function SessionSidebar({
           <span className="flex items-center gap-0.5">
             <button
               type="button"
-              className="text-muted-foreground hover:text-primary p-1"
+              className="text-muted-foreground hover:text-primary p-2 -m-1"
               aria-label={t("report.generate")}
               onClick={() => setReportOpen(true)}
             >
@@ -167,7 +167,7 @@ export function SessionSidebar({
             </button>
             <button
               type="button"
-              className="text-muted-foreground hover:text-primary p-1"
+              className="text-muted-foreground hover:text-primary p-2 -m-1"
               aria-label={t("sidebar.newSession")}
               onClick={onNew}
             >
@@ -210,7 +210,7 @@ export function SessionSidebar({
                 if (items.length === 0) return null;
                 return (
                   <div key={g.key} className="space-y-0.5">
-                    <div className="px-2 pt-1.5 pb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                    <div className="px-2 pt-1.5 pb-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
                       {t(g.labelKey)}
                     </div>
                     {items.map(renderSession)}

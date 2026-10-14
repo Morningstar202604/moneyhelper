@@ -64,7 +64,7 @@ function AiGenerate({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-[11px] text-primary transition-colors hover:bg-primary/10"
+        className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-xs text-primary transition-colors hover:bg-primary/10"
       >
         <Sparkles className="w-3 h-3" /> AI 生成
       </button>
@@ -85,7 +85,7 @@ function AiGenerate({
           type="button"
           disabled={busy || !prompt.trim()}
           onClick={generate}
-          className="rounded-md bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground disabled:opacity-50"
+          className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
         >
           {busy ? "AI 生成中…" : "生成"}
         </button>
@@ -96,7 +96,7 @@ function AiGenerate({
             setSugg(null);
             setPrompt("");
           }}
-          className="rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+          className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
         >
           取消
         </button>
@@ -104,7 +104,7 @@ function AiGenerate({
       {sugg && (
         <div className="mt-2 rounded-md border border-border bg-card p-2">
           <div className="text-xs font-medium">{sugg.name}</div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground">{sugg.description}</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">{sugg.description}</div>
           <div className="mt-1.5 flex gap-1.5">
             <button
               type="button"
@@ -114,14 +114,14 @@ function AiGenerate({
                 setSugg(null);
                 setPrompt("");
               }}
-              className="rounded-md bg-primary/90 px-2 py-1 text-[11px] text-primary-foreground"
+              className="rounded-md bg-primary/90 px-2 py-1 text-xs text-primary-foreground"
             >
               采用
             </button>
             <button
               type="button"
               onClick={generate}
-              className="rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+              className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
             >
               重生成
             </button>

@@ -58,7 +58,7 @@ export function LogsSection() {
           {t("settings.logsClear")}
         </Button>
       </div>
-      <div className="rounded-lg border border-border bg-muted/40 p-3 max-h-96 overflow-auto font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-all">
+      <div className="rounded-lg border border-border bg-muted/40 p-3 max-h-96 overflow-auto font-mono text-xs leading-relaxed whitespace-pre-wrap select-all">
         {lines.length === 0 ? (
           <span className="text-muted-foreground">{t("settings.logsEmpty")}</span>
         ) : (

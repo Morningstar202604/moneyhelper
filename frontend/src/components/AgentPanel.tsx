@@ -44,7 +44,7 @@ function ToolRow({ tool }: { tool: AgentToolStep }) {
         <div className="flex items-center justify-between gap-2">
           <b className="text-foreground truncate">{toolLabel(tr, tool.name)}</b>
           {tool.duration_ms != null && (
-            <span className="text-[10px] text-muted-foreground">{tool.duration_ms}ms</span>
+            <span className="text-[11px] text-muted-foreground">{tool.duration_ms}ms</span>
           )}
         </div>
         {tool.summary ? (
@@ -121,7 +121,7 @@ export function AgentPanel({
               <ol className="space-y-1">
                 {plan.steps.map((s, i) => (
                   <li key={s.id} className="flex items-start gap-1.5 text-xs text-foreground">
-                    <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary/15 text-[10px] text-primary shrink-0">
+                    <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary/15 text-[11px] text-primary shrink-0">
                       {i + 1}
                     </span>
                     <span className="min-w-0">

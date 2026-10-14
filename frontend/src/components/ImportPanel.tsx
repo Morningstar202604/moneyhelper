@@ -149,7 +149,7 @@ export function ImportPanel({ onDone }: { onDone?: () => void }) {
               {busy ? tt("import.parsing") : tt("import.preview")}
             </Button>
             {parsed && (
-              <Badge variant="outline" className="text-[10px]">
+              <Badge variant="outline" className="text-[11px]">
                 {parserName}
               </Badge>
             )}
@@ -186,7 +186,7 @@ export function ImportPanel({ onDone }: { onDone?: () => void }) {
             {templates?.data?.map((t) => (
               <div key={t.key} className="rounded-lg bg-muted/30 p-2.5">
                 <div className="font-medium text-xs mb-1">{t.label}</div>
-                <div className="text-[10px] text-muted-foreground">{t.description}</div>
+                <div className="text-[11px] text-muted-foreground">{t.description}</div>
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {t.sample_columns.map((f) => (
                     <Badge key={f} variant="outline" className="text-[9px]">{f}</Badge>
@@ -241,7 +241,7 @@ export function ImportPanel({ onDone }: { onDone?: () => void }) {
             </div>
           )}
           {parsed.total > parsed.preview.length && (
-            <div className="text-[10px] text-muted-foreground mt-1 text-center">
+            <div className="text-[11px] text-muted-foreground mt-1 text-center">
               {tt("import.truncated", { shown: parsed.preview.length, total: parsed.total })}
             </div>
           )}

@@ -61,7 +61,7 @@ export function AuditSection() {
             <button
               key={a || "all"}
               onClick={() => setFilter(a)}
-              className={`px-2 py-0.5 text-[11px] rounded-full border transition-colors ${
+              className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
                 filter === a ? "border-primary/50 bg-primary/10 text-primary" : "border-border text-muted-foreground"
               }`}
             >
@@ -85,7 +85,7 @@ export function AuditSection() {
         <div className="text-xs text-muted-foreground py-6 text-center">{t("settings.auditEmpty")}</div>
       ) : (
         <div className="rounded-lg border border-border overflow-auto max-h-96">
-          <table className="w-full text-[11px]">
+          <table className="w-full text-xs">
             <thead className="bg-muted/40 text-muted-foreground sticky top-0">
               <tr>
                 <th className="px-2 py-1.5 text-left">{t("settings.auditTime")}</th>
@@ -99,11 +99,11 @@ export function AuditSection() {
                 <tr key={a.id} className="border-t border-border/60">
                   <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground">{fmtDate(a.ts)}</td>
                   <td className="px-2 py-1.5">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${ACTION_TONE[a.action] || ""}`}>
+                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${ACTION_TONE[a.action] || ""}`}>
                       {a.action}
                     </span>
                   </td>
-                  <td className="px-2 py-1.5 font-mono text-[10px]">{a.method} {a.path}</td>
+                  <td className="px-2 py-1.5 font-mono text-xs">{a.method} {a.path}</td>
                   <td className="px-2 py-1.5 text-muted-foreground">{a.actor || "—"}</td>
                 </tr>
               ))}

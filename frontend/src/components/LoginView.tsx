@@ -174,7 +174,7 @@ export function LoginView({ onAuthed }: { onAuthed: () => void }) {
         <p className="mt-4 text-center text-xs text-muted-foreground">
           {t("auth.localOnly")}
         </p>
-        <p className="mt-1 text-center text-[10px] text-muted-foreground/60">
+        <p className="mt-1 text-center text-[11px] text-muted-foreground/60">
           {mode === "login" ? "" : "注册即代表同意 MIT 开源协议与本地存储条款"}
         </p>
       </motion.div>

@@ -97,9 +97,9 @@ export function AiSection({
             ]}
           />
         </Row>
-        <AlertBanner tone="warn" className="text-[11px]">{t("settings.aiPrivacy")}</AlertBanner>
+        <AlertBanner tone="warn" className="text-xs">{t("settings.aiPrivacy")}</AlertBanner>
         <div>
-          <label className={labelCls}>{t("settings.aiBaseUrl")} <span className="text-[10px] opacity-70">（{t("settings.aiBaseOptional")}）</span></label>
+          <label className={labelCls}>{t("settings.aiBaseUrl")} <span className="text-xs opacity-70">（{t("settings.aiBaseOptional")}）</span></label>
           <input
             className={inputCls}
             value={form.ai_base_url ?? ""}
@@ -109,7 +109,7 @@ export function AiSection({
           />
         </div>
         <div>
-          <label className={labelCls}>{t("settings.aiKey")} <span className="text-[10px] opacity-70">（{t("settings.aiKeyHint")}）</span></label>
+          <label className={labelCls}>{t("settings.aiKey")} <span className="text-xs opacity-70">（{t("settings.aiKeyHint")}）</span></label>
           <input
             className={inputCls}
             type="password"
@@ -121,7 +121,7 @@ export function AiSection({
           />
         </div>
         <div>
-          <label className={labelCls}>{t("settings.aiModel")} <span className="text-[10px] opacity-70">（{t("settings.aiModelOptional")}）</span></label>
+          <label className={labelCls}>{t("settings.aiModel")} <span className="text-xs opacity-70">（{t("settings.aiModelOptional")}）</span></label>
           <input
             className={inputCls}
             value={form.ai_model ?? ""}
@@ -133,7 +133,7 @@ export function AiSection({
         {catalog.length > 0 && (
           <div className="pt-2 border-t border-border/60">
             <div className="mb-1 text-xs font-medium text-foreground/90">{t("settings.enabledModels")}</div>
-            <p className="mb-2 text-[11px] text-muted-foreground/70">{t("settings.enabledModelsHint")}</p>
+            <p className="mb-2 text-xs text-muted-foreground/70">{t("settings.enabledModelsHint")}</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {catalog.map((m) => {
                 const on = enabledSet.has(m.model);
@@ -146,7 +146,7 @@ export function AiSection({
                   >
                     <span className="flex flex-col min-w-0">
                       <span className="font-medium text-foreground/90">{m.name}</span>
-                      <span className="text-[10px] text-muted-foreground/70 truncate">{m.provider}</span>
+                      <span className="text-xs text-muted-foreground/70 truncate">{m.provider}</span>
                     </span>
                     <Switch
                       checked={on}
@@ -168,7 +168,7 @@ export function AiSection({
         )}
         <div className="pt-2 border-t border-border/60">
           <div className="mb-2 text-xs font-medium text-foreground/90">{t("settings.agentBehavior")}</div>
-          <p className="mb-2 text-[11px] text-muted-foreground/70">{t("settings.agentBehaviorHint")}</p>
+          <p className="mb-2 text-xs text-muted-foreground/70">{t("settings.agentBehaviorHint")}</p>
           <div className="space-y-2">
             <Row label={t("settings.agentPlan")} hint={t("settings.agentPlanHint")}>
               <Switch checked={form.agent_plan !== "off"} onChange={() => onToggle("agent_plan")} label={t("settings.agentPlan")} />
@@ -190,7 +190,7 @@ export function AiSection({
           </div>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {t("settings.current")}: {health.llm_configured ? `${t("settings.aiOn")}（${health.model}）` : t("settings.aiOff")}
           </span>
           <Button variant="outline" size="sm" onClick={() => ai.mutate(undefined)} disabled={ai.isPending}>

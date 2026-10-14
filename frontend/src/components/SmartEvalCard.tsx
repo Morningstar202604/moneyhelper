@@ -108,7 +108,7 @@ export function SmartEvalCard() {
           <Bell className="w-4 h-4 text-primary" />
           <span className="text-sm font-medium">{tr("eval.title")}</span>
           {sumTodo > 0 && (
-            <Badge variant="warn" className="text-[10px]">
+            <Badge variant="warn" className="text-[11px]">
               {tr("eval.actionNeeded", { n: sumTodo })}
             </Badge>
           )}

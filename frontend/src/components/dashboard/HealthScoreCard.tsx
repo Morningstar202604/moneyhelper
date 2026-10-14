@@ -98,7 +98,7 @@ export function HealthScoreCard() {
                 </div>
                 <ProgressBar pct={pct} colorClass={dimColor(d.score, d.max)} className="h-1.5" />
                 {d.suggestion && (
-                  <div className="mt-0.5 text-[10px] text-muted-foreground leading-snug text-balance">{d.suggestion}</div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground leading-snug text-balance">{d.suggestion}</div>
                 )}
               </div>
             );

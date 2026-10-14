@@ -82,7 +82,7 @@ export function BudgetSection() {
           />
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {budgetTotal ? `${t("settings.budgetTotalLabel")} ${fmtMoney(previewTotal)}` : t("settings.budgetNone")} · {t("settings.budgetCatCount", { n: previewCats.length })}
           </span>
           <Button variant="outline" size="sm" onClick={doSave} disabled={save.isPending}>
@@ -93,7 +93,7 @@ export function BudgetSection() {
         {/* 实时预览：各类别占总额比例。总额未设置时以分类合计为分母 */}
         {previewCats.length > 0 && (
           <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3">
-            <div className="text-[11px] text-muted-foreground mb-1.5">{t("settings.budgetPreview")}</div>
+            <div className="text-xs text-muted-foreground mb-1.5">{t("settings.budgetPreview")}</div>
             {(() => {
               const denom = previewTotal > 0 ? previewTotal : catsSum;
               const ordered = [...previewCats].sort((a, b) => b.amount - a.amount);
@@ -113,17 +113,17 @@ export function BudgetSection() {
                       const pct = denom > 0 ? Math.round((c.amount / denom) * 100) : 0;
                       const color = ["bg-rose-500", "bg-sky-500", "bg-amber-500", "bg-emerald-500", "bg-violet-500", "bg-orange-500"][i % 6];
                       return (
-                        <li key={c.name} className="flex items-center gap-2 text-[11px]">
+                        <li key={c.name} className="flex items-center gap-2 text-xs">
                           <span className={`w-2 h-2 rounded-full shrink-0 ${color}`} />
                           <span className="truncate">{c.name}</span>
                           <span className="ml-auto tabular-nums text-muted-foreground">{fmtMoney(c.amount)} · {pct}%</span>
                         </li>
                       );
                     })}
-                    {previewCats.length > 5 && <li className="text-[11px] text-muted-foreground">+{previewCats.length - 5}</li>}
+                    {previewCats.length > 5 && <li className="text-xs text-muted-foreground">+{previewCats.length - 5}</li>}
                   </ul>
                   {previewTotal > 0 && catsSum > previewTotal && (
-                    <div className="mt-1 text-[11px] text-red-500">{t("settings.budgetOverBy", { over: fmtMoney(catsSum - previewTotal) })}</div>
+                    <div className="mt-1 text-xs text-red-500">{t("settings.budgetOverBy", { over: fmtMoney(catsSum - previewTotal) })}</div>
                   )}
                 </>
               );
