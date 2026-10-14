@@ -1097,10 +1097,7 @@ async def add_transaction(
     if resolved_shared is None and resolved_owner is not None:
         # 查成员角色：owner/admin 的流水自动共享
         m = await _fetch_member(resolved_owner)
-        if m and m.get("role") in ("owner", "admin"):
-            resolved_shared = True
-        else:
-            resolved_shared = False
+        resolved_shared = bool(m and m.get("role") in ("owner", "admin"))
     if resolved_shared is None:
         resolved_shared = 1  # 默认值：无 owner 时保持向后兼容
 
@@ -1145,7 +1142,7 @@ async def update_transaction(
     item: str | None = None,
     category: str | None = None,
     amount: float | None = None,
-    owner_id: int | None | str = None,
+    owner_id: int | str | None = None,
     is_shared: bool | None = None,
 ) -> dict[str, Any]:
     """编辑一条流水。只传需要改的字段（None 表示不动），金额 0 / NaN 拒绝。"""
@@ -2113,6 +2110,23 @@ async def list_runs(
             "SELECT * FROM runs ORDER BY id DESC LIMIT ?", (clamped,)
         )
     return [_hydrate_run(r) for r in rows]
+
+
+async def claim_pending_nl(thread_id: str) -> bool:
+    """原子消费该线程最后一条 nl_pending run（大额审批回执，确认/取消共用）。
+
+    单条 UPDATE + rowcount 判定：并发回执或断连重试时仅一个能 claim 成功，
+    防止同一笔待确认被重复入账；claim 成功后该 run 的 route 记为 nl_pending_consumed。
+    """
+    conn = await _conn()
+    cur = await conn.execute(
+        "UPDATE runs SET route='nl_pending_consumed' "
+        "WHERE id = (SELECT id FROM runs WHERE thread_id=? ORDER BY id DESC LIMIT 1) "
+        "AND route='nl_pending'",
+        (thread_id,),
+    )
+    await conn.commit()
+    return cur.rowcount == 1
 
 
 def _hydrate_run(r: dict[str, Any]) -> dict[str, Any]:

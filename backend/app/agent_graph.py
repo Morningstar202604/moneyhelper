@@ -30,6 +30,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -39,7 +40,17 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
-from . import agent, analysis, context, db, llm, mem, nlparse, observability, react_agent, service, tools
+from . import (
+    agent,
+    analysis,
+    db,
+    llm,
+    mem,
+    nlparse,
+    react_agent,
+    service,
+    tools,
+)
 from .logging_utils import get_logger
 from .quotes import live_quotes
 
@@ -181,6 +192,33 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
+# 大额审批 pending 有效期：超过后「确认」不再生效（防止隔很久的误触/陈旧回复入账）
+_PENDING_APPROVAL_TTL_MINUTES = 30
+
+
+async def _pending_confirm_context(question: str, thread_id: str | None) -> dict[str, Any] | None:
+    """上一轮为 nl_pending 待确认时，把「确认/取消」短回复识别为审批回执。
+
+    仅当该线程最后一条 run 的 route 是 nl_pending、未过 TTL 且回复命中词表才算，否则返回 None。
+    （消费动作由调用方经 db.claim_pending_nl 原子完成，本函数只做识别。）
+    """
+    if not thread_id:
+        return None
+    decision = service._confirm_decision(question)
+    if decision is None:
+        return None
+    runs = await db.list_runs(thread_id, 1)
+    if not runs or runs[0].get("route") != "nl_pending":
+        return None
+    try:
+        created = datetime.fromisoformat(str(runs[0].get("created_at") or ""))
+        if datetime.now().astimezone() - created > timedelta(minutes=_PENDING_APPROVAL_TTL_MINUTES):
+            return None
+    except ValueError:
+        pass  # 时间戳异常不阻断（按未过期处理）
+    return {"decision": decision, "question": str(runs[0].get("question") or "")}
+
+
 class AgentState(TypedDict, total=False):
     question: str
     thread_id: str | None
@@ -194,6 +232,8 @@ class AgentState(TypedDict, total=False):
     flags: list[dict[str, Any]]
     has_data: bool
     parsed: dict[str, Any] | None
+    confirm: bool  # 大额审批：用户回复「确认」后带 True 重走 record
+    pending_question: str | None  # 大额审批确认时携带的原问题（「确认」本身没有金额）
     result: dict[str, Any]
     # collect_market 写入、collect_ledger / finalize 复用：避免同一轮持仓+行情被重复拉取
     positions: list[dict[str, Any]] | None
@@ -209,11 +249,34 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
     """意图分类 + 记账检测。LLM 分类失败/未接入一律规则兜底。"""
     q = state["question"]
     tid = state.get("thread_id")
+    en_lang = state.get("lang") == "en"
+
+    # 大额审批回执优先：「确认/取消」承接本线程最后一条 nl_pending，先于一切路由，
+    # 否则「确认」会被分类成 general，审批流断在死路（原实现承诺可回复确认但无实现）。
+    # claim_pending_nl 原子消费：并发/断连重试时只有一个回执能生效，防重复入账。
+    pending_ctx = await _pending_confirm_context(q, tid)
+    if pending_ctx:
+        if pending_ctx["decision"] == "confirm":
+            segments = service._nl_segments(pending_ctx["question"])
+            if segments and tid and await db.claim_pending_nl(str(tid)):
+                return {
+                    "route": "bookkeeping",
+                    "reason": "Large-amount approval: user confirmed" if en_lang else "大额审批：用户确认入账",
+                    "parsed": segments[0],
+                    "confirm": True,
+                    "pending_question": pending_ctx["question"],
+                }
+        elif tid and await db.claim_pending_nl(str(tid)):
+            return {
+                "route": "nl_cancel",
+                "reason": "Large-amount approval: user cancelled" if en_lang else "大额审批：用户取消",
+            }
+        # claim 失败（已被并发回执消费）或原句不可解析：落回常规路由，不重复入账
 
     # 长记忆 recall：把用户历史相关记忆注入 state，供后续节点参考
     mem_hits = mem.recall(q)
     if mem_hits:
-        log.info("mem.recalled", count=len(mem_hits), sample=mem_hits[0].get("memory", "")[:60])
+        log.info("mem.recalled count=%s sample=%s", len(mem_hits), mem_hits[0].get("memory", "")[:60])
 
     route, reason = service.route_question(q, state.get("lang", "zh"))
     if route == "general" and await service._is_finance_followup(q, tid):
@@ -318,20 +381,28 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
 async def record(state: AgentState) -> dict[str, Any]:
     """记账 agent：把一句话记账指令确定性入账并回执（复用 service._try_nl_add 唯一实现）。
 
-    大额审批：单笔金额 > 5000 元时先不入账，返回 pending 状态让前端弹确认框。
-    用户确认后带 confirm=true 再发一次请求，这次真正入账。
+    大额审批：**任一分段**金额 > 5000 元时先不入账，返回 pending 状态让用户确认
+    （分段口径与 _try_nl_add 入账口径共用 service._nl_segments，防止整句解析只取
+    第一段金额绕过审批，如「奶茶 20，房租 6000」）。
+    用户回复「确认」后由 supervisor 带 confirm=true + 原问题回到本节点，整句一起入账。
     """
     parsed = state["parsed"]
     assert parsed is not None
-    amount = abs(float(parsed.get("amount", 0)))
     confirm = state.get("confirm", False)
+    src_q = state.get("pending_question") or state["question"]
 
-    # 大额审批：>5000 元先确认
+    # 门槛判定按全部分段（与入账同口径）；任一段超阈值即触发审批
+    segments = service._nl_segments(src_q)
+    breach = max(segments, key=lambda p: abs(float(p.get("amount", 0)))) if segments else parsed
+    amount = abs(float(breach.get("amount", 0)))
+
+    # 大额审批：任一段 >5000 元先确认
     if amount > 5000 and not confirm:
-        direction = "收入" if float(parsed.get("amount", 0)) > 0 else "支出"
+        direction = "收入" if float(breach.get("amount", 0)) > 0 else "支出"
+        extra = f"，本句共 {len(segments)} 笔，确认后一起入账" if len(segments) > 1 else ""
         answer = (
             f"这笔{direction} {amount:,.0f} 元金额较大，确认要记吗？\n\n"
-            f"记的是：{parsed.get('item', '未命名')}（{parsed.get('category', '其他')}）\n"
+            f"记的是：{breach.get('item', '未命名')}（{breach.get('category', '其他')}）{extra}\n"
             f"回复「确认」就入账，回复「取消」就不记。"
         )
         result = {
@@ -349,10 +420,32 @@ async def record(state: AgentState) -> dict[str, Any]:
         }
         return {"result": result}
 
-    result = await service._try_nl_add(state["question"], state["reason"], _emit, state.get("lang", "zh"))
+    result = await service._try_nl_add(
+        state.get("pending_question") or state["question"], state["reason"], _emit, state.get("lang", "zh")
+    )
     assert result is not None
     result.setdefault("actions", [{"tab": "ledger"}])
     return {"result": result}
+
+
+async def nl_cancel(state: AgentState) -> dict[str, Any]:
+    """大额审批取消：不入账，仅回执说明未记账。"""
+    en = state.get("lang") == "en"
+    return {
+        "result": {
+            "answer": "OK — not recorded." if en else "好，这笔不记了。",
+            "level": "已取消",
+            "route": "nl_cancel",
+            "route_reason": "Large-amount approval: user cancelled" if en else "大额审批：用户取消",
+            "metrics": {},
+            "flags": [],
+            "llm": "template",
+            "tools": [],
+            "actions": [],
+            "pending_token": "",
+            "pending_summary": "",
+        }
+    }
 
 
 async def action(state: AgentState) -> dict[str, Any]:
@@ -736,6 +829,8 @@ def _supervisor_route(state: AgentState) -> str:
     r = state.get("route") or ""
     if r == "bookkeeping":
         return "record"
+    if r == "nl_cancel":
+        return "nl_cancel"
     if r == "memory":
         return "memory"
     if r == "action":
@@ -749,6 +844,7 @@ def _build_graph() -> Any:
     g = StateGraph(AgentState)
     g.add_node("supervisor", supervisor)
     g.add_node("record", record)
+    g.add_node("nl_cancel", nl_cancel)
     g.add_node("memory", memory)
     g.add_node("action", action)
     g.add_node("general", general)
@@ -761,7 +857,7 @@ def _build_graph() -> Any:
     g.add_conditional_edges(
         "supervisor",
         _supervisor_route,
-        {"record": "record", "memory": "memory", "general": "general", "action": "action", "finance": "collect_market"},
+        {"record": "record", "nl_cancel": "nl_cancel", "memory": "memory", "general": "general", "action": "action", "finance": "collect_market"},
     )
     # 多智能体管线：市场 agent → 账本 agent → 风控 agent → 成文 agent
     # （顺序边：单连接 aiosqlite 不支持跨节点并发读写，结构并行、执行串行）
@@ -769,6 +865,7 @@ def _build_graph() -> Any:
     g.add_edge("collect_ledger", "risk")
     g.add_edge("risk", "finalize")
     g.add_edge("record", END)
+    g.add_edge("nl_cancel", END)
     g.add_edge("memory", END)
     g.add_edge("action", END)
     g.add_edge("general", END)

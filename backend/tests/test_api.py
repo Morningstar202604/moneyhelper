@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from datetime import datetime
@@ -462,12 +463,78 @@ async def test_chat_nl_records_transaction(client) -> None:
 
 
 async def test_chat_nl_records_income(client) -> None:
-    final = await _ask(client, "工资 8000 已到账")
+    """大额收入：先走待确认，回复「确认」后才入账（一次确认只入一笔）。"""
+    tid = "nl-income-confirm"
+    before = len((await client.get("/api/dashboard")).json()["transactions"])
+
+    pending = await _ask(client, "工资 8000 已到账", thread_id=tid)
+    assert pending["route"] == "nl_pending"
+    assert "确认" in pending["answer"]
+    d = (await client.get("/api/dashboard")).json()
+    assert len(d["transactions"]) == before  # 未确认前不得入账
+
+    final = await _ask(client, "确认", thread_id=tid)
     assert final["route"] == "nl_add"
     d = (await client.get("/api/dashboard")).json()
+    assert len(d["transactions"]) == before + 1
     tx = d["transactions"][0]
     assert tx["category"] == "收入"
     assert tx["amount"] == 8000.0
+
+    # 再次「确认」不重复入账（pending 上下文已消费）
+    await _ask(client, "确认", thread_id=tid)
+    d = (await client.get("/api/dashboard")).json()
+    assert len(d["transactions"]) == before + 1
+
+
+async def test_chat_nl_pending_cancel(client) -> None:
+    """大额待确认回复「取消」：不入账 + 取消回执。"""
+    tid = "nl-income-cancel"
+    before = len((await client.get("/api/dashboard")).json()["transactions"])
+
+    pending = await _ask(client, "奖金 6600 到账", thread_id=tid)
+    assert pending["route"] == "nl_pending"
+
+    final = await _ask(client, "取消", thread_id=tid)
+    assert final["route"] == "nl_cancel"
+    d = (await client.get("/api/dashboard")).json()
+    assert len(d["transactions"]) == before
+
+
+async def test_confirm_reply_without_pending_not_hijacked(client) -> None:
+    """无 pending 上下文时，「确认」不得被当作审批回执。"""
+    final = await _ask(client, "确认", thread_id="no-pending-thread")
+    assert final["route"] not in ("nl_add", "nl_cancel", "nl_pending")
+
+
+async def test_chat_nl_multi_segment_large_amount_needs_approval(client) -> None:
+    """多段句里任一段大额都必须走审批（防「奶茶 20，房租 6000」只取第一段绕过门槛）。"""
+    tid = "nl-multi-bypass"
+    before = len((await client.get("/api/dashboard")).json()["transactions"])
+
+    pending = await _ask(client, "奶茶 20，房租 6000", thread_id=tid)
+    assert pending["route"] == "nl_pending"
+    d = (await client.get("/api/dashboard")).json()
+    assert len(d["transactions"]) == before  # 未确认前整句都不入账
+
+    final = await _ask(client, "确认", thread_id=tid)
+    assert final["route"] == "nl_add"
+    newest = sorted(abs(t["amount"]) for t in (await client.get("/api/dashboard")).json()["transactions"][:2])
+    assert newest == [20.0, 6000.0]
+
+
+async def test_chat_nl_concurrent_confirm_records_once(client) -> None:
+    """并发两个「确认」只允许一笔入账（claim 原子消费；防双标签页/重试重复入账）。"""
+    tid = "nl-concurrent-confirm"
+    pending = await _ask(client, "工资 9000 已到账", thread_id=tid)
+    assert pending["route"] == "nl_pending"
+
+    await asyncio.gather(
+        _ask(client, "确认", thread_id=tid),
+        _ask(client, "确认", thread_id=tid),
+    )
+    tx = (await client.get("/api/dashboard")).json()["transactions"]
+    assert sum(1 for t in tx if t["amount"] == 9000.0) == 1
 
 
 @pytest.mark.parametrize(

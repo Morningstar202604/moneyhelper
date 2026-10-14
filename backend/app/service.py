@@ -104,17 +104,46 @@ def _looks_like_record(question: str) -> bool:
     return not any(m in q for m in QUESTION_MARKS)
 
 
+# 大额审批回执短语：仅「去空白/标点后精确命中词表」才算审批回复，防止普通短聊被误判。
+# 词表保持显式（不含「好/是/对」等日常用语），降低 pending 上下文中的误触面。
+_CONFIRM_REPLIES = {
+    "确认", "确认入账", "确认记账", "确定", "记吧", "入账", "ok", "yes", "confirm",
+}
+_CANCEL_REPLIES = {
+    "取消", "不记了", "不用了", "不记账", "算了", "no", "cancel",
+}
+
+
+def _confirm_decision(text: str) -> str | None:
+    """把短回复归类为大额审批回执：「confirm」/「cancel」；不匹配返回 None。"""
+    t = re.sub(r"[\s。.!！~～,，、;；]+", "", (text or "").strip().lower())
+    if not t or len(t) > 8:
+        return None
+    if t in _CONFIRM_REPLIES:
+        return "confirm"
+    if t in _CANCEL_REPLIES:
+        return "cancel"
+    return None
+
+
+def _nl_segments(question: str) -> list[dict[str, Any]]:
+    """一句话记账的统一切段解析口径：按标点/连词切段、逐段解析。
+
+    _try_nl_add 入账与「大额审批」门槛判定共用本函数，保证两者看到完全相同的分段，
+    避免整句解析只取到第一段金额绕过审批（如「奶茶 20，房租 6000」）。
+    """
+    if not _looks_like_record(question):
+        return []
+    parts = [p.strip() for p in re.split(r"[，,。;；、和及]", question) if p.strip()]
+    return [p for p in (nlparse.parse(part) for part in parts) if p is not None]
+
+
 async def _try_nl_add(question: str, reason: str, emit: Emit, lang: str = "zh") -> dict[str, Any] | None:
     """对话内一句话记账：规则解析（无需模型）→ 入账 → 回执（含撤销路径）。
 
     支持一句多笔（用逗号/顿号/分号/和/及 分隔），逐段独立解析；全部可解析才入账（原子）。
     """
-    if not _looks_like_record(question):
-        return None
-
-    parts = [p.strip() for p in re.split(r"[，,。;；、和及]", question) if p.strip()]
-    parsed_all = [nlparse.parse(p) for p in parts]
-    parsed_all = [p for p in parsed_all if p is not None]
+    parsed_all = _nl_segments(question)
     if not parsed_all:
         return None
 
