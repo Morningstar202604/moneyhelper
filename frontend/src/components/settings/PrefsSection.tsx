@@ -1,12 +1,13 @@
 import { SlidersHorizontal } from "lucide-react";
 import { Segmented } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
-import { useTheme } from "@/lib/theme";
+import { BRAND_DEFAULT_ACCENT, BRAND_PRESETS } from "@/lib/brand";
+import { DEFAULT_PRESET, useTheme } from "@/lib/theme";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Section } from "./shared";
 
-/** 偏好设置（主题 / 语音 / 语言 / 涨跌配色 / 默认首页）；开关类即改即存，配色与首页走底部批量保存 */
+/** 偏好设置（主题 / 主题色 / 语音 / 语言 / 涨跌配色 / 默认首页）；开关类即改即存，配色与首页走底部批量保存 */
 export function PrefsSection({
   form,
   setColorScheme,
@@ -19,7 +20,7 @@ export function PrefsSection({
   onToggle: (k: string) => void;
 }) {
   const { t, lang, setLang } = useI18n();
-  const { theme: themeMode, setTheme } = useTheme();
+  const { theme: themeMode, setTheme, preset, setPreset } = useTheme();
 
   return (
     <Section title={t("settings.navPrefs")} icon={<SlidersHorizontal className="w-4 h-4 text-muted-foreground" />} desc={t("settings.prefsDesc")}>
@@ -34,6 +35,32 @@ export function PrefsSection({
             { value: "system", label: t("settings.system") },
           ]}
         />
+      </div>
+      {/* 品牌主题色：本机持久化（localStorage），不改服务端设置 */}
+      <div className="mt-3">
+        <div className="text-sm">{t("settings.brandColor")}</div>
+        <div className="text-[11px] text-muted-foreground mt-0.5">{t("settings.brandColorHint")}</div>
+        <div className="mt-2 flex flex-wrap items-center gap-2" role="radiogroup" aria-label={t("settings.brandColor")}>
+          {[
+            { id: DEFAULT_PRESET, color: BRAND_DEFAULT_ACCENT },
+            ...BRAND_PRESETS.map((p) => ({ id: p.id, color: p.accent })),
+          ].map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              role="radio"
+              aria-checked={preset === p.id}
+              aria-label={t(`settings.preset.${p.id}`)}
+              title={t(`settings.preset.${p.id}`)}
+              onClick={() => setPreset(p.id)}
+              className={cn(
+                "h-7 w-7 rounded-full border-2 transition-transform",
+                preset === p.id ? "border-foreground scale-110" : "border-transparent hover:scale-105",
+              )}
+              style={{ backgroundColor: p.color }}
+            />
+          ))}
+        </div>
       </div>
       <div className="mt-3 flex items-center justify-between">
         <div>

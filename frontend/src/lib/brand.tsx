@@ -9,6 +9,9 @@ export const BRAND = {
   en: "Xiaoman",
 };
 
+/** 默认主题主色（对应 index.css 的墨绿 --primary）——主题色选择器「默认」档的展示色 */
+export const BRAND_DEFAULT_ACCENT = "#0f8a73";
+
 export interface BrandPreset {
   id: string;
   label: string;

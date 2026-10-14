@@ -60,4 +60,19 @@ test.describe("应用启动 & 冒烟", () => {
     const after = await html.getAttribute("class");
     expect(before !== after).toBeTruthy();
   });
+
+  test("切换品牌主题色即时生效并可恢复默认", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "设置" }).first().click();
+    const primaryVar = () =>
+      page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--primary").trim());
+
+    // 选「麦金」：--primary 变为预设明色值
+    await page.getByRole("radio", { name: "麦金" }).click();
+    await expect.poll(primaryVar).toBe("38 78% 45%");
+
+    // 恢复默认：变量回落 index.css 墨绿
+    await page.getByRole("radio", { name: "墨绿（默认）" }).click();
+    await expect.poll(primaryVar).toBe("168 76% 24%");
+  });
 });
