@@ -151,7 +151,7 @@ async def _rule_subscriptions(today: date) -> list[EvalItem]:
                     "name": s["name"],
                     "monthly": float(s.get("monthly") or 0),
                     "days": days,
-                    "date": due_date.strftime("%-m-%-d"),
+                    "date": f"{due_date.month}-{due_date.day}",
                 },
             ))
         elif not (due_day or "").strip():
@@ -197,7 +197,7 @@ async def _rule_debts(today: date) -> list[EvalItem]:
                     "name": d["name"],
                     "monthly": d["monthly"],
                     "days": days,
-                    "date": due_date.strftime("%-m-%-d"),
+                    "date": f"{due_date.month}-{due_date.day}",
                     "balance": d["balance"],
                 },
             ))

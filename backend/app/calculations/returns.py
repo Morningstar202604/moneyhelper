@@ -42,7 +42,7 @@ def calculate_xirr(cashflows: list[tuple[date, float]]) -> float:
         raise ValueError("XIRR 计算至少需要 2 条现金流")
 
     # 类型校验（在排序之前，避免 sort 本身 TypeError）
-    for d, cf in cashflows:
+    for d, _cf in cashflows:
         if not isinstance(d, date):
             raise ValueError(f"现金流日期必须为 datetime.date 类型，got {type(d).__name__}")
 
@@ -119,7 +119,7 @@ def calculate_xirr(cashflows: list[tuple[date, float]]) -> float:
         if hi - lo < _XIRR_TOLERANCE:
             return round((lo + hi) / 2.0, 6)
 
-    raise ValueError(f"XIRR 迭代未收敛，请检查现金流是否合理")
+    raise ValueError("XIRR 迭代未收敛，请检查现金流是否合理")
 
 
 def calculate_twr(transactions: list[dict[str, Any]]) -> float:

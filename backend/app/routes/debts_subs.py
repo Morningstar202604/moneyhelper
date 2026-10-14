@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
@@ -25,7 +23,7 @@ async def create_debt(payload: dict) -> dict:
         out = await db.add_debt(payload or {})
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"error": str(exc)}, status_code=400)
-    asyncio.create_task(record_provenance(
+    await record_provenance(
         action="create_debt",
         entity_type="debt",
         entity_id=name,
@@ -33,7 +31,7 @@ async def create_debt(payload: dict) -> dict:
         after=payload or {},
         source="api",
         username="system",
-    ))
+    )
     return out
 
 
@@ -42,7 +40,7 @@ async def remove_debt(name: str) -> dict:
     before_row = await db.fetch_one("SELECT * FROM debts WHERE name = ?", (name,))
     before = dict(before_row) if before_row else None
     result = await db.delete_debt(name)
-    asyncio.create_task(record_provenance(
+    await record_provenance(
         action="delete_debt",
         entity_type="debt",
         entity_id=name,
@@ -50,7 +48,7 @@ async def remove_debt(name: str) -> dict:
         after=None,
         source="api",
         username="system",
-    ))
+    )
     return result
 
 
@@ -66,7 +64,7 @@ async def create_subscription(payload: dict) -> dict:
         out = await db.add_subscription(payload or {})
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"error": str(exc)}, status_code=400)
-    asyncio.create_task(record_provenance(
+    await record_provenance(
         action="create_subscription",
         entity_type="subscription",
         entity_id=name,
@@ -74,7 +72,7 @@ async def create_subscription(payload: dict) -> dict:
         after=payload or {},
         source="api",
         username="system",
-    ))
+    )
     return out
 
 
@@ -83,7 +81,7 @@ async def remove_subscription(name: str) -> dict:
     before_row = await db.fetch_one("SELECT * FROM subscriptions WHERE name = ?", (name,))
     before = dict(before_row) if before_row else None
     result = await db.delete_subscription(name)
-    asyncio.create_task(record_provenance(
+    await record_provenance(
         action="delete_subscription",
         entity_type="subscription",
         entity_id=name,
@@ -91,5 +89,5 @@ async def remove_subscription(name: str) -> dict:
         after=None,
         source="api",
         username="system",
-    ))
+    )
     return result

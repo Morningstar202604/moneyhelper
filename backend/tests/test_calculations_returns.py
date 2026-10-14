@@ -5,12 +5,11 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from app.calculations.returns import (
+    _to_date,
     calculate_simple_return,
     calculate_twr,
     calculate_xirr,
-    _to_date,
 )
 
 
@@ -74,7 +73,7 @@ class TestCalculateXIRR:
 
     def test_invalid_date_type_raises(self):
         """日期非 date 类型 raise ValueError。"""
-        with pytest.raises(ValueError, match="datetime.date"):
+        with pytest.raises(ValueError, match=r"datetime\.date"):
             calculate_xirr([("2024-01-01", -100.0), (date(2024, 6, 1), 110.0)])
 
     def test_negative_rate_possible(self):

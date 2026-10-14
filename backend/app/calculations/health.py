@@ -158,11 +158,9 @@ def _score_dti(debt_payment: float, income: float) -> tuple[int, str]:
 
     dti = debt_payment / income * 100
     if dti <= 0:
-        return 20, f"无负债，DTI = 0%"
-    elif dti < 20:
+        return 20, "无负债，DTI = 0%"
+    elif dti < 20 or dti < DTI_WARN_PCT:
         score = round(20 - dti / DTI_WARN_PCT * 10)
-    elif dti < DTI_WARN_PCT:
-        score = round(20 - (dti / DTI_WARN_PCT) * 10)
     else:
         score = 0
 

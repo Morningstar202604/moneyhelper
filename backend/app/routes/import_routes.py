@@ -12,17 +12,15 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 
-import asyncio
-
-from ..auth import verify_api_token
 from .. import db
-from ..provenance import record_provenance
+from ..auth import verify_api_token
+from ..csvimport import classify as _auto_classify
 from ..import_parsers import (
     get_parser,
     supported_sources,
 )
-from ..import_parsers.base import ParseResult, ParsedTransaction
-from ..csvimport import classify as _auto_classify
+from ..import_parsers.base import ParsedTransaction, ParseResult
+from ..provenance import record_provenance
 
 log = logging.getLogger(__name__)
 
@@ -210,7 +208,7 @@ async def import_csv_confirm(req: CsvConfirmRequest) -> dict:
 
     # 异步记录导入审计
     if imported > 0:
-        asyncio.create_task(record_provenance(
+        await record_provenance(
             action="import_transactions",
             entity_type="transaction",
             entity_id=f"batch:{imported}_rows",
@@ -218,7 +216,7 @@ async def import_csv_confirm(req: CsvConfirmRequest) -> dict:
             after={"imported": imported, "duplicates": dup_total},
             source="api",
             username="system",
-        ))
+        )
 
     return {
         "imported": imported,

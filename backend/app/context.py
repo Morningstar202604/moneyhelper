@@ -60,7 +60,7 @@ def trim_messages(
     if total <= max_tokens:
         return messages
 
-    log.info("context.trim", before=total, max=max_tokens)
+    log.info("context.trim before=%s max=%s", total, max_tokens)
 
     # 分离 system 和普通消息
     system_msgs = [m for m in messages if m.get("role") == "system"]
@@ -82,5 +82,5 @@ def trim_messages(
 
     result = system_msgs + kept
     after = count_messages_tokens(result)
-    log.info("context.trim.done", after=after)
+    log.info("context.trim.done after=%s", after)
     return result

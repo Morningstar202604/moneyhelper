@@ -18,8 +18,8 @@ import io
 import re
 
 from .base import (
-    ParseResult,
     ParsedTransaction,
+    ParseResult,
     TransactionParser,
     _is_real_date,
     _parse_amount,

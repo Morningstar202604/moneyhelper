@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 
 from .. import db
 
@@ -142,13 +142,13 @@ async def create_loan(payload: dict) -> dict:
         to_id = int(p.get("to_member_id", 0))
         amount = float(p.get("amount", 0))
     except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="参数格式错误")
+        raise HTTPException(status_code=400, detail="参数格式错误") from None
     note = str(p.get("note", ""))
     currency = str(p.get("currency", "CNY"))
     try:
         lid = await db.loan_create(from_id, to_id, amount, note, currency)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True, "id": lid}
 
 

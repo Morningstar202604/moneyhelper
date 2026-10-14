@@ -11,10 +11,10 @@
 
 from __future__ import annotations
 
-from .base import ParseResult, ParsedTransaction, TransactionParser
+from .alipay import AlipayParser
+from .base import ParsedTransaction, ParseResult, TransactionParser
 from .generic_csv import GenericCSVParser
 from .wechat import WeChatParser
-from .alipay import AlipayParser
 
 # 注册表：来源名称 → 解析器类
 _REGISTRY: dict[str, type[TransactionParser]] = {
@@ -47,12 +47,12 @@ def supported_sources() -> list[dict]:
 
 
 __all__ = [
+    "AlipayParser",
+    "GenericCSVParser",
+    "ParseResult",
+    "ParsedTransaction",
+    "TransactionParser",
+    "WeChatParser",
     "get_parser",
     "supported_sources",
-    "TransactionParser",
-    "ParsedTransaction",
-    "ParseResult",
-    "GenericCSVParser",
-    "WeChatParser",
-    "AlipayParser",
 ]

@@ -24,7 +24,8 @@ ruff>=0.8,<1
 langgraph>=1.0,<2
 langgraph-checkpoint-sqlite>=3,<4   # LangGraph 磁盘 checkpoint（AsyncSqliteSaver：线程状态落盘 + 重启可恢复 HITL）
 sse-starlette>=1.6,<2       # SSE 流式问答（EventSourceResponse：ping 保活 + 断连检测）
-mcp>=1.0,<2                 # MCP 官方 SDK（StreamableHTTP 客户端；替换自研 JSON-RPC 实现）
+mcp>=1.30,<2                # MCP 官方 SDK（StreamableHTTP 客户端；替换自研 JSON-RPC 实现）
+                            # 1.30 起兼容 pydantic 2.14（1.16 的 func_metadata 引用已移除的 eval_type_backport）
 fastmcp>=2.0,<3             # MCP Server 框架：把小满工具暴露为标准 MCP Server（Claude Code/Cursor 直接接入）
 rank-bm25>=0.2,<1           # BM25 检索（替换手写打分；中文分词仍由 memory_retrieve 提供）
 cachetools>=5.0,<6          # TTL 缓存（替换 quotes.py 自建缓存注册表）

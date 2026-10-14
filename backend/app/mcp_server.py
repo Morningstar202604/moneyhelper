@@ -22,8 +22,8 @@ from typing import Any
 
 from . import db
 from . import tools as xtools
-from .provenance import record_provenance
 from .logging_utils import get_logger
+from .provenance import record_provenance
 
 log = get_logger(__name__)
 
@@ -310,8 +310,6 @@ async def _compute_returns(months: int = 6) -> str:
     from .calculations.returns import calculate_simple_return
 
     positions = await db.list_positions()
-    txs = await db.list_transactions()
-    settings = await db.get_settings()
 
     # 非现金持仓总成本 / 总市值
     total_cost = 0.0
@@ -367,9 +365,8 @@ async def _compute_goal_progress() -> str:
 
 async def _import_transactions(source: str, csv_text: str) -> str:
     """批量导入交易：解析 CSV + 去重 + 写入 + 审计。"""
-    from .import_parsers import get_parser
-    from .import_parsers.base import ParsedTransaction
     from ..csvimport import classify as _auto_classify
+    from .import_parsers import get_parser
 
     parser = get_parser(source)
     result = parser.parse(csv_text)
@@ -458,7 +455,7 @@ async def get_family_summary() -> str:
 async def get_provenance(entity_type: str = "", entity_id: str = "", limit: int = 20) -> str:
     """查询操作审计日志（按实体类型/ID 过滤）。返回最近的操作记录（时间/动作/来源/前后快照）。"""
     from .provenance import get_provenances as _get_prov
-    rows = await _get_provenances(
+    rows = await _get_prov(
         entity_type=entity_type or None,
         entity_id=entity_id or None,
         limit=min(limit, 200),

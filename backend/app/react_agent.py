@@ -13,15 +13,14 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from langchain_core.tools import StructuredTool
 from langchain_litellm import ChatLiteLLM
 from langgraph.prebuilt import create_react_agent
-from pydantic import BaseModel, Field
+from pydantic import Field, create_model
 
-from . import db, llm, tools
+from . import agent, db, llm, tools
 from .logging_utils import get_logger
 
 log = get_logger(__name__)
@@ -44,7 +43,7 @@ def _make_langchain_tool(name: str, description: str, impl: Any, param_schema: d
         default = ... if pname in required else None
         fields[pname] = (ptype, Field(default, description=pspec.get("description", "")))
 
-    ArgsModel = type("ToolArgs", (BaseModel,), fields)
+    ArgsModel = create_model("ToolArgs", **fields)
 
     return StructuredTool.from_function(
         coroutine=_run,
@@ -105,12 +104,14 @@ async def run_react_agent(question: str, system_prompt: str, lang: str = "zh", a
         raise RuntimeError("未接入模型")
 
     # 用 ChatLiteLLM 作为 LangChain chat model
+    # request_timeout 与 llm.py 约定的 60s 一致：模型端点挂起时不无限拖住整轮问答
     llm_model = ChatLiteLLM(
         model=cfg["litellm_model"],
         api_base=cfg.get("base"),
         api_key=cfg.get("key"),
         temperature=0.2,
         max_tokens=2048,
+        request_timeout=60,
     )
 
     lc_tools = _build_finance_tools(agent_name)

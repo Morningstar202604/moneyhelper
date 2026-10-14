@@ -16,7 +16,7 @@ import asyncio
 import json
 import uuid
 from collections import deque
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -273,6 +273,9 @@ def _truncate_snapshot(snapshot: dict | None, max_keys: int = 20, max_val_len: i
     """裁剪快照，防止单个审计记录过大。"""
     if snapshot is None:
         return None
+    if not isinstance(snapshot, dict):
+        # 防御：调用方误传非 dict 时不该把审计异常抛给主业务（调用点已改 await）
+        return {"value": str(snapshot)[:max_val_len]}
     result = {}
     for i, (k, v) in enumerate(snapshot.items()):
         if i >= max_keys:
@@ -300,7 +303,5 @@ def ring_capacity() -> int:
 async def flush_writes() -> None:
     """等待挂起的异步写入全部完成（供测试用）。"""
     while _pending_tasks:
-        done, _ = await asyncio.wait(
-            list(_pending_tasks), timeout=2.0
-        )
+        await asyncio.wait(list(_pending_tasks), timeout=2.0)
         # _pending_tasks 在 task.add_done_callback 中自动清理

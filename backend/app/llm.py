@@ -76,7 +76,7 @@ async def _config() -> dict[str, Any] | None:
                     key = await vault.decrypt_secret(raw_key)
                 except Exception as e:
                     _log.warning("vault decrypt failed: %s", e)
-                    raise RuntimeError("API Key 解密失败 — 请检查 VAULT_PASSPHRASE 是否与加密时一致")
+                    raise RuntimeError("API Key 解密失败 — 请检查 VAULT_PASSPHRASE 是否与加密时一致") from e
             else:
                 key = raw_key
         if s.get("ai_enabled") == "on" and key and model:

@@ -7,24 +7,21 @@ from __future__ import annotations
 import textwrap
 
 import pytest
-
 from app.import_parsers import (
+    AlipayParser,
     GenericCSVParser,
     WeChatParser,
-    AlipayParser,
     get_parser,
     supported_sources,
 )
 from app.import_parsers.base import (
-    CSVEncodingError,
-    ParseResult,
     ParsedTransaction,
+    ParseResult,
     _detect_encoding,
     _is_real_date,
     _parse_amount,
     _parse_date,
 )
-
 
 # ===========================================================================
 # section 1: ParsedTransaction & ParseResult 数据结构
@@ -96,7 +93,7 @@ class TestUtilityFunctions:
         assert not _is_real_date("2026-02-30")
 
     def test_detect_encoding_utf8(self) -> None:
-        assert _detect_encoding("hello 世界".encode("utf-8")) == "utf-8-sig"
+        assert _detect_encoding("hello 世界".encode()) == "utf-8-sig"
 
     def test_detect_encoding_gbk(self) -> None:
         assert _detect_encoding("微信支付账单".encode("gbk")) == "gbk"

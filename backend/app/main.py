@@ -197,10 +197,9 @@ async def api_auth(request: Request, call_next):
     path = request.url.path
     if path.startswith("/api/") and path not in _SKIP_AUTH_PATHS:
         key = os.getenv("API_TOKEN", "").strip()
-        if key:
-            # 鉴权逻辑共用 auth.verify_api_token（_timing-safe 比对_）
-            if verify_api_token(request) is None:
-                return JSONResponse({"error": "需要访问口令"}, status_code=401)
+        # 鉴权逻辑共用 auth.verify_api_token（_timing-safe 比对_）
+        if key and verify_api_token(request) is None:
+            return JSONResponse({"error": "需要访问口令"}, status_code=401)
     return await call_next(request)
 
 
@@ -445,7 +444,17 @@ def _mask_secret(settings: dict[str, str]) -> dict[str, str]:
 # 模块化路由：预算 / 目标 / 负债 / 订阅 / 行情 → backend/app/routes/
 # ---------------------------------------------------------------------------
 
-from .routes import budgets_router, calculations_router, debts_subs_router, goals_router, market_router, import_router, provenance_router, members_router, family_router
+from .routes import (  # noqa: E402 — 就近放在挂载点导入，路由模块与主应用解耦
+    budgets_router,
+    calculations_router,
+    debts_subs_router,
+    family_router,
+    goals_router,
+    import_router,
+    market_router,
+    members_router,
+    provenance_router,
+)
 
 app.include_router(budgets_router)
 app.include_router(goals_router)

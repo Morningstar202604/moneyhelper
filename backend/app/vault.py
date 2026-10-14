@@ -132,7 +132,7 @@ async def decrypt_secret(payload: str) -> str:
         body = payload[len(_ENCRYPTED_PREFIX):]
         _, _ = body.split(":", 1)
     except ValueError:
-        raise ValueError(f"vault: 无法解析加密字段格式（期望 ~<salt>:<ct>， got {payload[:20]!r}）")
+        raise ValueError(f"vault: 无法解析加密字段格式（期望 ~<salt>:<ct>， got {payload[:20]!r}）") from None
 
     pp = master_passphrase()
     return await asyncio.to_thread(_decrypt_sync, payload, pp)

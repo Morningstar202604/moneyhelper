@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import re
 
 from fastapi import APIRouter
@@ -66,7 +65,7 @@ async def put_budgets(payload: dict) -> dict:
     await db.save_budgets(month, clean)
     # 异步记录审计（不阻塞主业务）
     after = {r["category"]: r["amount"] for r in await db.list_budgets(month)}
-    asyncio.create_task(record_provenance(
+    await record_provenance(
         action="save_budgets",
         entity_type="budget",
         entity_id=month,
@@ -74,5 +73,5 @@ async def put_budgets(payload: dict) -> dict:
         after=after,
         source="api",
         username="system",
-    ))
+    )
     return {"ok": True, "month": month, "count": len(clean)}

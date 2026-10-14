@@ -85,9 +85,9 @@ def _decode_jwt(token: str) -> dict[str, Any]:
     try:
         return jwt.decode(token, _JWT_SECRET, algorithms=[_JWT_ALG])
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="令牌已过期，请重新登录")
+        raise HTTPException(status_code=401, detail="令牌已过期，请重新登录") from None
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="无效令牌")
+        raise HTTPException(status_code=401, detail="无效令牌") from None
 
 
 def verify_api_token(request: Request) -> dict[str, Any] | None:

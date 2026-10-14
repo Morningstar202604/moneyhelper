@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from datetime import date
 
-import pytest
-
-from app.calculations.goals import GoalProgress, _months_until, _estimate_monthly_savings, calculate_goal_progress
+from app.calculations.goals import (
+    GoalProgress,
+    _estimate_monthly_savings,
+    _months_until,
+    calculate_goal_progress,
+)
 
 
 class TestGoalProgress:

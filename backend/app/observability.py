@@ -44,7 +44,9 @@ def _init() -> None:
         return  # 没配，no-op
     try:
         from opentelemetry import trace
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+            OTLPSpanExporter,
+        )
         from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -56,7 +58,7 @@ def _init() -> None:
         trace.set_tracer_provider(provider)
         _tracer = trace.get_tracer("xiaoman")
         _enabled = True
-        log.info("phoenix.connected", endpoint=endpoint)
+        log.info("phoenix.connected endpoint=%s", endpoint)
     except Exception as e:  # pragma: no cover - 降级路径
         log.warning("phoenix.init_failed: " + str(e))
         _tracer = None

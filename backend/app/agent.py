@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import json
+import pathlib
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -64,8 +65,6 @@ GENERAL_SYSTEM = (
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
 
 MAX_TURNS = 5
-
-import pathlib
 
 _AGENTS_DIR = pathlib.Path(__file__).parent / "agents"
 
@@ -240,7 +239,7 @@ async def _compress_history(messages: list[dict[str, Any]], cfg: dict[str, Any])
         "role": "system",
         "content": f"（前面对话摘要：{summary}）以下是最后的对话：",
     }
-    return head + [compressed] + tail
+    return [*head, compressed, *tail]
 
 
 async def run_agent(

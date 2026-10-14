@@ -21,8 +21,6 @@ from typing import Any
 
 import httpx
 
-import asyncio
-
 from . import analysis, backup, db, nlparse, scheduler
 from .logging_utils import get_logger
 from .provenance import record_provenance
@@ -199,7 +197,7 @@ async def tool_record_transaction(args: dict[str, Any]) -> str:
         parsed["date"], parsed["item"], parsed["category"], parsed["amount"]
     )
     # 异步审计
-    asyncio.create_task(record_provenance(
+    await record_provenance(
         action="add_transaction",
         entity_type="transaction",
         entity_id=f"{parsed['date']}:{parsed['item']}:{parsed['amount']}",
@@ -207,7 +205,7 @@ async def tool_record_transaction(args: dict[str, Any]) -> str:
         after=parsed,
         source="mcp",
         username="system",
-    ))
+    )
     return json.dumps(
         {
             "ok": True,
@@ -420,7 +418,7 @@ async def tool_sell_position(args: dict[str, Any]) -> str:
         before = dict(cur)
         if shares <= 0 or shares >= cur["shares"]:
             await db.delete_position(symbol)
-            asyncio.create_task(record_provenance(
+            await record_provenance(
                 action="sell_position",
                 entity_type="position",
                 entity_id=symbol,
@@ -428,7 +426,7 @@ async def tool_sell_position(args: dict[str, Any]) -> str:
                 after=None,
                 source="mcp",
                 username="system",
-            ))
+            )
             return f"已清仓卖出 {cur['name']}（{symbol}）：{cur['shares']:g} 份全部平仓，持仓已移除。"
         new_shares = cur["shares"] - shares
         after = {**cur, "shares": new_shares}
@@ -445,7 +443,7 @@ async def tool_sell_position(args: dict[str, Any]) -> str:
                 "fee": cur.get("fee", 0),
             }
         )
-        asyncio.create_task(record_provenance(
+        await record_provenance(
             action="sell_position",
             entity_type="position",
             entity_id=symbol,
@@ -453,7 +451,7 @@ async def tool_sell_position(args: dict[str, Any]) -> str:
             after=after,
             source="mcp",
             username="system",
-        ))
+        )
         return (
             f"已卖出 {cur['name']}（{symbol}）{shares:g} 份，剩余 {new_shares:g} 份（成本 {cur['cost']:g} 不变）。"
             "可在持仓页查看最新盈亏。"
@@ -535,9 +533,8 @@ async def tool_set_setting(args: dict[str, Any], lang: str = "zh") -> str:
         return "lang must be zh or en" if en else "语言只能是 zh 或 en"
     if key in ("compact_numbers", "show_suggestions") and raw not in ("on", "off"):
         return f"{key} must be on or off" if en else f"{key} 只能是 on 或 off"
-    if key == "morning_report_time":
-        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", raw):
-            return "Morning report time must be HH:MM (24-hour)" if en else "晨报时间需为 HH:MM（24 小时制）"
+    if key == "morning_report_time" and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", raw):
+        return "Morning report time must be HH:MM (24-hour)" if en else "晨报时间需为 HH:MM（24 小时制）"
     try:
         await db.set_setting(key, raw)
     except Exception as exc:  # noqa: BLE001
@@ -601,7 +598,7 @@ async def tool_record_position(args: dict[str, Any]) -> str:
         await db.add_position(position_data)
     except Exception as exc:  # noqa: BLE001
         return f"记录失败：{exc}"
-    asyncio.create_task(record_provenance(
+    await record_provenance(
         action="add_position",
         entity_type="position",
         entity_id=symbol,
@@ -609,7 +606,7 @@ async def tool_record_position(args: dict[str, Any]) -> str:
         after=position_data,
         source="mcp",
         username="system",
-    ))
+    )
     return (
         f"已记录买入 {name}（{symbol}）：{shares:g} 份 × 成本 {cost:g}，现价 {last:g}。"
         "可在总览/持仓页查看最新盈亏。"

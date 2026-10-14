@@ -28,20 +28,20 @@ def _load_default() -> dict[str, Any]:
 
 async def init_default_config() -> None:
     """启动时调用：如果 settings 表里没有 agent_config，就写入默认值。"""
-    existing = await db.get_setting(_SETTINGS_KEY)
+    existing = (await db.get_settings()).get(_SETTINGS_KEY)
     if existing:
-        log.info("agent.config.loaded", from_db=True)
+        log.info("agent.config.loaded from_db=true")
         return
     default = _load_default()
     if not default:
         return
     await db.set_setting(_SETTINGS_KEY, json.dumps(default, ensure_ascii=False))
-    log.info("agent.config.init_default", version=default.get("version", "?"))
+    log.info("agent.config.init_default version=%s", default.get("version", "?"))
 
 
 async def get_config() -> dict[str, Any]:
     """读当前 agent 配置（数据库里的，没有就用默认）。"""
-    raw = await db.get_setting(_SETTINGS_KEY)
+    raw = (await db.get_settings()).get(_SETTINGS_KEY)
     if raw:
         try:
             return json.loads(raw)

@@ -14,10 +14,11 @@ from typing import Any
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-import asyncio
-
 from . import db, service
+from .logging_utils import get_logger
 from .provenance import record_provenance
+
+log = get_logger(__name__)
 
 REPORT_QUESTION = "帮我做一次全面体检：汇总我的组合、账本与财务目标的现状，只描述事实与风险提示，不给操作建议。"
 # 订阅到期提前提醒天数；due_day 在 [today, today+SUBS_REMIND_WITHIN_DAYS] 区间内即生成提醒
@@ -88,16 +89,19 @@ async def generate_report() -> dict[str, Any]:
         _state["generated"] += 1
         _state["last_run_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
         _state["last_error"] = None
-        # 记录晨报生成审计
-        asyncio.create_task(record_provenance(
-            action="generate_morning_report",
-            entity_type="report",
-            entity_id="morning_report",
-            before=None,
-            after={"generated": _state["generated"], "thread_id": "cron"},
-            source="scheduler",
-            username="system",
-        ))
+        # 记录晨报生成审计：审计失败不应把已生成的晨报标成失败
+        try:
+            await record_provenance(
+                action="generate_morning_report",
+                entity_type="report",
+                entity_id="morning_report",
+                before=None,
+                after={"generated": _state["generated"], "thread_id": "cron"},
+                source="scheduler",
+                username="system",
+            )
+        except Exception as audit_exc:  # noqa: BLE001
+            log.warning("morning report audit failed: %s", audit_exc)
         return result
     except Exception as exc:  # noqa: BLE001 — 晨报失败只记录，不炸服务
         _state["last_error"] = f"{type(exc).__name__}: {exc}"

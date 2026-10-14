@@ -10,7 +10,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import date
 
-
 # ---------------------------------------------------------------------------
 # 纯数据：解析产物
 # ---------------------------------------------------------------------------

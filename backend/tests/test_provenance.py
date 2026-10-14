@@ -19,11 +19,9 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
-from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 
 # ---------------------------------------------------------------------------
 # 单元测试：验证数据结构与内存缓冲区语义
@@ -97,7 +95,7 @@ def test_truncate_snapshot():
 @pytest.mark.asyncio
 async def test_filter_by_entity_type(temp_db):
     """按 entity_type 过滤仅返回匹配记录。"""
-    from app.provenance import record_provenance, get_provenances
+    from app.provenance import get_provenances, record_provenance
 
     await record_provenance(action="add", entity_type="position", entity_id="600519", source="api")
     await record_provenance(action="add", entity_type="goal", entity_id="goal-1", source="api")
@@ -110,7 +108,7 @@ async def test_filter_by_entity_type(temp_db):
 @pytest.mark.asyncio
 async def test_filter_by_entity_id(temp_db):
     """按 entity_id 精确过滤。"""
-    from app.provenance import record_provenance, get_provenances
+    from app.provenance import get_provenances, record_provenance
 
     entry = await record_provenance(
         action="buy", entity_type="position",
@@ -135,7 +133,7 @@ async def _cancel_provenance_tasks():
 @pytest.mark.asyncio
 async def test_record_and_get_from_memory(temp_db):
     """写入一条审计后能从内存缓冲区查到。"""
-    from app.provenance import record_provenance, get_provenances
+    from app.provenance import get_provenances, record_provenance
 
     entry = await record_provenance(
         action="test_action",
@@ -172,6 +170,7 @@ async def test_get_provenance_by_id_not_found(temp_db):
 async def test_async_non_blocking(temp_db):
     """record_provenance 应在毫秒级返回（fire-and-forget 不阻塞）。"""
     import time
+
     from app.provenance import record_provenance
 
     start = time.monotonic()
@@ -293,8 +292,8 @@ async def test_provenance_route_empty_filter(temp_db):
 @pytest.mark.asyncio
 async def test_provenance_persists_to_sqlite(temp_db):
     """审计记录最终持久化到 SQLite。"""
-    from app.provenance import record_provenance, flush_writes
     from app import db
+    from app.provenance import flush_writes, record_provenance
 
     await record_provenance(action="persist_test", entity_type="t", entity_id="sqlite-chk", source="api")
     await flush_writes()

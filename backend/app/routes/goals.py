@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
@@ -25,7 +23,7 @@ async def create_goal(payload: dict) -> dict:
         out = await db.add_goal(payload or {})
     except Exception as exc:  # noqa: BLE001 — 坏输入回 400
         return JSONResponse({"error": str(exc)}, status_code=400)
-    asyncio.create_task(record_provenance(
+    await record_provenance(
         action="create_goal",
         entity_type="goal",
         entity_id=name,
@@ -33,7 +31,7 @@ async def create_goal(payload: dict) -> dict:
         after=payload or {},
         source="api",
         username="system",
-    ))
+    )
     return out
 
 
@@ -47,7 +45,7 @@ async def update_goal(name: str, payload: dict) -> dict:
         return JSONResponse({"error": str(exc)}, status_code=400)
     after_row = await db.fetch_one("SELECT * FROM goals WHERE name = ?", (name,))
     after = dict(after_row) if after_row else None
-    asyncio.create_task(record_provenance(
+    await record_provenance(
         action="update_goal",
         entity_type="goal",
         entity_id=name,
@@ -55,7 +53,7 @@ async def update_goal(name: str, payload: dict) -> dict:
         after=after,
         source="api",
         username="system",
-    ))
+    )
     return out
 
 
@@ -64,7 +62,7 @@ async def remove_goal(name: str) -> dict:
     before_row = await db.fetch_one("SELECT * FROM goals WHERE name = ?", (name,))
     before = dict(before_row) if before_row else None
     result = await db.delete_goal(name)
-    asyncio.create_task(record_provenance(
+    await record_provenance(
         action="delete_goal",
         entity_type="goal",
         entity_id=name,
@@ -72,5 +70,5 @@ async def remove_goal(name: str) -> dict:
         after=None,
         source="api",
         username="system",
-    ))
+    )
     return result

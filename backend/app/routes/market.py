@@ -75,6 +75,7 @@ async def get_quote(symbol: str) -> dict:
 async def search(q: str, limit: int = 8) -> dict:
     """东财 suggest：搜股票/基金/指数（仅东财源；失败返回空列表）。"""
     import os
+
     import httpx
     kw = q.strip()
     if not kw or len(kw) > 20:

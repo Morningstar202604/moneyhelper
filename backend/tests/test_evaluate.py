@@ -20,6 +20,7 @@ import httpx
 import pytest
 from app import db, evaluate, main
 from app import quotes as quotes_mod
+from app.evaluate import EvalItem
 
 
 @pytest.fixture(autouse=True)
@@ -292,7 +293,7 @@ async def test_rule_exception_does_not_break_others(monkeypatch):
         raise RuntimeError("boom")
 
     original_rules = evaluate.RULES
-    monkeypatch.setattr(evaluate, "RULES", (("boom", _explode),) + original_rules)
+    monkeypatch.setattr(evaluate, "RULES", (("boom", _explode), *original_rules))
     out = await evaluate.evaluate_all(month="2026-01", today=date(2026, 1, 15))
     # 不崩溃 + 其他规则产出项（subscriptions 等）
     assert isinstance(out["items"], list)

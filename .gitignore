@@ -25,3 +25,12 @@ frontend/*.tsbuildinfo
 .ruff_cache/
 
 # 对话触发/手动生成的加密备份包（在 data 卷内，随 backend/data/ 一并忽略）
+
+# Playwright e2e 产物
+frontend/test-results/
+frontend/playwright-report/
+
+# 本地运行日志（开发辅助，不入库）
+backend/uvicorn.log
+backend/pytest_*.log
+frontend/vite-dev.log

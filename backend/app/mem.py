@@ -61,7 +61,7 @@ def _init() -> None:
             },
         }
         _client = Memory.from_config(cfg)
-        log.info("mem.ready", path=str(_data_dir()))
+        log.info("mem.ready path=%s", _data_dir())
     except Exception as e:  # pragma: no cover
         log.warning("mem.init_failed: " + str(e))
         _client = None
@@ -76,7 +76,7 @@ def remember(text: str, user_id: str = "default") -> bool:
         _client.add(text, user_id=user_id)
         return True
     except Exception as e:  # pragma: no cover
-        log.warning("mem.add_failed", error=str(e))
+        log.warning("mem.add_failed: %s", e)
         return False
 
 
@@ -92,7 +92,7 @@ def recall(query: str, user_id: str = "default", limit: int = 5) -> list[dict]:
             res = res["results"]
         return list(res or [])[:limit]
     except Exception as e:  # pragma: no cover
-        log.warning("mem.search_failed", error=str(e))
+        log.warning("mem.search_failed: %s", e)
         return []
 
 
