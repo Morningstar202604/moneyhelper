@@ -1368,6 +1368,35 @@ async def test_reset_to_seed_keeps_data_note(client) -> None:
     assert d["positions"]  # 种子持仓仍在
 
 
+async def test_reset_to_seed_preserves_user_settings(client) -> None:
+    """恢复示例数据只换数据：用户设置（AI 配置 / Agent 配置 / 偏好）一律保留。
+
+    回归：此前 reset 会 DELETE 整张 settings 表——「恢复示例数据」把用户填的
+    模型密钥、Agent 技能开关与偏好一起清掉（e2e 复用在跑服务时污染研发库）。
+    """
+    await client.put(
+        "/api/settings",
+        json={"settings": {"report_time": "22:10", "monthly_income": 12345}},
+    )
+    # 改一条 Agent 配置（关闭长期记忆技能）
+    cfg = (await client.get("/api/agent-config")).json()["config"]
+    cfg["skills"]["long_memory"]["enabled"] = False
+    r = await client.post("/api/agent-config", json={"config": cfg})
+    assert r.status_code == 200
+
+    r = await client.post("/api/portfolio/reset")
+    assert r.status_code == 200
+
+    st = (await client.get("/api/settings")).json()["settings"]
+    assert st["report_time"] == "22:10"
+    assert st["monthly_income"] == "12345"
+    cfg2 = (await client.get("/api/agent-config")).json()["config"]
+    assert cfg2["skills"]["long_memory"]["enabled"] is False
+    # 数据确实换回了种子
+    d = (await client.get("/api/dashboard")).json()
+    assert d["source"]["seeded"] is True and d["positions"]
+
+
 async def test_deleting_all_positions_does_not_reseed(client, monkeypatch) -> None:
     """用户清空全部持仓后重启服务，不得重新灌入种子数据。"""
     for p in await db.list_positions():

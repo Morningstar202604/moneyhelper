@@ -639,17 +639,26 @@ async def _migrate_sessions_from_runs() -> None:
 
 
 async def reset_to_seed() -> dict[str, Any]:
-    """清空并重新种入示例数据（演示/测试用）。"""
+    """清空并重新种入示例数据（演示/测试用）。
+
+    只重置示例数据本身（持仓/流水/订阅/负债/预算）与 data_note 标记；用户设置
+    （AI 端点与密钥、Agent 配置、偏好、账本假设）一律保留——「恢复示例数据」
+    不应把用户的模型密钥与个性化配置一起清掉（e2e 复用在跑的研发服务时同理）。
+    """
     conn = await _conn()
     for t in (
         "positions",
         "transactions",
         "subscriptions",
         "debts",
-        "settings",
         "budgets",
     ):
         await conn.execute(f"DELETE FROM {t}")
+    # 数据已换回种子 → data_note 标回 seed；其余 settings 全部保留
+    await conn.execute(
+        "INSERT INTO settings(key,value) VALUES('data_note','seed') "
+        "ON CONFLICT(key) DO UPDATE SET value='seed'"
+    )
     await _seed_all()
     await conn.commit()
     return {"ok": True, "reset": True}
