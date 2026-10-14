@@ -579,6 +579,45 @@ async def test_mem_legacy_recall_fallback(client) -> None:
     assert all("memory" in h for h in hits)
 
 
+async def test_mem_suggest_endpoint(client, monkeypatch) -> None:
+    """AI 归纳偏好：未接模型报错；无对话记录报错；有记录时出建议且去重、不落库。"""
+    # 未接入模型
+    r = await client.post("/api/memory/suggest", json={})
+    d = r.json()
+    assert d["ok"] is False and "模型" in d["error"]
+
+    async def fake_avail() -> bool:
+        return True
+
+    monkeypatch.setattr(service.llm, "llm_available", fake_avail)
+    # 无对话记录 → 友好报错
+    d = (await client.post("/api/memory/suggest", json={})).json()
+    assert d["ok"] is False and "对话" in d["error"]
+
+    # 有一条对话记录 → 走模型（mock）；输出含重复与已有记忆，应被去重
+    await _ask(client, "我这个月花了多少钱", thread_id="mem-suggest-1")
+    await client.post("/api/memory", json={"content": "用户偏好稳健型投资"})
+
+    async def fake_json(system: str, user: str, timeout: float = 25.0) -> dict:
+        assert "已记住的内容" in user  # 现有记忆应进 prompt（防重复建议）
+        return {
+            "suggestions": [
+                "用户偏好稳健型投资",  # 与已有记忆重复 → 剔除
+                "用户关注每月开销变化",
+                "用户关注每月开销变化",  # 自身重复 → 剔除
+                "用户常看持仓盈亏",
+            ]
+        }
+
+    monkeypatch.setattr(service.llm, "json_complete", fake_json)
+    d = (await client.post("/api/memory/suggest", json={})).json()
+    assert d["ok"] is True
+    assert d["suggestions"] == ["用户关注每月开销变化", "用户常看持仓盈亏"]
+    # 不落库：建议不自动写入
+    mem = (await client.get("/api/memory")).json()["memory"]
+    assert not any("常看持仓盈亏" in m["content"] for m in mem)
+
+
 async def test_agent_config_generate_endpoint(client, monkeypatch) -> None:
     """AI 生成端点：未接入模型友好报错；模型可用时返回建议且不落库。"""
     # 未接入模型（conftest 的 _no_real_llm autouse 已置空 llm._cfg）

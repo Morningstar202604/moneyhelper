@@ -76,7 +76,7 @@ test.describe("应用启动 & 冒烟", () => {
     await expect.poll(primaryVar).toBe("168 76% 24%");
   });
 
-  test("四个设置区都有 AI 生成入口（预算/规则/晨报/Agent）", async ({ page }) => {
+  test("设置区都有 AI 生成入口（预算/规则/晨报/记忆/Agent）", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "设置" }).first().click();
 
@@ -89,6 +89,7 @@ test.describe("应用启动 & 冒烟", () => {
     await expectAi("预算", /生成建议/);
     await expectAi("账本规则", /生成建议/);
     await expectAi("每日晨报", /生成建议/);
+    await expectAi("长期记忆", /生成建议/);
     await expectAi("Agent 与技能", /^AI 生成$/);
   });
 });

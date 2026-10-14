@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { BrainCog, Check, Plus, Trash2 } from "lucide-react";
+import { BrainCog, Check, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { FieldError } from "@/components/ui/field-error";
-import { addMemory, clearMemory, deleteMemory, listMemory, forgetMemory, listReflections, resolveReflection, clearReflections, type ReflectionItem } from "@/lib/api";
+import { addMemory, clearMemory, deleteMemory, listMemory, forgetMemory, listReflections, resolveReflection, clearReflections, suggestMemories, type ReflectionItem } from "@/lib/api";
 import { useToast } from "@/lib/toast";
 import { useI18n } from "@/lib/i18n";
 import { fmtDate } from "@/lib/format";
 import type { MemoryItem } from "@/lib/types";
 import { Section, inputCls, labelCls } from "./shared";
 
-/** 长期记忆 + 主动遗忘 + 经验库（P1 反思/踩坑复盘） */
+/** 长期记忆 + AI 归纳偏好 + 主动遗忘 + 经验库（P1 反思/踩坑复盘） */
 export function MemorySection() {
   const { t } = useI18n();
   const [items, setItems] = useState<MemoryItem[] | null>(null);
@@ -20,6 +20,9 @@ export function MemorySection() {
   const [clearOpen, setClearOpen] = useState(false);
   const [forgetOpen, setForgetOpen] = useState(false);
   const [reflections, setReflections] = useState<ReflectionItem[] | null>(null);
+  // AI 归纳偏好：多条目建议，逐条「记住」才落库（不搞一键全收，避免噪音）
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<string[] | null>(null);
   const { toast } = useToast();
 
   const reload = useCallback(async () => {
@@ -38,6 +41,31 @@ export function MemorySection() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  const aiSuggest = async () => {
+    setAiBusy(true);
+    setAiSuggestions(null);
+    try {
+      const r = await suggestMemories();
+      if (r.ok && r.suggestions?.length) setAiSuggestions(r.suggestions);
+      else toast(String(r.error || t("settings.memAiFail")), "error");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), "error");
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const adoptOne = async (content: string) => {
+    try {
+      const r = await addMemory(content);
+      toast(r.deduped ? t("settings.memDup") : t("settings.memSaved"), "ok");
+      setAiSuggestions((prev) => (prev ? prev.filter((s) => s !== content) : prev));
+      void reload();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), "error");
+    }
+  };
 
   const submit = async () => {
     setErr("");
@@ -87,6 +115,45 @@ export function MemorySection() {
         </Button>
       </div>
       {err ? <FieldError className="mt-1">{err}</FieldError> : null}
+
+      {/* AI 归纳偏好：看最近提问给出建议，逐条「记住」才落库 */}
+      <div className="mt-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-sm">{t("settings.memAi")}</div>
+            <div className="mt-0.5 text-xs text-muted-foreground">{t("settings.memAiHint")}</div>
+          </div>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => void aiSuggest()} disabled={aiBusy}>
+            <Sparkles className="w-3.5 h-3.5" /> {aiBusy ? t("settings.aiBusy") : t("settings.aiGen")}
+          </Button>
+        </div>
+        {aiSuggestions && aiSuggestions.length > 0 && (
+          <ul className="mt-2 space-y-1.5">
+            {aiSuggestions.map((s) => (
+              <li key={s} className="flex items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-sm">
+                <span className="min-w-0 flex-1 break-words">{s}</span>
+                <span className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-primary hover:bg-primary/10"
+                    onClick={() => void adoptOne(s)}
+                  >
+                    <Check className="w-3 h-3" /> {t("settings.memAiAdopt")}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("settings.memAiSkip", { c: s })}
+                    className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+                    onClick={() => setAiSuggestions((prev) => (prev ? prev.filter((x) => x !== s) : prev))}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <div className="mt-3 flex items-center justify-between">
         <span className="text-xs text-muted-foreground">

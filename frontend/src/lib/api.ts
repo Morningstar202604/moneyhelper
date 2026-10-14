@@ -349,6 +349,13 @@ export const forgetMemory = (olderThanDays: number) =>
     body: JSON.stringify({ older_than_days: olderThanDays }),
   });
 
+/** AI 归纳用户偏好：基于最近提问 + 现有记忆，建议若干条长期记忆（只出建议）。 */
+export const suggestMemories = () =>
+  api<{ ok: boolean; suggestions?: string[]; based_on?: { questions: number }; error?: string }>(
+    "/api/memory/suggest",
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) },
+  );
+
 // —— 经验库（P1 反思 / 踩坑复盘）——
 export interface ReflectionItem {
   id: number;
