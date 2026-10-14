@@ -316,10 +316,10 @@ function BubbleInner({
                   <span>{m.created_at ? fmtDate(m.created_at) : tr("chat.justNow")}</span>
                 </span>
                 {/* 操作按钮：移动端常显（无悬停），桌面端悬停/聚焦才出现 */}
-                <span className="flex items-center gap-1 opacity-70 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+                <span className="flex items-center gap-0.5 opacity-70 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                   <button
                     type="button"
-                    className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                    className="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-40"
                     aria-label={tr("chat.regenerate")}
                     title={tr("chat.regenerate")}
                     disabled={busy}
@@ -331,7 +331,7 @@ function BubbleInner({
                     <>
                       <button
                         type="button"
-                        className="p-1 text-muted-foreground hover:text-foreground"
+                        className="p-1.5 text-muted-foreground hover:text-foreground"
                         aria-label={tr("chat.copyMd")}
                         onClick={() => onExport(m, "copy")}
                       >
@@ -339,7 +339,7 @@ function BubbleInner({
                       </button>
                       <button
                         type="button"
-                        className="p-1 text-muted-foreground hover:text-foreground"
+                        className="p-1.5 text-muted-foreground hover:text-foreground"
                         aria-label={tr("chat.downloadMd")}
                         onClick={() => onExport(m, "download")}
                       >
@@ -445,7 +445,7 @@ function BubbleInner({
                       key={i}
                       type="button"
                       onClick={() => onNavigate(a.tab)}
-                      className="rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1 text-[11px] text-primary transition-colors hover:bg-primary/10"
+                      className="rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-[11px] text-primary transition-colors hover:bg-primary/10"
                     >
                       {tr(TAB_ACTION_KEYS[a.tab] ?? "chat.goOverview")}
                     </button>

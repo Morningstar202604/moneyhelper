@@ -13,8 +13,11 @@ export interface NetWorthBreakdown {
   total_assets: number;
   total_liabilities: number;
   net_worth: number;
-  asset_breakdown: { label: string; value: number; pct: number }[];
-  liability_breakdown: { name: string; balance: number; rate: number; monthly: number }[];
+  /** 明细为 {名称: 金额} dict（与后端 NetWorthSnapshot 一致） */
+  asset_breakdown: Record<string, number>;
+  liability_breakdown: Record<string, number>;
+  /** 可选：{负债名称: 年利率}，后端路由附加字段，用于展示利率 */
+  liability_rates?: Record<string, number>;
 }
 
 /** GET /api/calculations/health 响应 */

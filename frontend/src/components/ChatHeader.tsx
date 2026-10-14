@@ -39,9 +39,10 @@ export const ChatHeader = memo(({
   return (
     <div className="relative flex items-center justify-between gap-2 px-4 py-2 border-b border-border/60 py-1.5 sm:py-2">
       <div className="relative min-w-0">
+        {/* 会话切换：-my-1 + py-2 —— 视觉不变、触控命中区扩到 32px（移动端唯一入口） */}
         <button
           type="button"
-          className="text-xs text-muted-foreground inline-flex items-center gap-1 hover:text-foreground"
+          className="text-xs text-muted-foreground inline-flex items-center gap-1 hover:text-foreground py-2 -my-1"
           onClick={onToggleSessions}
         >
           <MessageCircle className="w-3.5 h-3.5 shrink-0" />

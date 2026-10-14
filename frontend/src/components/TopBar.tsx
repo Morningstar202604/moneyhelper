@@ -34,7 +34,7 @@ export function TopBar({
             <Button
               variant="ghost"
               size="icon"
-              aria-label={lang === "zh" ? "Switch language" : "Switch language"}
+              aria-label={lang === "zh" ? "Switch to English" : "切换到中文"}
               onClick={() => setLang(lang === "zh" ? "en" : "zh")}
             >
               <Languages className="w-4 h-4" />

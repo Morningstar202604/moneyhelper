@@ -82,7 +82,8 @@
     --card-pad: 1rem;
 
     --brand: 168 76% 24%;
-    --brand-gold: 168 76% 35%;
+    /* 品牌点睛金（logo 麦粒 / 图标金线 #f0b64a 一族）；原先误为墨绿，导致 logo 麦粒与底色同色 */
+    --brand-gold: 41 82% 46%;
   }
 
   .dark {
@@ -94,7 +95,8 @@
     --card-foreground: 0 0% 92%;
 
     --primary: 168 70% 45%;
-    --primary-foreground: 0 0% 100%;
+    /* 深色下主色是亮墨绿：前景改深色文字，白字对比度仅 2.23:1（低于 WCAG AA 4.5:1） */
+    --primary-foreground: 168 70% 12%;
 
     --secondary: 0 0% 17%;
     --secondary-foreground: 0 0% 90%;
@@ -110,7 +112,7 @@
     --ring: 168 70% 45%;
 
     --brand: 168 70% 50%;
-    --brand-gold: 168 70% 60%;
+    --brand-gold: 41 85% 60%;
   }
   /* 边框默认色 = --border（v3 行为；v4 裸 border 宽度工具默认 currentColor，这里显式兜底） */
   * {

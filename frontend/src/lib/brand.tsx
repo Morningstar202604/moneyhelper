@@ -19,7 +19,8 @@ export interface BrandPreset {
   accent: string;
 }
 
-/** 品牌色预设：麦金（默认）/ 翡翠 / 靛蓝 / 琥珀 / 石墨 */
+/** 品牌色预设（可选项，尚未接入设置页；当前默认主题 = index.css 的墨绿主色 + 金色点睛）：
+ *  麦金 / 翡翠 / 靛蓝 / 琥珀 / 石墨。接入时由设置页消费，写入 :root / .dark 的 CSS 变量。 */
 export const BRAND_PRESETS: BrandPreset[] = [
   {
     id: "wheat",

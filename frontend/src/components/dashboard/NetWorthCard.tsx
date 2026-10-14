@@ -17,7 +17,9 @@ function NetWorthPie({ breakdown }: { breakdown: NetWorthBreakdown["asset_breakd
   const palette = usePalette();
   const { resolved } = useTheme();
   const option = useMemo<EChartsCoreOption | null>(() => {
-    const items = breakdown.filter((d) => d.value > 0);
+    const items = Object.entries(breakdown)
+      .filter(([, value]) => value > 0)
+      .map(([label, value]) => ({ label, value }));
     if (items.length === 0) return null;
     return {
       tooltip: { trigger: "item", triggerOn: "click", renderMode: "richText", confine: true, formatter: `{b}\n¥{c}` },
@@ -66,7 +68,10 @@ export function NetWorthCard() {
     );
   }
 
-  const hasPieData = data.asset_breakdown.some((d) => d.value > 0);
+  const hasPieData = Object.values(data.asset_breakdown ?? {}).some((v) => v > 0);
+  // 防御旧服务端/中间版本缺字段：null 保护，避免整卡被 ErrorBoundary 兜成"页面出错"
+  const assets = data.asset_breakdown ?? {};
+  const liabilities = data.liability_breakdown ?? {};
 
   return (
     <Card className="p-[var(--card-pad)]">
@@ -86,33 +91,36 @@ export function NetWorthCard() {
       </div>
 
       <div className="grid grid-cols-2 gap-x-3 items-center">
-        {hasPieData && <NetWorthPie breakdown={data.asset_breakdown} />}
+        {hasPieData && <NetWorthPie breakdown={assets} />}
         <div className={`space-y-1.5 ${hasPieData ? "" : "col-span-2 grid grid-cols-2 gap-x-4"}`}>
           <StatRow label={tr("netWorth.assets")} value={data.total_assets} tone="up" />
-          {data.asset_breakdown.map((a) => (
-            <StatRow key={a.label} label={a.label} value={a.value} />
+          {Object.entries(assets).map(([label, value]) => (
+            <StatRow key={label} label={label} value={value} />
           ))}
           <StatRow label={tr("netWorth.liability")} value={data.total_liabilities} tone="down" />
         </div>
       </div>
 
       {/* 负债明细 */}
-      {data.liability_breakdown.length > 0 && (
+      {Object.keys(liabilities).length > 0 && (
         <div className="mt-3 pt-3 border-t border-border/60">
           <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
             <Landmark className="w-3.5 h-3.5" />
             {tr("netWorth.liabilityDetail")}
           </div>
           <div className="space-y-1.5">
-            {data.liability_breakdown.map((l) => (
-              <div key={l.name} className="flex items-center justify-between text-xs">
-                <span>
-                  {l.name}
-                  {l.rate > 0 && <span className="text-muted-foreground ml-1.5">{(l.rate * 100).toFixed(2)}%</span>}
-                </span>
-                <span className="text-down tabular-nums">{fmtMoney(l.balance)}</span>
-              </div>
-            ))}
+            {Object.entries(liabilities).map(([name, balance]) => {
+              const rate = data.liability_rates?.[name] ?? 0;
+              return (
+                <div key={name} className="flex items-center justify-between text-xs">
+                  <span>
+                    {name}
+                    {rate > 0 && <span className="text-muted-foreground ml-1.5">{(rate * 100).toFixed(2)}%</span>}
+                  </span>
+                  <span className="text-down tabular-nums">{fmtMoney(balance)}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

@@ -25,7 +25,7 @@ export type DataKind = "overview" | "holdings" | "market" | "ledger" | "health";
 
 export default function App() {
   const { t } = useI18n();
-  const { sessions } = useSessions();
+  const { sessions, loading: sessionsLoading } = useSessions();
   const { bootstrap } = useBootstrap();
   const { toast } = useToast();
 
@@ -161,9 +161,12 @@ export default function App() {
 
   useEffect(() => {
     if (activeThread) return;
+    // 会话列表加载完成前不下结论：否则会把「加载中」误判为「没有任何会话」，
+    // 每次打开都新建垃圾会话，且首发消息可能滞留在 __tmp_ 线程。
+    if (sessionsLoading) return;
     if (sessions.length > 0) setActiveThread(sessions[0].thread_id);
     else void newSession();
-  }, [activeThread, sessions, newSession]);
+  }, [activeThread, sessions, sessionsLoading, newSession]);
 
   // 对话里的"跳转意图"：弹数据浮层，不切页面、不占常驻侧栏
   const openData = useCallback((kind: string) => {

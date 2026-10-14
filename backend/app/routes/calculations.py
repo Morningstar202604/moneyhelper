@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query
 
 from .. import db
+from ..auth import get_current_user
 from ..calculations import (
     calculate_goal_progress,
     calculate_health_score,
@@ -20,10 +21,7 @@ from ..calculations import (
     calculate_twr,
     calculate_xirr,
 )
-from ..calculations.goals import GoalProgress
 from ..calculations.health import HealthInputs
-from ..calculations.net_worth import NetWorthSnapshot
-from ..auth import get_current_user
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -42,6 +40,11 @@ async def net_worth_endpoint() -> dict[str, Any]:
     # db.list_positions 返回的持仓已含 last 字段（快照价）
     snapshot = calculate_net_worth(positions, debts=debts, subscriptions=subs)
 
+    # 负债利率附加字段：前端负债明细展示用，键与 liability_breakdown 一致
+    liability_rates = {
+        (d.get("name") or "未知负债"): float(d.get("rate", 0) or 0) for d in debts
+    }
+
     return {
         "date": snapshot.date.isoformat(),
         "total_assets": snapshot.total_assets,
@@ -49,6 +52,7 @@ async def net_worth_endpoint() -> dict[str, Any]:
         "net_worth": snapshot.net_worth,
         "asset_breakdown": snapshot.asset_breakdown,
         "liability_breakdown": snapshot.liability_breakdown,
+        "liability_rates": liability_rates,
     }
 
 
@@ -309,7 +313,6 @@ def _build_twr_sequence(
 
         # 添加期初估值（借用第一个月之前的市值）
         first_month = sorted_months[0]
-        first_flow = monthly_flows.get(first_month, 0)
         start_value = max(0.0, total_mv - sum(monthly_flows.values()))
         if start_value > 0:
             result.insert(0, {"date": f"{first_month}-01", "type": "valuation", "amount": start_value})
