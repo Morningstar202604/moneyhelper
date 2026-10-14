@@ -558,7 +558,7 @@ export const en: Record<string, string> = {
   "settings.realNote": "Using your real data.",
   "settings.restoreDemo": "Restore",
   "settings.restoreDemoTitle": "Restore sample data",
-  "settings.restoreDemoDesc": "Restoring sample data overwrites current holdings, transactions and debts. Continue?",
+  "settings.restoreDemoDesc": "Sample data will overwrite current holdings, transactions and debts (your settings and AI config are kept). Continue?",
   "settings.clearHistory": "Clear all history",
   "settings.clearHistoryTitle": "Clear all history",
   "settings.clearHistoryDesc": "Deletes all sessions and Q&A records (holdings, transactions etc. are kept). This cannot be undone.",

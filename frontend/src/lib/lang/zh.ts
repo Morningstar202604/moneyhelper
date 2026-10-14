@@ -558,7 +558,7 @@ export const zh: Record<string, string> = {
   "settings.realNote": "当前是你的真实数据。",
   "settings.restoreDemo": "恢复",
   "settings.restoreDemoTitle": "恢复示例数据",
-  "settings.restoreDemoDesc": "恢复示例数据会覆盖当前的持仓、流水与负债，确定吗？",
+  "settings.restoreDemoDesc": "会用示例数据覆盖当前的持仓、流水与负债（你的设置与 AI 配置保留），确定吗？",
   "settings.clearHistory": "清空全部历史",
   "settings.clearHistoryTitle": "清空全部历史",
   "settings.clearHistoryDesc": "删除所有会话与问答记录（不影响持仓、流水等数据）。此操作不可撤销。",
