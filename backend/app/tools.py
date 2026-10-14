@@ -42,6 +42,7 @@ SETTING_KEYS_ALLOWED = frozenset({
     "quote_source_mode", "report_time", "voice_input", "show_export",
     "expand_process", "show_suggestions", "auto_refresh", "auto_refresh_seconds",
     "compact_numbers", "color_scheme", "default_tab", "savings_goal",
+    "report_focus",
     "ai_base_url", "ai_api_key", "ai_model",  # 这三个在下方被显式拒绝
 })
 

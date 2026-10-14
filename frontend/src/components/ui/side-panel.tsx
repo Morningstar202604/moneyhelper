@@ -68,7 +68,8 @@ export function SidePanel({
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto scroll-thin p-4">{children}</div>
+            {/* @container：内容区按自身宽度响应（而非视口）——面板内表格等可自适应为窄布局 */}
+            <div className="@container min-h-0 flex-1 overflow-y-auto scroll-thin p-4">{children}</div>
           </motion.aside>
         </motion.div>
       )}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Newspaper, RefreshCw } from "lucide-react";
+import { Newspaper, RefreshCw, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -24,7 +24,29 @@ export function ReportSection({
   const { t } = useI18n();
   const { toast } = useToast();
   const [reports, setReports] = useState<RunRecord[]>([]);
+  // AI 关注点建议：只出建议，采用后填进 report_focus 字段（随设置保存生效）
+  const [aiBusy, setAiBusy] = useState(false);
   const sc = scheduler;
+
+  const suggestFocus = async () => {
+    setAiBusy(true);
+    try {
+      const d = await api<{ ok: boolean; suggestion?: { focus: string }; error?: string }>(
+        "/api/reports/suggest-focus",
+        { method: "POST", body: JSON.stringify({}) },
+      );
+      if (d.ok && d.suggestion) {
+        onField("report_focus", d.suggestion.focus);
+        toast(t("settings.reportAiApplied"), "ok");
+      } else {
+        toast(String(d.error || t("settings.reportAiFail")), "error");
+      }
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), "error");
+    } finally {
+      setAiBusy(false);
+    }
+  };
 
   const loadReports = useCallback(async () => {
     try {
@@ -73,6 +95,24 @@ export function ReportSection({
       <div className="mt-2 text-xs text-muted-foreground">
         {sc.enabled ? `${t("settings.reportNext")}: ${sc.next_run_at ?? "—"}` : t("settings.reportDisabled")}
         {sc.generated > 0 ? ` · ${t("settings.reportCount", { n: sc.generated })}` : ""}
+      </div>
+
+      {/* 关注点：写进 report_focus，晨报生成时会重点结合这一点 */}
+      <div className="mt-3">
+        <label className={labelCls}>{t("settings.reportFocus")}</label>
+        <div className="flex items-start gap-2">
+          <input
+            className={inputCls}
+            value={form.report_focus ?? ""}
+            onChange={(e) => onField("report_focus", e.target.value)}
+            placeholder={t("settings.reportFocusPh")}
+            maxLength={200}
+          />
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => void suggestFocus()} disabled={aiBusy}>
+            <Sparkles className="w-3.5 h-3.5" /> {aiBusy ? t("settings.budgetAiBusy") : t("settings.reportAiBtn")}
+          </Button>
+        </div>
+        <div className="mt-1 text-xs text-muted-foreground">{t("settings.reportFocusHint")}</div>
       </div>
       <details className="mt-3 group">
         <summary className="cursor-pointer list-none text-xs text-muted-foreground hover:text-foreground">

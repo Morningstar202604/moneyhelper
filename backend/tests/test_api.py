@@ -639,6 +639,59 @@ async def test_budgets_suggest_endpoint(client, monkeypatch) -> None:
     assert not any(b["amount"] == 3000 for b in budgets)
 
 
+async def test_rules_and_report_focus_suggest(client, monkeypatch) -> None:
+    """规则建议 / 晨报关注点建议：未接模型友好报错；模型可用时出建议；夹取到合理区间。"""
+    r = await client.post("/api/rules/suggest", json={})
+    assert r.json()["ok"] is False
+    r = await client.post("/api/reports/suggest-focus", json={})
+    assert r.json()["ok"] is False
+
+    # 准备数据：一笔收入 + 一笔支出
+    await client.post("/api/transactions", json={"date": "2026-10-01", "item": "工资", "category": "收入", "amount": 20000})
+    await client.post("/api/transactions", json={"date": "2026-10-02", "item": "午餐", "category": "餐饮", "amount": -50})
+
+    async def fake_rules(system: str, user: str, timeout: float = 25.0) -> dict:
+        return {
+            "monthly_income": 20000,
+            "emergency_target_months": 99,  # 越界：应被夹到 12
+            "essential_categories": "餐饮,交通",
+            "savings_goal": 1,  # 越界：应被夹到 5
+        }
+
+    async def fake_avail() -> bool:
+        return True
+
+    monkeypatch.setattr(service.llm, "json_complete", fake_rules)
+    monkeypatch.setattr(service.llm, "llm_available", fake_avail)
+    d = (await client.post("/api/rules/suggest", json={})).json()
+    assert d["ok"] is True
+    assert d["suggestion"]["monthly_income"] == 20000
+    assert d["suggestion"]["emergency_target_months"] == 12
+    assert d["suggestion"]["savings_goal"] == 5
+    # 不落库：设置未变
+    st = (await client.get("/api/settings")).json()["settings"]
+    assert st.get("monthly_income") != "20000"
+
+    async def fake_focus(system: str, user: str, timeout: float = 20.0) -> dict:
+        assert "贵州茅台" in user or "持仓" in user
+        return {"focus": "重点关注白酒持仓的集中度风险"}
+
+    monkeypatch.setattr(service.llm, "json_complete", fake_focus)
+    d = (await client.post("/api/reports/suggest-focus", json={})).json()
+    assert d["ok"] is True and "集中度" in d["suggestion"]["focus"]
+
+
+async def test_report_focus_setting_roundtrip(client) -> None:
+    """report_focus 为自由文本设置：可保存、可读回、可清空（晨报生成会读取它）。"""
+    r = await client.put("/api/settings", json={"settings": {"report_focus": "  盯住房贷利率变化  "}})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    st = (await client.get("/api/settings")).json()["settings"]
+    assert st["report_focus"] == "盯住房贷利率变化"  # 去空白
+    await client.put("/api/settings", json={"settings": {"report_focus": ""}})
+    st = (await client.get("/api/settings")).json()["settings"]
+    assert st.get("report_focus", "") == ""
+
+
 @pytest.mark.parametrize(
     "question",
     ["我这个月花了3000怎么办", "昨天打车32元花了吗", "这个月餐饮预算应该定多少"],

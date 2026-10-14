@@ -70,8 +70,10 @@ export function PositionsTable({
 
   return (
     <>
-      {/* 桌面/平板：7 列可排序表格 */}
-      <div className={cn("scroll-thin hidden overflow-x-auto rounded-lg border border-border bg-card md:block", className)}>
+      {/* 宽容器（≥36rem）：7 列可排序表格；窄容器（侧面板/移动端）：卡片视图。
+          用容器查询而非视口断点：本组件主要渲染在 400-440px 的侧面板内，
+          桌面视口虽宽但面板很窄，md: 视口断点会把 8 列表格挤进面板。 */}
+      <div className={cn("scroll-thin hidden overflow-x-auto rounded-lg border border-border bg-card @xl:block", className)}>
         <table className="w-full border-collapse text-xs" style={{ fontVariantNumeric: "tabular-nums" }}>
           <thead>
             <tr className="border-b border-border bg-muted/50">
@@ -159,8 +161,8 @@ export function PositionsTable({
         </table>
       </div>
 
-      {/* 移动端：每持仓一张卡片（整卡可点开 K 线），替代 7 列宽表 */}
-      <div className={cn("space-y-2 md:hidden", className)}>
+      {/* 窄容器：每持仓一张卡片（整卡可点开 K 线），替代 7 列宽表 */}
+      <div className={cn("space-y-2 @xl:hidden", className)}>
         {computed.length === 0 && (
           <p className="rounded-lg border border-border bg-card px-3 py-4 text-center text-sm text-muted-foreground">
             {tr("pos.empty")}

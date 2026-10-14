@@ -131,3 +131,100 @@ async def suggest_budgets() -> dict:
         "suggestion": {"total": total_v, "categories": cats},
         "based_on": {"days": 60, "spent": round(total)},
     }
+
+
+@router.post("/api/rules/suggest")
+async def suggest_rules() -> dict:
+    """AI 按交易历史给账本假设建议（月收入/应急月数/必选类别/储蓄比例）。只出建议不落库。"""
+    from datetime import datetime, timedelta
+
+    from .. import llm
+
+    if not await llm.llm_available():
+        return {"ok": False, "error": "未接入模型 —— 先到「设置 → AI 回答」配置模型端点"}
+
+    txns = await db.list_transactions()
+    cutoff = (datetime.now().astimezone().date() - timedelta(days=60)).isoformat()
+    income = 0.0
+    essential: dict[str, float] = {}
+    for t in txns:
+        if str(t.get("date") or "") < cutoff:
+            continue
+        amt = float(t.get("amount") or 0)
+        if amt > 0:
+            income += amt
+        else:
+            cat = str(t.get("category") or "其他")
+            essential[cat] = essential.get(cat, 0.0) + abs(amt)
+    if income <= 0 and not essential:
+        return {"ok": False, "error": "近两个月没有收支记录，先记几笔再来"}
+
+    summary = (
+        f"近约两个月（60 天）收入合计 {round(income)} 元；支出分类："
+        + "，".join(f"{k} {round(v)}" for k, v in sorted(essential.items(), key=lambda x: -x[1])[:12])
+        + "。"
+    )
+    system = (
+        "你是理财规划顾问。根据用户近两月收支，给出账本假设建议。只输出 JSON："
+        '{"monthly_income": 整数（月均收入）, "emergency_target_months": 3-12 整数, '
+        '"essential_categories": "逗号分隔的必选支出类别（从给定类别中选）", "savings_goal": 5-50 整数（储蓄率%）}。'
+    )
+    out = await llm.json_complete(system, summary, timeout=25.0)
+    if not isinstance(out, dict):
+        return {"ok": False, "error": "生成失败，请稍后重试"}
+    try:
+        mi = int(float(out.get("monthly_income") or 0))
+        em = int(float(out.get("emergency_target_months") or 6))
+        sg = int(float(out.get("savings_goal") or 20))
+        cats = str(out.get("essential_categories") or "").strip()[:120]
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "生成结果不可用，请重试"}
+    if mi <= 0 or not cats:
+        return {"ok": False, "error": "生成结果不可用，请重试"}
+    # 夹到合理区间，防止模型给出离谱值直接写进设置
+    em = min(max(em, 3), 12)
+    sg = min(max(sg, 5), 50)
+    return {
+        "ok": True,
+        "suggestion": {
+            "monthly_income": mi,
+            "emergency_target_months": em,
+            "essential_categories": cats,
+            "savings_goal": sg,
+        },
+        "based_on": {"days": 60, "income": round(income)},
+    }
+
+
+@router.post("/api/reports/suggest-focus")
+async def suggest_report_focus() -> dict:
+    """AI 按当前持仓/账本给出晨报应重点关注的 3 条（只出建议不落库）。"""
+    from .. import llm
+
+    if not await llm.llm_available():
+        return {"ok": False, "error": "未接入模型 —— 先到「设置 → AI 回答」配置模型端点"}
+
+    positions = await db.list_positions()
+    txns = await db.list_transactions()
+    if not positions and not txns:
+        return {"ok": False, "error": "还没有持仓和流水，先记几笔再来"}
+
+    top = sorted(positions, key=lambda p: -(float(p.get("shares", 0)) * float(p.get("last", 0))))[:5]
+    pos_desc = "，".join(
+        f"{p.get('name')}({p.get('kind')}) 市值{round(float(p.get('shares', 0)) * float(p.get('last', 0)))}"
+        for p in top
+    )
+    recent = txns[:10]
+    tx_desc = "，".join(f"{t.get('category')} {round(abs(float(t.get('amount') or 0)))}" for t in recent)
+    summary = f"当前主要持仓：{pos_desc or '无'}。最近流水：{tx_desc or '无'}。"
+    system = (
+        "你是理财晨报编辑。根据用户持仓与最近流水，给出这份晨报应重点关注的要点。"
+        '只输出 JSON：{"focus": "一句话（60 字以内），指明最该盯的 1-3 个点"}。'
+    )
+    out = await llm.json_complete(system, summary, timeout=20.0)
+    if not isinstance(out, dict):
+        return {"ok": False, "error": "生成失败，请稍后重试"}
+    focus = str(out.get("focus") or "").strip()[:160]
+    if not focus:
+        return {"ok": False, "error": "生成结果不可用，请重试"}
+    return {"ok": True, "suggestion": {"focus": focus}}

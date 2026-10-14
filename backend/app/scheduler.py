@@ -73,10 +73,16 @@ async def generate_report() -> dict[str, Any]:
         }
 
     try:
-        result = await service.run_question(REPORT_QUESTION, emit)
+        # 关注的要点（设置 → 晨报，可 AI 生成）：拼进报告问题，让成文聚焦用户关心的点
+        st = await db.get_settings()
+        focus = (st.get("report_focus") or "").strip()
+        question = (
+            f"{REPORT_QUESTION}\n\n本次请重点结合这一点来写：{focus[:200]}" if focus else REPORT_QUESTION
+        )
+        result = await service.run_question(question, emit)
         await db.save_run(
             thread_id="cron",
-            question=REPORT_QUESTION,
+            question=question,
             answer=result["answer"],
             level=result["level"],
             flags=result["flags"],

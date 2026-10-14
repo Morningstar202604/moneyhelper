@@ -1123,6 +1123,8 @@ ONOFF_KEYS = (
 # AI 配置：文本直存（key 仅存本机数据库）。
 # 灵活化：base_url 允许留空走 OpenAI 默认；model 允许留空走模型默认；api_key 可含前缀（sk- 等）。
 AI_TEXT_KEYS = ("ai_base_url", "ai_api_key", "ai_model")
+# 付费/自由文本设置：直存（长度截断），如晨报关注要点（可 AI 生成）
+FREE_TEXT_KEYS = ("report_focus",)
 # 模型点亮：逗号分隔的模型名白名单（P0 模型点亮），列表直存但做目录校验
 MODEL_LIST_KEYS = ("enabled_models",)
 AI_KEY_MAX_LEN = 2000
@@ -1192,6 +1194,9 @@ async def put_settings(payload: dict) -> dict:
                 errors.append("必要支出类别不能为空")
                 continue
             applied[key] = ",".join(cats)
+        elif key in FREE_TEXT_KEYS:
+            # 自由文本设置：去空白 + 长度截断（200 字），允许清空
+            applied[key] = str(raw).strip()[:200]
         elif key in AI_TEXT_KEYS:
             v = str(raw).strip()
             # base_url：可留空（走 OpenAI 默认端点）；填了则必须 http(s)://
