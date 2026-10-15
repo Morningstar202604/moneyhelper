@@ -618,16 +618,27 @@ async def _ensure_defaults() -> None:
 
 
 async def _migrate_sessions_from_runs() -> None:
-    """历史迁移：已有问答（旧库）按 thread 生成会话，标题取该线程首个问题。"""
+    """历史迁移：已有问答（旧库）按 thread 生成会话，标题取该线程首个问题。
+
+    系统归档线程（cron 晨报、skill:<id> 技能定时触发）不属于「问AI」会话列表：
+    它们由 save_run(skip_session=True) 写入，此处也必须一并排除，否则重启时会把
+    系统产出补建成会话、污染会话列表（skip_session 只拦写入侧）。
+    同时自愈清理历史版本已误建的系统线程会话行。
+    """
     conn = await _conn()
+    await conn.execute(
+        "DELETE FROM sessions WHERE thread_id='cron' OR thread_id LIKE 'skill:%'"
+    )
     rows = await (
         await conn.execute(
             "SELECT r.thread_id, r.question FROM runs r"
             " WHERE r.id = (SELECT MIN(id) FROM runs WHERE thread_id = r.thread_id)"
+            "   AND r.thread_id <> 'cron' AND r.thread_id NOT LIKE 'skill:%'"
             "   AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.thread_id = r.thread_id)"
         )
     ).fetchall()
     if not rows:
+        await conn.commit()
         return
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     for r in rows:
@@ -2191,8 +2202,18 @@ async def clear_history() -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 
+def is_system_thread(thread_id: str) -> bool:
+    """系统归档线程（不属于「问AI」会话列表）：cron 晨报 / skill:<id> 技能定时触发。"""
+    return thread_id == "cron" or thread_id.startswith("skill:")
+
+
 async def upsert_session(thread_id: str, title: str) -> dict[str, Any]:
-    """问答落库时同步会话表：标题仍为默认'新会话'时用首个问题覆盖，否则保留自定义；刷新 updated_at。"""
+    """问答落库时同步会话表：标题仍为默认'新会话'时用首个问题覆盖，否则保留自定义；刷新 updated_at。
+
+    系统归档线程直接拒绝（第三道防线：调用方应传 skip_session，读侧与启动迁移也各自排除）。
+    """
+    if is_system_thread(thread_id):
+        return {"ok": True, "thread_id": thread_id, "skipped": "system_thread"}
     conn = await _conn()
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     await conn.execute(
@@ -2221,9 +2242,12 @@ async def create_session(
 
 
 async def list_sessions() -> list[dict[str, Any]]:
+    # 读侧同样排除系统归档线程（cron 晨报 / skill:<id> 技能触发）：即使旧库已被
+    # 误建，界面也不会把它们当会话展示；启动迁移会做彻底清理。
     rows = await fetch_all(
         "SELECT id, thread_id, title, created_at, updated_at"
-        " FROM sessions ORDER BY updated_at DESC"
+        " FROM sessions WHERE thread_id <> 'cron' AND thread_id NOT LIKE 'skill:%'"
+        " ORDER BY updated_at DESC"
     )
     return rows
 

@@ -3,6 +3,9 @@ import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { useToast } from "@/lib/toast";
+import { listSkillRuns } from "@/lib/api";
+import { fmtDate } from "@/lib/format";
+import type { RunRecord } from "@/lib/types";
 import { AiGenerate } from "./ai-generate";
 
 /** 内置技能 id（与后端 agent_config.BUILTIN_SKILLS 同口径）：有运行时落点，不可删除；其余为自定义技能 */
@@ -50,6 +53,8 @@ export function AgentSection() {
   const [savedJson, setSavedJson] = useState("");
   const [running, setRunning] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<{ skillId: string; answer: string } | null>(null);
+  const [historyFor, setHistoryFor] = useState<string | null>(null);
+  const [history, setHistory] = useState<RunRecord[] | null>(null);
   /** 正在编辑动作的技能 id；null = 无 */
   const [editingAction, setEditingAction] = useState<string | null>(null);
   /** 动作编辑草稿（保存按钮写回 config；与定时任务行为按"保存即生效"） */
@@ -140,6 +145,7 @@ export function AgentSection() {
       if (d.ok) {
         toast(t("agent.ranOk"), "ok");
         setLastRun({ skillId, answer: String(d.answer ?? "") });
+        if (historyFor === skillId) void loadHistory(skillId);
       } else {
         toast(String(d.error || t("agent.runFailed")), "error");
       }
@@ -148,6 +154,25 @@ export function AgentSection() {
     } finally {
       setRunning(null);
     }
+  };
+
+  /** 触发历史（归档线程 skill:<id>）：与「最近一次」互补，用于核查到点是否真的跑过 */
+  const loadHistory = async (skillId: string) => {
+    try {
+      setHistory(await listSkillRuns(skillId, 10));
+    } catch {
+      setHistory([]);
+    }
+  };
+
+  const toggleHistory = async (skillId: string) => {
+    if (historyFor === skillId) {
+      setHistoryFor(null);
+      return;
+    }
+    setHistoryFor(skillId);
+    setHistory(null);
+    await loadHistory(skillId);
   };
 
   if (loading) return <div className="text-sm text-muted-foreground">加载中…</div>;
@@ -283,6 +308,17 @@ export function AgentSection() {
                       {running === key ? "执行中…" : "立即触发"}
                     </button>
                   )}
+                  {skill.action && (
+                    <button
+                      type="button"
+                      aria-label={`查看触发记录 ${skill.name}`}
+                      aria-expanded={historyFor === key}
+                      className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                      onClick={() => void toggleHistory(key)}
+                    >
+                      {historyFor === key ? "收起记录" : "查看记录"}
+                    </button>
+                  )}
                   {!BUILTIN_SKILL_IDS.has(key) && (
                     <button
                       type="button"
@@ -378,6 +414,32 @@ export function AgentSection() {
                 <div className="mt-2 rounded-md border border-border bg-card p-2 text-xs">
                   <div className="text-[11px] text-muted-foreground">{t("agent.lastRun")}</div>
                   <div className="mt-1 whitespace-pre-wrap text-foreground/90">{lastRun.answer.slice(0, 400)}</div>
+                </div>
+              )}
+
+              {/* 触发历史（含定时触发）：核查"到点到底跑没跑" */}
+              {historyFor === key && (
+                <div className="mt-2 rounded-md border border-border bg-muted/30 p-2 text-xs">
+                  <div className="text-[11px] text-muted-foreground">{t("agent.historyTitle")}</div>
+                  {history === null ? (
+                    <div className="mt-1 text-muted-foreground">{t("app.loading")}</div>
+                  ) : history.length === 0 ? (
+                    <div className="mt-1 text-muted-foreground">{t("agent.historyEmpty")}</div>
+                  ) : (
+                    <ul className="mt-1 space-y-1.5">
+                      {history.map((r) => (
+                        <li key={r.id} className="rounded border border-border bg-card px-2 py-1.5">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-[11px] text-muted-foreground">{fmtDate(r.created_at)}</span>
+                            <span className="text-[11px] text-muted-foreground">{r.level}</span>
+                          </div>
+                          <div className="mt-0.5 line-clamp-2 text-foreground/90" title={r.answer}>
+                            {r.question}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               )}
             </div>

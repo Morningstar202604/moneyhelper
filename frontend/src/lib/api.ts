@@ -356,6 +356,16 @@ export const suggestMemories = () =>
     { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) },
   );
 
+// ---------------------------------------------------------------------------
+// 技能定时动作
+// ---------------------------------------------------------------------------
+
+/** 技能触发历史（归档在独立线程 skill:<id>，不进会话列表）。 */
+export const listSkillRuns = (skillId: string, limit = 10) =>
+  api<{ runs: import("@/lib/types").RunRecord[] }>(
+    `/api/history?thread_id=${encodeURIComponent(`skill:${skillId}`)}&limit=${limit}`,
+  ).then((r) => r.runs ?? []);
+
 // —— 经验库（P1 反思 / 踩坑复盘）——
 export interface ReflectionItem {
   id: number;

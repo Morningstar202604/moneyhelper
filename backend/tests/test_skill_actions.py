@@ -6,6 +6,11 @@
 - 调度同步：启用+合法 → 建 job；停用/删除/非法 → 不建；重复同步幂等
 - 立即触发：走问答管线归档到 skill:<id>（skip_session），失败分支如实报错
 - 保存容错：排程同步失败不影响保存本身
+- 系统线程隔离：cron / skill:<id> 不进会话列表（写入/读侧/启动迁移三道防线）
+
+注意：本模块所有用例都必须跑在临时库上。曾因两个用例漏挂 temp_db，
+经 main.update_agent_config 直接写进开发库、把研发环境 agent_config 清空——
+故此处加模块级 autouse 隔离兜底，任何漏挂 temp_db 的用例也不会碰到真实库。
 """
 
 from __future__ import annotations
@@ -14,6 +19,12 @@ import json
 
 import pytest
 from app import agent_config, db, scheduler
+
+
+@pytest.fixture(autouse=True)
+def _isolated_db(temp_db):
+    """模块级兜底：全部用例强制跑在临时库（漏挂 temp_db 也不写研发库）。"""
+    return temp_db
 
 
 class FakeScheduler:
@@ -200,10 +211,12 @@ async def test_run_skill_action_error_branches(temp_db, skill_id, setup, expect)
 
 # ---------------------------------------------------------------------------
 # 5) API 层：保存清洗回报 + 立即触发端点 + 保存容错
+# 注意：调用 main.update_agent_config 会写 settings 表——必须带 temp_db，
+# 否则会直接写进开发库（曾把研发环境 agent_config 清成空配置）。
 # ---------------------------------------------------------------------------
 
 
-async def test_api_save_reports_warnings_and_syncs() -> None:
+async def test_api_save_reports_warnings_and_syncs(temp_db) -> None:
     """保存接口：坏动作 → warnings 回报；调度同步被调用。"""
     from app import main
 
@@ -232,7 +245,7 @@ async def test_api_save_reports_warnings_and_syncs() -> None:
     assert called == ["sync"]
 
 
-async def test_api_save_survives_scheduler_sync_failure() -> None:
+async def test_api_save_survives_scheduler_sync_failure(temp_db) -> None:
     """排程同步失败不影响保存本身（保存是数据，排程是运行时）。"""
     import app.scheduler as sched_mod
     from app import main
@@ -247,3 +260,56 @@ async def test_api_save_survives_scheduler_sync_failure() -> None:
     finally:
         sched_mod.sync_skill_jobs = orig  # type: ignore[assignment]
     assert out["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# 6) 系统归档线程不进会话列表（含启动回填与读侧兜底）
+# ---------------------------------------------------------------------------
+
+
+async def test_system_threads_never_listed_as_sessions(temp_db) -> None:
+    """cron / skill:<id> 归档线程不得出现在会话列表；启动迁移也要排除它们。
+
+    回归：skip_session 只拦写入侧，重启时 _migrate_sessions_from_runs 会把系统
+    线程当作旧库会话补建出来（真实缺陷）。
+    """
+    await _set_skill("sys_skill", name="系统线程技能", enabled=True, action={"prompt": "p", "time": "09:00"})
+    # 写入两条系统归档 + 一条真实对话
+    await db.save_run("cron", "晨报问题", "晨报回答", "已生成", skip_session=True)
+    await db.save_run("skill:sys_skill", "技能问题", "技能回答", "L1 洞察", skip_session=True)
+    await db.save_run("real-thread", "普通提问", "普通回答", "L1 洞察")
+
+    sessions = await db.list_sessions()
+    tids = [s["thread_id"] for s in sessions]
+    assert "real-thread" in tids
+    assert "cron" not in tids
+    assert "skill:sys_skill" not in tids
+
+    # 模拟历史版本已误建的系统线程会话行 → 启动迁移自愈清理，且不新增
+    conn = await db._conn()
+    await conn.execute(
+        "INSERT INTO sessions(thread_id,title,created_at,updated_at) VALUES('cron','晨报',datetime('now'),datetime('now'))"
+    )
+    await conn.execute(
+        "INSERT INTO sessions(thread_id,title,created_at,updated_at)"
+        " VALUES('skill:sys_skill','技能',datetime('now'),datetime('now'))"
+    )
+    await conn.commit()
+
+    # 读侧立即兜底（不等重启）
+    tids = [s["thread_id"] for s in await db.list_sessions()]
+    assert "cron" not in tids and "skill:sys_skill" not in tids
+
+    # 启动迁移：误建行被清理；真实线程保持（不重复插入）
+    await db._migrate_sessions_from_runs()
+    tids = [s["thread_id"] for s in await db.list_sessions()]
+    assert tids.count("real-thread") == 1
+    assert "cron" not in tids and "skill:sys_skill" not in tids
+    rows = await db.fetch_all("SELECT thread_id FROM sessions")
+    assert all(r["thread_id"] not in ("cron", "skill:sys_skill") for r in rows)
+
+    # 第三道防线：即便调用方漏传 skip_session，upsert_session 也拒绝系统线程
+    await db.upsert_session("skill:sys_skill", "泄漏尝试")
+    await db.upsert_session("cron", "泄漏尝试")
+    rows = await db.fetch_all("SELECT thread_id FROM sessions")
+    assert all(r["thread_id"] not in ("cron", "skill:sys_skill") for r in rows)

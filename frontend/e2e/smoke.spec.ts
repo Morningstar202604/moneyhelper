@@ -121,6 +121,11 @@ test.describe("应用启动 & 冒烟", () => {
 
       // 触发结果如实回显（走真实问答管线：确定性兜底即可产生回答）
       await expect(page.getByText("最近一次触发结果")).toBeVisible({ timeout: 30_000 });
+
+      // 触发记录：归档线程可查（含刚触发的一条；标题 + 问题可见）
+      await page.getByRole("button", { name: "查看触发记录 E2E 周报提醒" }).click();
+      await expect(page.getByText(/触发记录（含定时/)).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText("帮我看看这个月的支出").first()).toBeVisible({ timeout: 10_000 });
     } finally {
       // 清理：删除测试技能并保存
       const cfg2 = (await (await request.get(`${api}/api/agent-config`)).json()).config as {

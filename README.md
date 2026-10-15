@@ -6,7 +6,7 @@
 - 🤖 **多 Agent 架构** —— agents/ 目录，supervisor / bookkeeping / portfolio 三个 agent 各自独立提示词与工具
 - ⚙️ **Agent 配置系统** —— 角色 / skills / 工具开关，设置页可视化改
 - 📊 **对话内嵌数据卡** —— 4 宫格小卡直接嵌在对话流里，点展开看完整数据
-- 🎯 **对话主导布局** —— 95% 屏幕留给对话，财务数据按需弹出，不挤占空间
+- 🎯 **对话主导布局（ChatGPT 式）** —— 聊天占满主舞台，数据/工具/预览一律从右侧滑出（桌面不遮挡对话、可并排；移动端全屏），顶栏「功能」页签定位到同一批数据面板
 - 🔍 **Arize Phoenix 可观测性** —— OpenTelemetry 标准，本地单容器跑，不需要外部账号
 - 🧠 **mem0 长记忆** —— 用户偏好、家庭背景自动记住，下次对话直接用
 - 📦 **EXE 单文件打包** —— 双击就能跑，不需要装 Python / Node
@@ -49,17 +49,19 @@
 
 ## 截图
 
-**演示视频**（约 8 秒 · 总览 → 资产分布 → 问答 → 意图识别与主动建议）
+**演示视频**（约 11 秒 · 总览侧面板 → 持仓 → 对话提问 → 意图识别与主动建议）
 
 | 动图（GitHub 内直接播放） | MP4 |
 |---|---|
 | ![小满演示](docs/demo/xiaoman-demo.gif) | [xiaoman-demo.mp4](docs/demo/xiaoman-demo.mp4) |
 
-| 总览（资产分布 · 持仓速览 · 风控预警） | 对话中枢（意图识别「小满的理解」· 主动给建议） |
-|---|---|
-| ![总览](docs/screenshots/overview-zh.png) | ![对话中枢](docs/screenshots/chat-zh.png) |
+**对话主导布局**：聊天是唯一主角，数据与工具按需从右侧滑出，不抢对话空间。
 
-| 持仓（集中度 · 逐笔盈亏） | English UI |
+| 对话中枢（执行计划「小满的理解」· 主动给建议 · Agent 运行面板） | 总览（净资产 · 资产分布 · 风控 · 健康评分） |
+|---|---|
+| ![对话中枢](docs/screenshots/chat-zh.png) | ![总览](docs/screenshots/overview-zh.png) |
+
+| 持仓（集中度 · 行业分布 · 逐笔盈亏） | English UI |
 |---|---|
 | ![持仓](docs/screenshots/holdings-zh.png) | ![English](docs/screenshots/overview-en.png) |
 
@@ -69,11 +71,17 @@
 |---|---|
 | ![AI对话](docs/demo/xiaoman-02-ai-dialogue.png) | ![体检](docs/demo/xiaoman-07-healthcheck.png) |
 
-| 审计日志（工具调用 · 数据变更） | 记忆经验库（长期记忆 · 经验沉淀） |
+| Agent 与技能（角色/技能开关 · AI 生成 · 技能定时动作） | 长期记忆（AI 归纳偏好 · 经验库） |
 |---|---|
-| ![审计](docs/demo/xiaoman-03-audit.png) | ![记忆](docs/demo/xiaoman-05-memory-lessons.png) |
+| ![Agent 与技能](docs/demo/xiaoman-04-ai-settings.png) | ![记忆](docs/demo/xiaoman-05-memory-lessons.png) |
+
+| 技能定时动作（周几+时间 · 立即触发 · 结果归档） | 审计日志（工具调用 · 数据变更） |
+|---|---|
+| ![技能定时动作](docs/demo/xiaoman-08-skill-schedule.png) | ![审计](docs/demo/xiaoman-03-audit.png) |
 
 > 对话示例：问「我的组合怎么样」，小满先亮出它读到的意图「你想看持仓盈亏和行情」，分析完还会主动给一句下一步动作（如「可考虑再平衡，让单一持仓不超过 40% 上限」）——这是它与"只会回答问题"的 Agent 的区别。
+>
+> 技能示例：给一个自定义技能配上「周日 20:00」定时动作后，到点自动跑一遍并把结果归档；也可点「立即触发」当场验证——结果只落在独立线程，不污染会话列表。
 
 ---
 
@@ -177,7 +185,7 @@ backend/app/
   scheduler.py  定时晨报：APScheduler
   backup.py     本地加密备份：PBKDF2+Fernet，口令不落盘
 frontend/src/
-  App.tsx               5 页签布局（桌面顶栏/移动底栏）
+  App.tsx               对话主导布局（左侧会话栏 + 中央对话 + 右侧数据侧面板；移动端底栏）
   components/           Dashboard / HoldingsView / MarketView / EntryView / ChatView
                         / SettingsView / IndicesStrip / KlineDialog / MorningReportDialog …
   lib/                  api / store / i18n（zh+en）/ charts / format / brand
@@ -220,10 +228,10 @@ docs/
 ## 测试与检查
 
 ```bash
-cd backend && .venv/bin/python -m pytest tests -q    # 269 项：分析内核/行情三级降级/agent 工具循环/LangGraph 图/API 集成/备份加密往返/目标/记忆/体检/MCP/附件/密钥扫描
+cd backend && .venv/bin/python -m pytest tests -q    # 516 项：分析内核/行情三级降级/agent 工具循环/LangGraph 图/API 集成/备份加密往返/目标/记忆/体检/MCP/附件/技能定时动作/密钥扫描
 cd backend && .venv/bin/python -m ruff check app tests
 cd frontend && npm run build                          # tsc + vite build（自动 bump SW 缓存版本）
-cd frontend && npm run test:e2e                       # Playwright e2e：冒烟+问答+功能页 11 项（自动起后端+前端 dev 服务，用独立 e2e.db）
+cd frontend && npm run test:e2e                       # Playwright e2e 14 项（冒烟/问答/功能页/五个 AI 生成入口/技能定时动作；自动起后端+前端 dev 服务，用独立 e2e.db）
 ```
 
 CI 覆盖后端 ruff + pytest、前端 tsc + build，以及端到端冒烟。
@@ -247,6 +255,7 @@ CI 覆盖后端 ruff + pytest、前端 tsc + build，以及端到端冒烟。
 
 ## 更新日志
 
+- **v2.1（2026-10-15 · 对话主导布局 + 技能定时动作 + AI 全覆盖）**：**布局重构为 ChatGPT 式**——聊天占满主舞台，数据面板/工具/预览统一改为右侧滑出（`SidePanel`：桌面非模态不遮挡、`@container` 自适应、移动端全屏），设置页拆为左侧导航 + 右侧内容；**技能真正带动作**——自定义技能可配「周几 + 时间 + 提示词」，到点由 APScheduler 自动执行，结果归档到独立线程 `skill:<id>`（不进会话列表），支持「立即触发」与「查看记录」，AI 生成技能时可直接从描述里识别定时意图；**设置区 AI 生成覆盖 5 个区**（Agent/技能、预算、账本规则、每日晨报、长期记忆——记忆区为「AI 归纳偏好」，逐条确认才落库）；**修复**：系统归档线程（cron / skill:*）不再被启动回填成会话（写入/读侧/启动迁移三道防线 + 自愈清理）、恢复示例数据不再清空用户设置（含模型密钥与 Agent 配置）、测试与研发库隔离（防再污染）。门禁：后端 516 用例 + ruff 全绿、前端 tsc + 84 单测 + build、e2e 14 项。
 - **v1.4.0（2026-10-05 · 订阅巡检 + 撤销面板 + 预算/订阅卡 + 预览 + 测试扩面）**：订阅到期巡检（CronTrigger Asia/Shanghai，7 天窗口，月度幂等去重写入记忆）；Cmd+K 撤销面板（列出最近 6 条可撤回操作，点一下撤回 + 全局刷新）；Dashboard 预算卡（三档进度配色 + 分类进度行 + 超支红色徽标 + 无预算态引导跳设置）；订阅卡（纯前端 hook 计算 7 天内到期，今日红/3天黄徽标 + 月度合计）；设置页 BudgetSection 实时堆叠预览（分类输入即时渲染图例，总额未设自动退化，溢出红提示）；后端新增 `/api/subscriptions`、`/api/undoables`、`POST /api/undo/{id}`、`DELETE /api/memory?kind=`。前端单测 16→31（新增 use-subs-overview 7 项 + ProgressBar 8 项）。进度条组件签名扩展 className/colorClass/bgClass。
 - **v1.3.0（2026-10-05 · 撤回 + 规则引擎 + in-memory 限流 + 前端单测）**：SQLite 快照式 undo（每写操作前置 capture，单条/批量撤回，零新依赖）；JS​ON DSL 分类规则引擎（desc_contains/desc_regex/category_is/amount_min-max + priority 排序，内置规则兜底，用户可自定义）；in-memory 滑动窗口 API 限流（200/分钟/IP，绕过 slowapi 复杂依赖，返回 429 + Retry-After）；vitest + RTL + jsdom 搭建前端单测（i18n/store/AlertBanner 共 16 项绿）。依赖净减（剔除 slowapi）。
 - **v1.2.1（2026-10-05 · 去自研发化 + 安全/性能加固 + e2e 补齐）**：消除重复造轮子（MCP 客户端换官方 `mcp` 库、BM25 换 `rank_bm25.BM25L`）；ReactMarkdown 过 `rehype-sanitize` 阻断脚本注入；消息虚拟化窗口（长会话 DOM 节点下降 ~10x）；剔除生产 console；`create_task` 加引用兜底避免事件循环提前回收；Playwright e2e 补齐 11 项（独立测试库，不污染开发者数据）。详见 [CHANGELOG.md](CHANGELOG.md)。依赖 +`mcp`/`rank-bm25`（后端）、+`rehype-sanitize`/`@playwright/test`（前端）。
