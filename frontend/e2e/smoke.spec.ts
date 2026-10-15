@@ -135,4 +135,40 @@ test.describe("应用启动 & 冒烟", () => {
       await request.post(`${api}/api/agent-config`, { data: { config: cfg2 } });
     }
   });
+
+  test("定时产出收件箱：侧栏入口 + 未读徽标 + 面板可查技能产出", async ({ page, request }) => {
+    const api = "http://127.0.0.1:8788";
+    const cfg = (await (await request.get(`${api}/api/agent-config`)).json()).config as {
+      skills: Record<string, unknown>;
+    };
+    cfg.skills["e2e_inbox_probe"] = {
+      name: "E2E 收件箱技能",
+      description: "收件箱探测",
+      enabled: true,
+      action: { prompt: "收件箱探测专用问题", time: "20:00", weekdays: [6] },
+    };
+    await request.post(`${api}/api/agent-config`, { data: { config: cfg } });
+    try {
+      // 先产生一条技能产出（直接走接口；界面上的「立即触发」已由上一用例覆盖）
+      const runResp = await request.post(`${api}/api/skills/e2e_inbox_probe/run`);
+      expect((await runResp.json()).ok).toBe(true);
+
+      await page.goto("/");
+      // 侧栏收件箱入口（桌面视口默认展示左侧栏）；新产出未读 → 徽标出现
+      const entry = page.getByRole("button", { name: "定时产出" }).first();
+      await expect(entry).toBeVisible({ timeout: 10_000 });
+      await expect(entry.locator("span.rounded-full").first()).toBeVisible({ timeout: 10_000 });
+      await entry.click();
+
+      // 面板：标题 + 刚产生的产出（问题文本可见）
+      await expect(page.getByRole("complementary", { name: "定时产出" })).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText("收件箱探测专用问题").first()).toBeVisible({ timeout: 10_000 });
+    } finally {
+      const cfg2 = (await (await request.get(`${api}/api/agent-config`)).json()).config as {
+        skills: Record<string, unknown>;
+      };
+      delete cfg2.skills["e2e_inbox_probe"];
+      await request.post(`${api}/api/agent-config`, { data: { config: cfg2 } });
+    }
+  });
 });

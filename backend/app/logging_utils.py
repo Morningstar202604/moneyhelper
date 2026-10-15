@@ -63,10 +63,22 @@ def _configure_root() -> None:
     file_h.setFormatter(logging.Formatter(_FMT, _DATEFMT))
     root.addHandler(file_h)
 
-    # 第三方库降噪
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    # 第三方库降噪：DEBUG 级对本项目排查无用，且会持续把日志文件刷爆
+    # （曾因 LiteLLM/aiosqlite 的 DEBUG 行把单文件刷到数百 MB）。
+    for noisy in (
+        "httpx",
+        "httpcore",
+        "uvicorn.access",
+        "aiosqlite",
+        "openai",
+        "mcp",
+        "sse_starlette",
+        "chromadb",
+    ):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+    # LiteLLM：成本表查询/模型映射的 DEBUG 行带 traceback，看着像报错但不是；
+    # 压到 ERROR（真实调用错误仍会输出）。
+    logging.getLogger("LiteLLM").setLevel(logging.ERROR)
 
     _configured = True
 

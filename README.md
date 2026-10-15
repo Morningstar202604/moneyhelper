@@ -75,13 +75,17 @@
 |---|---|
 | ![Agent 与技能](docs/demo/xiaoman-04-ai-settings.png) | ![记忆](docs/demo/xiaoman-05-memory-lessons.png) |
 
-| 技能定时动作（周几+时间 · 立即触发 · 结果归档） | 审计日志（工具调用 · 数据变更） |
+| 技能定时动作（周几+时间 · 立即触发 · 结果归档） | 定时产出收件箱（晨报 + 技能触发 · 未读徽标） |
 |---|---|
-| ![技能定时动作](docs/demo/xiaoman-08-skill-schedule.png) | ![审计](docs/demo/xiaoman-03-audit.png) |
+| ![技能定时动作](docs/demo/xiaoman-08-skill-schedule.png) | ![定时产出](docs/demo/xiaoman-09-scheduled-inbox.png) |
+
+| 设置 · AI 一键生成（描述一句话 → 建议预览 → 采用） | 审计日志（工具调用 · 数据变更） |
+|---|---|
+| ![AI 生成](docs/demo/xiaoman-10-ai-suggest.png) | ![审计](docs/demo/xiaoman-03-audit.png) |
 
 > 对话示例：问「我的组合怎么样」，小满先亮出它读到的意图「你想看持仓盈亏和行情」，分析完还会主动给一句下一步动作（如「可考虑再平衡，让单一持仓不超过 40% 上限」）——这是它与"只会回答问题"的 Agent 的区别。
 >
-> 技能示例：给一个自定义技能配上「周日 20:00」定时动作后，到点自动跑一遍并把结果归档；也可点「立即触发」当场验证——结果只落在独立线程，不污染会话列表。
+> 定时示例：技能可配「周几 + 时间 + 提示词」，到点自动执行；晨报与技能产出统一汇入侧栏「定时产出」收件箱（带未读徽标、可展开看全文），不污染会话列表。设置区 5 个位置（Agent/预算/规则/晨报/记忆）都支持 AI 一键生成。
 
 ---
 
@@ -228,10 +232,10 @@ docs/
 ## 测试与检查
 
 ```bash
-cd backend && .venv/bin/python -m pytest tests -q    # 516 项：分析内核/行情三级降级/agent 工具循环/LangGraph 图/API 集成/备份加密往返/目标/记忆/体检/MCP/附件/技能定时动作/密钥扫描
+cd backend && .venv/bin/python -m pytest tests -q    # 520 项：分析内核/行情三级降级/agent 工具循环/LangGraph 图/API 集成/备份加密往返/目标/记忆/体检/MCP/附件/技能定时动作/定时产出收件箱/密钥扫描
 cd backend && .venv/bin/python -m ruff check app tests
 cd frontend && npm run build                          # tsc + vite build（自动 bump SW 缓存版本）
-cd frontend && npm run test:e2e                       # Playwright e2e 14 项（冒烟/问答/功能页/五个 AI 生成入口/技能定时动作；自动起后端+前端 dev 服务，用独立 e2e.db）
+cd frontend && npm run test:e2e                       # Playwright e2e 15 项（冒烟/问答/功能页/五个 AI 生成入口/技能定时动作/定时产出收件箱；自动起后端+前端 dev 服务，用独立 e2e.db）
 ```
 
 CI 覆盖后端 ruff + pytest、前端 tsc + build，以及端到端冒烟。
@@ -255,7 +259,7 @@ CI 覆盖后端 ruff + pytest、前端 tsc + build，以及端到端冒烟。
 
 ## 更新日志
 
-- **v2.1（2026-10-15 · 对话主导布局 + 技能定时动作 + AI 全覆盖）**：**布局重构为 ChatGPT 式**——聊天占满主舞台，数据面板/工具/预览统一改为右侧滑出（`SidePanel`：桌面非模态不遮挡、`@container` 自适应、移动端全屏），设置页拆为左侧导航 + 右侧内容；**技能真正带动作**——自定义技能可配「周几 + 时间 + 提示词」，到点由 APScheduler 自动执行，结果归档到独立线程 `skill:<id>`（不进会话列表），支持「立即触发」与「查看记录」，AI 生成技能时可直接从描述里识别定时意图；**设置区 AI 生成覆盖 5 个区**（Agent/技能、预算、账本规则、每日晨报、长期记忆——记忆区为「AI 归纳偏好」，逐条确认才落库）；**修复**：系统归档线程（cron / skill:*）不再被启动回填成会话（写入/读侧/启动迁移三道防线 + 自愈清理）、恢复示例数据不再清空用户设置（含模型密钥与 Agent 配置）、测试与研发库隔离（防再污染）。门禁：后端 516 用例 + ruff 全绿、前端 tsc + 84 单测 + build、e2e 14 项。
+- **v2.1（2026-10-15 · 对话主导布局 + 技能定时动作 + AI 全覆盖）**：**布局重构为 ChatGPT 式**——聊天占满主舞台，数据面板/工具/预览统一改为右侧滑出（`SidePanel`：桌面非模态不遮挡、`@container` 自适应、移动端全屏），设置页拆为左侧导航 + 右侧内容；**技能真正带动作**——自定义技能可配「周几 + 时间 + 提示词」，到点由 APScheduler 自动执行，结果归档到独立线程 `skill:<id>`（不进会话列表），支持「立即触发」与「查看记录」，AI 生成技能时可直接从描述里识别定时意图；**设置区 AI 生成覆盖 5 个区**（Agent/技能、预算、账本规则、每日晨报、长期记忆——记忆区为「AI 归纳偏好」，逐条确认才落库）；**「定时产出」统一收件箱**——晨报与技能触发产出汇入侧栏入口（未读徽标、展开看全文、打开即标读），不污染会话列表。**日志与告警降噪**——LiteLLM 逐请求 DEBUG 刷屏（曾致单日志 400MB+）与启动期第三方弃用告警全部清理，控制台输出干净可读。**修复**：系统归档线程（cron / skill:*）不再被启动回填成会话（写入/读侧/启动迁移三道防线 + 自愈清理）、恢复示例数据不再清空用户设置（含模型密钥与 Agent 配置）、测试与研发库隔离（防再污染）。门禁：后端 520 用例 + ruff 全绿、前端 tsc + 86 单测 + build、e2e 15 项。
 - **v1.4.0（2026-10-05 · 订阅巡检 + 撤销面板 + 预算/订阅卡 + 预览 + 测试扩面）**：订阅到期巡检（CronTrigger Asia/Shanghai，7 天窗口，月度幂等去重写入记忆）；Cmd+K 撤销面板（列出最近 6 条可撤回操作，点一下撤回 + 全局刷新）；Dashboard 预算卡（三档进度配色 + 分类进度行 + 超支红色徽标 + 无预算态引导跳设置）；订阅卡（纯前端 hook 计算 7 天内到期，今日红/3天黄徽标 + 月度合计）；设置页 BudgetSection 实时堆叠预览（分类输入即时渲染图例，总额未设自动退化，溢出红提示）；后端新增 `/api/subscriptions`、`/api/undoables`、`POST /api/undo/{id}`、`DELETE /api/memory?kind=`。前端单测 16→31（新增 use-subs-overview 7 项 + ProgressBar 8 项）。进度条组件签名扩展 className/colorClass/bgClass。
 - **v1.3.0（2026-10-05 · 撤回 + 规则引擎 + in-memory 限流 + 前端单测）**：SQLite 快照式 undo（每写操作前置 capture，单条/批量撤回，零新依赖）；JS​ON DSL 分类规则引擎（desc_contains/desc_regex/category_is/amount_min-max + priority 排序，内置规则兜底，用户可自定义）；in-memory 滑动窗口 API 限流（200/分钟/IP，绕过 slowapi 复杂依赖，返回 429 + Retry-After）；vitest + RTL + jsdom 搭建前端单测（i18n/store/AlertBanner 共 16 项绿）。依赖净减（剔除 slowapi）。
 - **v1.2.1（2026-10-05 · 去自研发化 + 安全/性能加固 + e2e 补齐）**：消除重复造轮子（MCP 客户端换官方 `mcp` 库、BM25 换 `rank_bm25.BM25L`）；ReactMarkdown 过 `rehype-sanitize` 阻断脚本注入；消息虚拟化窗口（长会话 DOM 节点下降 ~10x）；剔除生产 console；`create_task` 加引用兜底避免事件循环提前回收；Playwright e2e 补齐 11 项（独立测试库，不污染开发者数据）。详见 [CHANGELOG.md](CHANGELOG.md)。依赖 +`mcp`/`rank-bm25`（后端）、+`rehype-sanitize`/`@playwright/test`（前端）。

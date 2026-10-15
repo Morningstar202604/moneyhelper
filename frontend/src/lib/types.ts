@@ -142,6 +142,13 @@ export interface RunRecord {
   session_title?: string;
 }
 
+/** 定时产出收件箱条目：晨报（cron）或技能触发（skill:<id>） */
+export interface ScheduledOutput extends RunRecord {
+  kind: "report" | "skill";
+  skill_id: string | null;
+  skill_name: string | null;
+}
+
 export interface SessionItem {
   id: number;
   thread_id: string;

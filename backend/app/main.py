@@ -1794,6 +1794,32 @@ async def scheduler_status() -> dict:
     return scheduler.status()
 
 
+@app.get("/api/scheduled-outputs")
+async def scheduled_outputs(limit: int = 30) -> dict:
+    """定时产出统一收件箱：晨报 + 技能触发合并时间线（最新在前）。
+
+    每项带 kind（report/skill）与 skill_id/skill_name（技能产出时解析）；
+    与「问AI」会话列表隔离（这些线程不建会话行），此处是它们的统一可见入口。
+    """
+    from . import agent_config
+
+    runs = await db.list_scheduled_runs(limit)
+    cfg = await agent_config.get_config()
+    skills = cfg.get("skills") or {}
+    items: list[dict] = []
+    for r in runs:
+        tid = str(r.get("thread_id") or "")
+        if tid == "cron":
+            items.append({**r, "kind": "report", "skill_id": None, "skill_name": None})
+        else:
+            sid = tid.split(":", 1)[1] if ":" in tid else tid
+            skill = skills.get(sid) or {}
+            items.append(
+                {**r, "kind": "skill", "skill_id": sid, "skill_name": str(skill.get("name") or sid)}
+            )
+    return {"outputs": items}
+
+
 # ---------------------------------------------------------------------------
 # MCP Server：小满财务工具 → MCP 协议（Claude Code / Cursor / 任何 MCP Client 接入）
 # ---------------------------------------------------------------------------

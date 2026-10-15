@@ -1,12 +1,14 @@
 /** 桌面侧边栏：品牌 + 导航 + 会话列表 + 设置入口（符合人的使用逻辑：先有导航，再有历史会话）。 */
 
 import { useState } from "react";
-import { Plus, Search, Settings, Sunrise, Trash2, Pencil, MessageCircle, PanelLeftClose } from "lucide-react";
+import { Plus, Search, Settings, Sunrise, Trash2, Pencil, MessageCircle, PanelLeftClose, Inbox } from "lucide-react";
 import { BrandLogo, BRAND } from "@/lib/brand";
 import { useSessions } from "@/lib/store";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useScheduledOutputs } from "@/lib/inbox";
 import { MorningReportDialog } from "@/components/MorningReportDialog";
+import { ScheduledOutputsPanel } from "@/components/ScheduledOutputsPanel";
 import type { SessionItem } from "@/lib/types";
 
 /** 问AI 页的会话侧栏：品牌 + 会话历史（主导航已上移 TopBar） */
@@ -31,10 +33,12 @@ export function SessionSidebar({
 }) {
   const { t } = useI18n();
   const { sessions } = useSessions();
+  const { unread } = useScheduledOutputs();
   const [editing, setEditing] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [q, setQ] = useState("");
   const [reportOpen, setReportOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
 
   // 本地过滤：会话量小，无需后端接口
   const kw = q.trim().toLowerCase();
@@ -179,6 +183,19 @@ export function SessionSidebar({
           <span className="flex items-center gap-0.5">
             <button
               type="button"
+              className="relative text-muted-foreground hover:text-primary p-2 -m-1"
+              aria-label={t("inbox.title")}
+              onClick={() => setInboxOpen(true)}
+            >
+              <Inbox className="w-4 h-4" />
+              {unread > 0 && (
+                <span className="absolute -right-0.5 top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-semibold leading-none text-primary-foreground">
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
               className="text-muted-foreground hover:text-primary p-2 -m-1"
               aria-label={t("report.generate")}
               onClick={() => setReportOpen(true)}
@@ -268,6 +285,8 @@ export function SessionSidebar({
 
       {/* 今日晨报：手动触发一次（AI 生成 / 规则降级） */}
       <MorningReportDialog open={reportOpen} onOpenChange={setReportOpen} />
+      {/* 定时产出收件箱：晨报 + 技能触发的统一时间线（未读徽标随打开清零） */}
+      <ScheduledOutputsPanel open={inboxOpen} onClose={() => setInboxOpen(false)} />
     </div>
   );
 }

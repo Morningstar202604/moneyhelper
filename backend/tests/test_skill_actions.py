@@ -313,3 +313,50 @@ async def test_system_threads_never_listed_as_sessions(temp_db) -> None:
     await db.upsert_session("cron", "泄漏尝试")
     rows = await db.fetch_all("SELECT thread_id FROM sessions")
     assert all(r["thread_id"] not in ("cron", "skill:sys_skill") for r in rows)
+
+
+# ---------------------------------------------------------------------------
+# 7) 定时产出统一收件箱（晨报 + 技能触发合并）
+# ---------------------------------------------------------------------------
+
+
+async def test_scheduled_outputs_merges_reports_and_skills(temp_db) -> None:
+    """收件箱 = 晨报（cron）+ 技能触发（skill:*）合并；技能解析出名称；其它线程不混入。"""
+    from app import main
+
+    # 三条：一条晨报、一条带动作技能产出、一条普通对话（不应出现）
+    await db.save_run("cron", "晨报问题", "晨报回答", "已生成", skip_session=True)
+    await _set_skill("inbox_skill", name="收件箱技能", enabled=True, action={"prompt": "提醒看盘", "time": "09:00"})
+    out = await scheduler.run_skill_action("inbox_skill")
+    assert out["ok"] is True
+    await db.save_run("normal-thread", "普通问题", "普通回答", "L1 洞察")
+
+    d = await main.scheduled_outputs(limit=10)
+    items = d["outputs"]
+    kinds = [i["kind"] for i in items]
+    assert kinds.count("report") == 1 and kinds.count("skill") == 1
+    # 最新在前：技能产出（后写入）排第一
+    assert items[0]["kind"] == "skill" and items[0]["skill_name"] == "收件箱技能"
+    assert items[1]["kind"] == "report" and items[1]["skill_id"] is None
+    # 普通对话线程不混入
+    assert all(i["thread_id"] not in ("normal-thread",) for i in items)
+
+
+async def test_scheduled_outputs_skill_name_falls_back_to_id(temp_db) -> None:
+    """技能已删除但产出仍在：名称回退为线程里的技能 id（不报错、不丢失产出）。"""
+    from app import main
+
+    await db.save_run("skill:gone_skill", "旧问题", "旧回答", "L1 洞察", skip_session=True)
+    d = await main.scheduled_outputs(limit=10)
+    item = next(i for i in d["outputs"] if i["skill_id"] == "gone_skill")
+    assert item["skill_name"] == "gone_skill"
+
+
+async def test_list_scheduled_runs_limit_and_order(temp_db) -> None:
+    """limit 生效且严格按 id 倒序（收件箱最新在前依赖这个不变量）。"""
+    for i in range(5):
+        await db.save_run("cron", f"问题{i}", f"回答{i}", "已生成", skip_session=True)
+    rows = await db.list_scheduled_runs(3)
+    assert len(rows) == 3
+    ids = [r["id"] for r in rows]
+    assert ids == sorted(ids, reverse=True)

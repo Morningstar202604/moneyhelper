@@ -2132,6 +2132,21 @@ async def list_runs(
     return [_hydrate_run(r) for r in rows]
 
 
+async def list_scheduled_runs(limit: int = 30) -> list[dict[str, Any]]:
+    """定时产出时间线（system 线程）：晨报（thread='cron'）+ 技能触发（thread='skill:*'）。
+
+    这两类线程与「问AI」会话列表隔离（不建会话行），但产出需要可查——
+    收件箱统一从 runs 表读取，最新在前。
+    """
+    clamped = _clamp_limit(limit)
+    rows = await fetch_all(
+        "SELECT * FROM runs WHERE thread_id='cron' OR thread_id LIKE 'skill:%'"
+        " ORDER BY id DESC LIMIT ?",
+        (clamped,),
+    )
+    return [_hydrate_run(r) for r in rows]
+
+
 async def claim_pending_nl(thread_id: str) -> bool:
     """原子消费该线程最后一条 nl_pending run（大额审批回执，确认/取消共用）。
 

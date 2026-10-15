@@ -480,8 +480,15 @@ def mount_to_app(app: Any) -> None:
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import JSONResponse
 
-    # FastMCP 提供 ASGI app（SSE transport）
-    mcp_asgi = mcp.sse_app()
+    # FastMCP 提供 ASGI app（SSE transport）。2.3.2 起 sse_app() 已弃用；要保留
+    # SSE 端点（已接入的 MCP 客户端仍指向 /mcp/sse）就按官方提示直接调 create_sse_app，
+    # 新旧两条路径产出的路由一致（/sse + /messages/）。旧版 fastmcp 无此函数，回退原调用。
+    try:
+        from fastmcp.server.http import create_sse_app
+
+        mcp_asgi = create_sse_app(server=mcp, message_path="/messages/", sse_path="/sse")
+    except ImportError:  # pragma: no cover — 仅旧版 fastmcp 走到
+        mcp_asgi = mcp.sse_app()
 
     # /mcp 走 app.mount 会绕过主 app 的 @app.middleware("http") 中间件链，
     # 如果不用独立鉴权包裹，任何能访问 /mcp 的人都可触发全量财务工具（sell_position/backup_now）。

@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import { Loader2, Newspaper } from "lucide-react";
 import { SidePanel } from "@/components/ui/side-panel";
 import { api } from "@/lib/api";
+import { emitInboxRefresh } from "@/lib/inbox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/lib/toast";
 import { useI18n } from "@/lib/i18n";
@@ -33,6 +34,8 @@ export function MorningReportDialog({
       .then((r) => {
         if (!alive) return;
         setState({ loading: false, answer: r.answer, level: r.level, skipped: r.skipped });
+        // 新晨报已归档：刷新收件箱徽标（此面板打开中不会再触发轮询焦点刷新）
+        if (!r.skipped) emitInboxRefresh();
       })
       .catch((e) => {
         if (!alive) return;

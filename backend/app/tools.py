@@ -959,7 +959,14 @@ async def tool_web_search(args: dict[str, Any]) -> str:
         return "缺少搜索关键词（q）。"
     # duckduckgo_search 同步调用在异步上下文：run_in_executor 避免阻塞事件循环
     try:
+        # 该包 import 时会在 Windows 上全局替换事件循环策略（其 __init__.py 调
+        # set_event_loop_policy(WindowsSelectorEventLoopPolicy)），会把宿主（uvicorn /
+        # pytest-asyncio）当前的 Proactor 循环变成孤儿（"unclosed event loop"）。
+        # 我们只用它的同步 DDGS，不需要换策略 —— import 后立即恢复原策略。
+        _prev_policy = asyncio.get_event_loop_policy()
         from duckduckgo_search import DDGS
+
+        asyncio.set_event_loop_policy(_prev_policy)
 
         loop = asyncio.get_running_loop()
 

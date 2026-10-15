@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import httpx
@@ -205,3 +206,14 @@ async def test_deterministic_action_follows_language() -> None:
 
     en_setting = await tools.tool_set_setting({"key": "not_a_key", "value": "1"}, "en")
     assert "Unsupported config key" in en_setting and "不支持" not in en_setting
+
+async def test_web_search_preserves_event_loop_policy() -> None:
+    """DDGS import 不得替换宿主事件循环策略。
+
+    回归：duckduckgo_search 在 Windows 上 import 时会全局换成
+    WindowsSelectorEventLoopPolicy，把 uvicorn/pytest-asyncio 的当前循环变成
+    孤儿（表现为「unclosed event loop」+ 事件循环行为漂移）。
+    """
+    policy_before = asyncio.get_event_loop_policy()
+    await tools.tool_web_search({"q": "xiaoman policy test"})
+    assert asyncio.get_event_loop_policy() is policy_before

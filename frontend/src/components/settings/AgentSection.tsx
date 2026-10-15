@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { useToast } from "@/lib/toast";
 import { listSkillRuns } from "@/lib/api";
+import { emitInboxRefresh } from "@/lib/inbox";
 import { fmtDate } from "@/lib/format";
 import type { RunRecord } from "@/lib/types";
 import { AiGenerate } from "./ai-generate";
@@ -145,6 +146,8 @@ export function AgentSection() {
       if (d.ok) {
         toast(t("agent.ranOk"), "ok");
         setLastRun({ skillId, answer: String(d.answer ?? "") });
+        // 通知侧栏收件箱徽标立即刷新（不等轮询）
+        emitInboxRefresh();
         if (historyFor === skillId) void loadHistory(skillId);
       } else {
         toast(String(d.error || t("agent.runFailed")), "error");

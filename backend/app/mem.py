@@ -63,8 +63,11 @@ def _init() -> None:
         }
         _client = Memory.from_config(cfg)
         log.info("mem.ready path=%s", _data_dir())
-    except Exception as e:  # pragma: no cover
-        log.warning("mem.init_failed: " + str(e))
+    except Exception as e:  # noqa: BLE001 — 无 embedding 凭据是预期路径，PDF 降级检索
+        # 常见原因：自建/国产端点没有 embedding 模型 → mem0 初始化失败。
+        # 这是预期的优雅降级（recall 自动回退到 _legacy_recall 关键词检索），
+        # 不是故障；用 INFO 记录并说明回退目标，避免被误读为启动报错。
+        log.info("mem.degraded: %s — 长期记忆检索回退为关键词近似检索（功能可用）", e)
         _client = None
 
 

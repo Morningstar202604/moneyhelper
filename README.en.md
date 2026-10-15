@@ -61,13 +61,17 @@ Xiaoman (小满) is one of the 24 solar terms — the moment when grain is nearl
 |---|---|
 | ![Agents & skills](docs/demo/xiaoman-04-ai-settings.png) | ![Memory](docs/demo/xiaoman-05-memory-lessons.png) |
 
-| Scheduled skill action (weekday + time · run now · archived result) | Audit log (tool calls · data changes) |
+| Scheduled skill action (weekday + time · run now · archived result) | Scheduled outputs inbox (reports + skills · unread badge) |
 |---|---|
-| ![Scheduled skill](docs/demo/xiaoman-08-skill-schedule.png) | ![Audit](docs/demo/xiaoman-03-audit.png) |
+| ![Scheduled skill](docs/demo/xiaoman-08-skill-schedule.png) | ![Inbox](docs/demo/xiaoman-09-scheduled-inbox.png) |
+
+| Settings · AI one-click generation (describe → preview → adopt) | Audit log (tool calls · data changes) |
+|---|---|
+| ![AI generate](docs/demo/xiaoman-10-ai-suggest.png) | ![Audit](docs/demo/xiaoman-03-audit.png) |
 
 > Chat example: ask "how is my portfolio doing" — Xiaoman first shows the intent it read ("you want position P&L and quotes"), then closes with a concrete next step (e.g. "consider rebalancing so no single position exceeds 40%"). That is the difference from an agent that only answers questions.
 >
-> Skill example: give a custom skill a "Sunday 20:00" action and it runs on schedule, archiving each result; "Run now" verifies it on the spot. Runs land in a dedicated thread and never pollute your session list.
+> Scheduling example: give a skill a weekday + time + prompt and it runs on schedule; morning reports and skill outputs land in one sidebar inbox (unread badge, expandable), never polluting your session list. Five settings areas (agents/budget/rules/report/memory) all support AI one-click generation.
 
 ---
 
@@ -212,10 +216,10 @@ docs/
 ## Tests & checks
 
 ```bash
-cd backend && .venv/bin/python -m pytest tests -q    # 516 tests: engine/quotes fallback/agent loop/LangGraph graph/API/backup round-trip/goals/memory/health-check/MCP/attachment/scheduled skill actions/secret scan
+cd backend && .venv/bin/python -m pytest tests -q    # 520 tests: engine/quotes fallback/agent loop/LangGraph graph/API/backup round-trip/goals/memory/health-check/MCP/attachment/scheduled skill actions/scheduled-outputs inbox/secret scan
 cd backend && .venv/bin/python -m ruff check app tests
 cd frontend && npm run build                          # tsc + vite build (auto-bumps SW cache version)
-cd frontend && npm run test:e2e                       # Playwright: 14 e2e specs (smoke / chat / feature pages / 5 AI-generate entry points / scheduled skill action)
+cd frontend && npm run test:e2e                       # Playwright: 15 e2e specs (smoke / chat / feature pages / 5 AI-generate entry points / scheduled skill action / scheduled-outputs inbox)
 ```
 
 CI covers backend ruff + pytest and frontend tsc + build.
@@ -239,7 +243,7 @@ Everything this software outputs (health checks, daily reports, AI advisor answe
 
 ## Changelog
 
-- **v2.1 (2026-10-15, chat-first layout · scheduled skill actions · AI everywhere)** — **ChatGPT-style layout**: the conversation owns the main stage and every data panel / tool / preview slides in from the right (`SidePanel`: non-occluding on desktop, `@container`-adaptive, full-screen on mobile); settings split into left nav + right content. **Skills with real actions**: a custom skill can carry "weekday + time + prompt" and APScheduler runs it on schedule, archiving results to a dedicated `skill:<id>` thread (never in the session list), with "Run now" and a run-history view; AI generation reads scheduling intent straight from your description. **AI generation now covers five settings areas** (agents/skills, budget, ledger rules, morning report, long-term memory — memory offers an AI preference digest, saved only per-item after you confirm). **Fixes**: system archive threads (cron / skill:*) are no longer backfilled into sessions (three layers: write, read, startup migration + self-healing cleanup); restoring sample data no longer wipes user settings (model keys, agent config); tests are isolated from the dev database. Gates: 516 backend tests + ruff clean, frontend tsc + 84 unit tests + build, 14 e2e specs.
+- **v2.1 (2026-10-15, chat-first layout · scheduled skill actions · AI everywhere)** — **ChatGPT-style layout**: the conversation owns the main stage and every data panel / tool / preview slides in from the right (`SidePanel`: non-occluding on desktop, `@container`-adaptive, full-screen on mobile); settings split into left nav + right content. **Skills with real actions**: a custom skill can carry "weekday + time + prompt" and APScheduler runs it on schedule, archiving results to a dedicated `skill:<id>` thread (never in the session list), with "Run now" and a run-history view; AI generation reads scheduling intent straight from your description. **AI generation now covers five settings areas** (agents/skills, budget, ledger rules, morning report, long-term memory — memory offers an AI preference digest, saved only per-item after you confirm). **Unified "scheduled outputs" inbox** — morning reports and skill runs land in one sidebar entry (unread badge, expandable, marked read on open) without polluting the session list. **Log & warning cleanup** — LiteLLM's per-request DEBUG spam (which once ballooned a log to 400MB+) and third-party startup deprecation warnings are gone; console output is clean and readable. **Fixes**: system archive threads (cron / skill:*) are no longer backfilled into sessions (three layers: write, read, startup migration + self-healing cleanup); restoring sample data no longer wipes user settings (model keys, agent config); tests are isolated from the dev database. Gates: 520 backend tests + ruff clean, frontend tsc + 86 unit tests + build, 15 e2e specs.
 - **v1.2.0 (2026-10-05, Agent upgrade)** — Agent roadmap **P0/P1/P2 all landed**: long-conversation summary compression; model detection / availability probe (auto-fallback to deterministic path); layered memory (session/long-term/experience) + semantic retrieval (BM25, vector-ready) + experience reflection + active forgetting; multi-agent orchestration (supervisor → finance/general/memory); audit log with UI; MCP client; attachment Q&amp;A. Real agnes-3.0-flash E2E + stress tests (20 concurrent writes / 15 mixed read-write / all 422 on hostile input). **269 tests green (42.8s), coverage 77% (core 90%+), frontend build passes**; fixed empty-data fallback misreporting "total value ¥0" plus 3 security defects.
 - **v1.0.0 (2026-10, final hardening)** — four full sweeps, 12 fixes: advice sentences no longer mis-booked; 6-digit stock buys no longer recorded as expenses; "add to watchlist" triggers market tools; morning report recursion fixed; "sell half" never liquidates fully; `1w`/`2k` amounts converted correctly; 5th "settings" capability card on first screen; multi-entry bookkeeping in one sentence; omitted follow-ups continue the ledger analysis; **security: the agent only receives read tools at runtime**; "remember…" is stored as memory first. **This round**: settings-tool whitelist (unknown keys rejected); encrypted-backup unit tests (round-trip / wrong passphrase / tampering) and watchlist/half-sell tool tests; **185+ tests green, coverage 75%+**; standalone CHANGELOG, version 1.0.0, CI coverage report, bilingual development guide. Full history in [CHANGELOG.md](CHANGELOG.md).
 - **2026-09 (investor-mindset redesign + workflow)** — 5-tab navigation; index strip; holdings page (grouping + concentration risk); market page (watchlist + holdings tabs, search, K-line); red-up/green-down (switchable); 17 agent tools; one-sentence end-to-end workflow; quick chips; overview reminder strip; encrypted local backups (PBKDF2+Fernet); 3-level quote fallback; cleanup pass; empty-first onboarding + empty-state guides + first-run 3-step; conversation hub (action tools + jump links + capability list).

@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from .. import db
 from ..auth import verify_api_token
@@ -45,7 +45,8 @@ class CsvPreviewRequest(BaseModel):
     content: str = Field(..., min_length=1, description="CSV 文本内容")
     auto_classify: bool = True
 
-    @validator("content")
+    @field_validator("content")
+    @classmethod
     def check_size(cls, v: str) -> str:
         if len(v.encode("utf-8")) > MAX_CSV_BYTES:
             raise ValueError(f"CSV 内容超过 {MAX_CSV_BYTES // 1024 // 1024}MB 上限")
@@ -54,7 +55,7 @@ class CsvPreviewRequest(BaseModel):
 
 class CsvConfirmRequest(BaseModel):
     """确认导入请求体。"""
-    transactions: list[dict[str, Any]] = Field(..., min_items=1)
+    transactions: list[dict[str, Any]] = Field(..., min_length=1)
     auto_classify: bool = True
 
 
