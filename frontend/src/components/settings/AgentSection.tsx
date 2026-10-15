@@ -290,33 +290,33 @@ export function AgentSection() {
                   {!BUILTIN_SKILL_IDS.has(key) && (
                     <button
                       type="button"
-                      aria-label={`${skill.action ? "编辑" : "设置"}定时任务 ${skill.name}`}
+                      aria-label={t(skill.action ? "agent.scheduleEdit" : "agent.scheduleAdd", { c: skill.name })}
                       className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-primary/10 hover:text-primary"
                       onClick={() => (editingAction === key ? setEditingAction(null) : openActionEditor(key))}
                     >
-                      {skill.action ? "编辑任务" : "加定时"}
+                      {t(skill.action ? "agent.scheduleEditLabel" : "agent.scheduleAddLabel")}
                     </button>
                   )}
                   {skill.action && (
                     <button
                       type="button"
-                      aria-label={`立即触发 ${skill.name}`}
+                      aria-label={t("agent.runNow", { c: skill.name })}
                       className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50"
                       disabled={running === key}
                       onClick={() => void runNow(key)}
                     >
-                      {running === key ? "执行中…" : "立即触发"}
+                      {running === key ? t("agent.running2") : t("agent.runNowLabel")}
                     </button>
                   )}
                   {skill.action && (
                     <button
                       type="button"
-                      aria-label={`查看触发记录 ${skill.name}`}
+                      aria-label={t("agent.historyToggle", { c: skill.name })}
                       aria-expanded={historyFor === key}
                       className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-primary/10 hover:text-primary"
                       onClick={() => void toggleHistory(key)}
                     >
-                      {historyFor === key ? "收起记录" : "查看记录"}
+                      {historyFor === key ? t("agent.historyHideLabel") : t("agent.historyShowLabel")}
                     </button>
                   )}
                   {!BUILTIN_SKILL_IDS.has(key) && (
