@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import json
 
-import httpx
 import pytest
 from app import quotes as quotes_mod
 from app import tools
@@ -177,15 +176,15 @@ async def test_web_search_missing_query() -> None:
     assert "缺少搜索关键词" in out
 
 
-async def test_web_search_fallback_on_network_failure(monkeypatch) -> None:
-    """联网失败必须兜底（返回提示），绝不抛错拖垮对话。"""
-    class _Fail:
-        async def __aenter__(self):
-            raise httpx.HTTPError("boom")
-        async def __aexit__(self, *a):
-            return False
+async def test_web_search_fallback_on_search_failure(monkeypatch) -> None:
+    """搜索库抛错必须兜底（返回提示），绝不抛错拖垮对话；不依赖真实网络。"""
+    ddgs_module = tools._load_ddgs()
 
-    monkeypatch.setattr(tools.httpx, "AsyncClient", lambda **k: _Fail())
+    class _BoomDDGS:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(ddgs_module, "DDGS", _BoomDDGS)
     out = await tools.tool_web_search({"q": "今天的新闻"})
     assert "暂时不可用" in out
 
@@ -207,13 +206,54 @@ async def test_deterministic_action_follows_language() -> None:
     en_setting = await tools.tool_set_setting({"key": "not_a_key", "value": "1"}, "en")
     assert "Unsupported config key" in en_setting and "不支持" not in en_setting
 
-async def test_web_search_preserves_event_loop_policy() -> None:
-    """DDGS import 不得替换宿主事件循环策略。
+async def test_web_search_preserves_event_loop_policy(monkeypatch) -> None:
+    """DDGS 调用不得替换宿主事件循环策略。
 
     回归：duckduckgo_search 在 Windows 上 import 时会全局换成
     WindowsSelectorEventLoopPolicy，把 uvicorn/pytest-asyncio 的当前循环变成
     孤儿（表现为「unclosed event loop」+ 事件循环行为漂移）。
+    用桩替换 DDGS，只验证策略不被换掉，不依赖真实网络。
     """
+    ddgs_module = tools._load_ddgs()
+
+    class _StubDDGS:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def text(self, *args, **kwargs):
+            return [{"title": "t", "body": "b"}]
+
+    monkeypatch.setattr(ddgs_module, "DDGS", _StubDDGS)
     policy_before = asyncio.get_event_loop_policy()
-    await tools.tool_web_search({"q": "xiaoman policy test"})
+    out = await tools.tool_web_search({"q": "policy probe"})
     assert asyncio.get_event_loop_policy() is policy_before
+    assert "搜索结果" in out
+
+
+def test_ddgs_import_restores_policy_in_fresh_process() -> None:
+    """子进程实测 import 副作用被立即恢复（修复前 Windows 上首次 import 必被换策略）。"""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    backend_dir = Path(__file__).resolve().parents[1]
+    code = (
+        "import asyncio\n"
+        "from app import tools\n"
+        "before = asyncio.get_event_loop_policy()\n"
+        "module = tools._load_ddgs()\n"
+        "after = asyncio.get_event_loop_policy()\n"
+        "assert after is before, (type(after).__name__, type(before).__name__)\n"
+        "assert callable(module.DDGS)\n"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=backend_dir,
+        capture_output=True,
+        text=True,
+        timeout=25,
+    )
+    assert proc.returncode == 0, proc.stderr

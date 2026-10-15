@@ -948,6 +948,21 @@ async def tool_get_now(_args: dict[str, Any]) -> str:
     return f"现在是 {now.strftime('%Y-%m-%d %H:%M:%S')}（服务器本地时间）。"
 
 
+def _load_ddgs() -> Any:
+    """导入 duckduckgo_search 模块并立即恢复被其 import 副作用替换的事件循环策略。
+
+    该包在 Windows 上 import 时执行 set_event_loop_policy(WindowsSelectorEventLoopPolicy)
+    （见其 __init__.py），会把宿主（uvicorn / pytest-asyncio）正在用的 Proactor 循环变成
+    孤儿（"unclosed event loop"）。我们只用它的同步 DDGS，不需要换策略。
+    """
+    prev_policy = asyncio.get_event_loop_policy()
+    try:
+        import duckduckgo_search
+    finally:
+        asyncio.set_event_loop_policy(prev_policy)
+    return duckduckgo_search
+
+
 async def tool_web_search(args: dict[str, Any]) -> str:
     """联网搜索（免 key，DuckDuckGo 即时答案 API）；失败返回明确提示，绝不抛错。
 
@@ -959,14 +974,7 @@ async def tool_web_search(args: dict[str, Any]) -> str:
         return "缺少搜索关键词（q）。"
     # duckduckgo_search 同步调用在异步上下文：run_in_executor 避免阻塞事件循环
     try:
-        # 该包 import 时会在 Windows 上全局替换事件循环策略（其 __init__.py 调
-        # set_event_loop_policy(WindowsSelectorEventLoopPolicy)），会把宿主（uvicorn /
-        # pytest-asyncio）当前的 Proactor 循环变成孤儿（"unclosed event loop"）。
-        # 我们只用它的同步 DDGS，不需要换策略 —— import 后立即恢复原策略。
-        _prev_policy = asyncio.get_event_loop_policy()
-        from duckduckgo_search import DDGS
-
-        asyncio.set_event_loop_policy(_prev_policy)
+        DDGS = _load_ddgs().DDGS
 
         loop = asyncio.get_running_loop()
 

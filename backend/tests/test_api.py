@@ -913,8 +913,13 @@ async def test_ask_regenerate_replaces_last(client) -> None:
     assert "总市值" in runs[0]["answer"]
 
 
+@pytest.mark.timeout(120)
 async def test_ai_misconfig_falls_back_to_template(client) -> None:
-    """AI 配置了但端点不可达 → 自动降级模板（不冒充模型输出）。"""
+    """AI 配置了但端点不可达 → 自动降级模板（不冒充模型输出）。
+
+    走真实故障转移链：agent 调用 + stream_narrate 多模型各带 num_retries=2 退避重试，
+    实测约 40s（机器相关）——全局 30s 超时不够，此处单独放宽；链路本身是产品行为。
+    """
     r = await client.put(
         "/api/settings",
         json={

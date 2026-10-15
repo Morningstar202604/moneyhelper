@@ -1,6 +1,6 @@
 # Deployment Guide
 
-> Applies to the 2026-10 final release (empty-first onboarding · conversation hub · local encrypted backups). Read the Quick start in [README](../README.en.md) first.
+> Applies to the 2026-10 final release (empty-first onboarding · conversation hub · local encrypted backups). Read the Quick start in [README](../README.md) first.
 
 ## 1. Run locally (default)
 
