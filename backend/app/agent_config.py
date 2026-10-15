@@ -117,6 +117,64 @@ async def custom_skill_prompt() -> str:
     return "用户自定义技能（用户主动启用，请在相关场景遵循）：\n" + "\n".join(lines[:10])
 
 
+# 定时动作的星期编号：0=周一 … 6=周日（与 Python date.weekday() 一致）。
+# 时间一律按 Asia/Shanghai 解释（与晨报/订阅巡检同一时区口径）。
+_SKILL_ACTION_TIME_RE = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
+
+
+def normalize_skill_action(action: Any) -> dict[str, Any] | None:
+    """校验并规范化技能动作；非法返回 None（fail-closed，调用方决定剔除或报错）。
+
+    合法形状：{"prompt": "≤200 字", "time": "HH:MM", "weekdays": [0..6]}
+    weekdays 缺省或空数组 = 每天；未知/越界值一律判非法（不静默篡改）。
+    """
+    if not isinstance(action, dict):
+        return None
+    prompt = str(action.get("prompt") or "").strip()
+    if not prompt or len(prompt) > 200:
+        return None
+    time_raw = str(action.get("time") or "").strip()
+    if not _SKILL_ACTION_TIME_RE.fullmatch(time_raw):
+        return None
+    days_raw = action.get("weekdays") or []
+    if not isinstance(days_raw, list):
+        return None
+    days: set[int] = set()
+    for d in days_raw:
+        if isinstance(d, bool) or not isinstance(d, int) or d < 0 or d > 6:
+            return None
+        days.add(d)
+    return {"prompt": prompt, "time": time_raw, "weekdays": sorted(days)}
+
+
+def clean_config(cfg: Any) -> tuple[dict[str, Any], list[str]]:
+    """保存前清洗配置：动作非法则剔除并回报 warning（不静默、不阻断其余保存）。
+
+    返回 (清洗后的配置, warnings)；深拷贝，不修改调用方对象。
+    """
+    warnings: list[str] = []
+    out: dict[str, Any] = json.loads(json.dumps(cfg or {}))
+    skills = out.get("skills")
+    if not isinstance(skills, dict):
+        return out, warnings
+    for sid, s in skills.items():
+        if not isinstance(s, dict) or "action" not in s:
+            continue
+        if s.get("action") is None:
+            s.pop("action")  # 显式清空
+            continue
+        a = normalize_skill_action(s.get("action"))
+        if a is None:
+            name = str(s.get("name") or sid)
+            warnings.append(
+                f"技能「{name}」的定时动作配置无效（需 prompt + HH:MM 时间 + 0-6 星期），已忽略"
+            )
+            s.pop("action", None)
+        else:
+            s["action"] = a
+    return out, warnings
+
+
 async def generate_suggestion(kind: str, prompt: str, agent_name: str = "") -> dict[str, Any] | None:
     """按自然语言描述生成配置建议（skill 或某 agent 的名称/描述）。
 
@@ -129,7 +187,12 @@ async def generate_suggestion(kind: str, prompt: str, agent_name: str = "") -> d
         system = (
             "你是财务助手的功能技能设计器。根据用户描述生成一个 JSON："
             '{"id": "snake_case_ascii 唯一短 id", "name": "4-6 字中文名", '
-            '"description": "一句话说明这个技能做什么（中文，40 字以内）"}。只输出 JSON，不要多余文字。'
+            '"description": "一句话说明这个技能做什么（中文，40 字以内）", '
+            '"action": {"prompt": "到点让助手做的事（自然语言，可含数字，如：检查我的持仓集中度并给一句风险提示）", '
+            '"time": "HH:MM", "weekdays": [0-6 的整数数组]}}。'
+            "action 规则：仅当用户描述里包含定时意图（如「每周日晚」「每天早上」「周五 9 点」）时才给出；"
+            "weekdays 0=周一 … 6=周日，每天都提醒则给空数组 []；时间用 24 小时制。"
+            "没有定时意图时省略 action 字段。只输出 JSON，不要多余文字。"
         )
     elif kind == "agent":
         system = (
@@ -149,5 +212,10 @@ async def generate_suggestion(kind: str, prompt: str, agent_name: str = "") -> d
     if kind == "skill":
         raw_id = str(out.get("id") or "").strip().lower()
         sid = re.sub(r"[^a-z0-9_]+", "_", raw_id).strip("_") or f"skill_{uuid.uuid4().hex[:8]}"
-        return {"id": sid, "name": name, "description": desc, "enabled": True}
+        suggestion: dict[str, Any] = {"id": sid, "name": name, "description": desc, "enabled": True}
+        # 定时动作：模型给了就校验，非法直接丢弃（技能本身仍可用，不因动作不合法整体失败）
+        action = normalize_skill_action(out.get("action"))
+        if action:
+            suggestion["action"] = action
+        return suggestion
     return {"name": name, "description": desc}

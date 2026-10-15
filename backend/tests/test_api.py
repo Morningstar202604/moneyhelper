@@ -579,6 +579,32 @@ async def test_mem_legacy_recall_fallback(client) -> None:
     assert all("memory" in h for h in hits)
 
 
+async def test_api_run_skill_endpoint(client) -> None:
+    """POST /api/skills/{id}/run：成功归档（skill:<id>、不进会话）；不存在 → 400。"""
+    cfg = (await client.get("/api/agent-config")).json()["config"]
+    cfg.setdefault("skills", {})["api_run"] = {
+        "name": "接口触发",
+        "description": "",
+        "enabled": True,
+        "action": {"prompt": "帮我看看这个月的支出", "time": "09:00"},
+    }
+    r = await client.post("/api/agent-config", json={"config": cfg})
+    assert r.status_code == 200 and r.json()["ok"] is True
+
+    r = await client.post("/api/skills/api_run/run")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["ok"] is True and d["thread_id"] == "skill:api_run"
+    # 归档可见、会话列表不可见
+    runs = (await client.get("/api/history", params={"thread_id": "skill:api_run", "limit": 5})).json()["runs"]
+    assert len(runs) == 1
+    sessions = (await client.get("/api/sessions")).json()["sessions"]
+    assert all(s["thread_id"] != "skill:api_run" for s in sessions)
+
+    r = await client.post("/api/skills/nope/run")
+    assert r.status_code == 400 and "不存在" in r.json()["error"]
+
+
 async def test_mem_suggest_endpoint(client, monkeypatch) -> None:
     """AI 归纳偏好：未接模型报错；无对话记录报错；有记录时出建议且去重、不落库。"""
     # 未接入模型

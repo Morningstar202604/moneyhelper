@@ -143,14 +143,31 @@ async def test_start_stop_status(temp_db):
     assert scheduler._state["enabled"] is False
 
 
+class _FakeJob:
+    """假 job 对象：只有 sync_skill_jobs 用到的 id（判前缀用）。"""
+
+    def __init__(self, jid: str) -> None:
+        self.id = jid
+
+
 class FakeScheduler:
-    """最小假调度器：只记录 add_job / remove_all_jobs 的触发与 job 类型。"""
+    """最小假调度器：记录 add_job / remove_all_jobs，并支持 get_jobs/remove_job。
+
+    get_jobs/remove_job 是 sync_skill_jobs()（技能定时动作同步）依赖的接口——
+    2026-10 新增技能调度后需要，缺了会让所有走到同步逻辑的用例报 AttributeError。
+    """
 
     def __init__(self) -> None:
         self.jobs: dict[str, dict] = {}
 
     def remove_all_jobs(self) -> None:
         self.jobs.clear()
+
+    def get_jobs(self) -> list:
+        return [_FakeJob(jid) for jid in self.jobs]
+
+    def remove_job(self, jid: str) -> None:
+        self.jobs.pop(jid, None)
 
     def add_job(self, fn, trigger=None, **kw) -> None:
         jid = kw.get("id", "morning_report")

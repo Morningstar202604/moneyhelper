@@ -241,8 +241,122 @@ async def _cron_job() -> None:
         _state["last_run_at"] = datetime.now().isoformat()
 
 
+# ---------------------------------------------------------------------------
+# 技能定时动作（设置 → Agent → 技能 action）：到点跑一遍问答管线并归档
+# ---------------------------------------------------------------------------
+
+_SKILL_JOB_PREFIX = "skill_action:"
+
+
+async def _skill_action_job(skill_id: str) -> None:
+    """调度到点：执行技能动作（走与手动触发同一条实现）。"""
+    try:
+        await run_skill_action(skill_id)
+    except Exception as exc:  # noqa: BLE001 — 定时任务异常不炸调度器
+        log.exception("skill action failed: %s", exc)
+        _state["last_error"] = f"技能「{skill_id}」触发失败: {exc}"
+
+
+async def sync_skill_jobs() -> None:
+    """把启用中、带合法定时动作的技能同步进调度器（幂等：先清后建）。
+
+    非法动作 / 服务停用 / 调度器未启动：静默跳过（保存侧已有 warning，dispatch 侧按策略跳过）。
+    """
+    global _sched
+    if _sched is None:
+        return
+    # 先清掉全部技能任务（含已被删/停用/改配置的）
+    for job in list(_sched.get_jobs()):
+        if job.id.startswith(_SKILL_JOB_PREFIX):
+            _sched.remove_job(job.id)
+    try:
+        from . import agent_config
+
+        cfg = await agent_config.get_config()
+    except Exception:  # noqa: BLE001 — 读配置失败不打断主流程
+        return
+    for sid, s in (cfg.get("skills") or {}).items():
+        if not isinstance(s, dict) or not s.get("enabled", True):
+            continue
+        action = agent_config.normalize_skill_action(s.get("action"))
+        if not action:
+            continue
+        h, m = (int(x) for x in action["time"].split(":"))
+        days = action["weekdays"]
+        try:
+            if days:
+                # APScheduler day_of_week 使用 mon-sun 名称；0=周一…6=周日 与 date.weekday() 一致
+                names = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+                dow = ",".join(names[d] for d in days)
+                trigger = CronTrigger(day_of_week=dow, hour=h, minute=m, timezone="Asia/Shanghai")
+            else:
+                trigger = CronTrigger(hour=h, minute=m, timezone="Asia/Shanghai")
+            _sched.add_job(_skill_action_job, trigger, id=f"{_SKILL_JOB_PREFIX}{sid}", args=[sid])
+        except Exception as exc:  # noqa: BLE001 — 单个技能排程失败不影响其他
+            log.warning("skill job add failed (%s): %s", sid, exc)
+
+
+async def run_skill_action(skill_id: str) -> dict[str, Any]:
+    """执行一次技能动作：走标准问答管线 → 归档到 thread=skill:<id>（不进会话列表）。
+
+    供「立即触发」端点与定时任务共用；失败抛 ValueError（调用方转 400 / 记 last_error）。
+    """
+    from . import agent_config
+    from . import service as service_mod
+
+    cfg = await agent_config.get_config()
+    skill = (cfg.get("skills") or {}).get(skill_id)
+    if not isinstance(skill, dict):
+        raise ValueError("技能不存在")
+    if not skill.get("enabled", True):
+        raise ValueError("技能已停用")
+    action = agent_config.normalize_skill_action(skill.get("action"))
+    if not action:
+        raise ValueError("该技能没有可执行的定时动作")
+
+    prompt = action["prompt"]
+    thread_id = f"skill:{skill_id}"
+
+    async def emit(_ev: dict[str, Any]) -> None:
+        pass
+
+    result = await service_mod.run_question(prompt, emit, thread_id=thread_id)
+    await db.save_run(
+        thread_id=thread_id,
+        question=prompt,
+        answer=result["answer"],
+        level=result["level"],
+        flags=result["flags"],
+        route=result.get("route", ""),
+        llm=result.get("llm", ""),
+        route_reason=result.get("route_reason", ""),
+        # 系统归档不进会话列表（与晨报一致）；历史按 thread_id 读
+        skip_session=True,
+    )
+    # 审计链：技能触发属于"自动产生的金额相关产出"，可溯源
+    try:
+        await record_provenance(
+            action="skill_action_fired",
+            entity_type="skill",
+            entity_id=skill_id,
+            before=None,
+            after={"thread_id": thread_id, "time": action["time"]},
+            source="scheduler",
+            username="system",
+        )
+    except Exception as exc:  # noqa: BLE001 — 审计失败不影响触发结果
+        log.warning("skill action audit failed: %s", exc)
+    return {
+        "ok": True,
+        "skill_id": skill_id,
+        "thread_id": thread_id,
+        "answer": result["answer"],
+        "level": result["level"],
+    }
+
+
 async def notify_settings_changed() -> None:
-    """设置保存后调用：读最新报告时间与晨报开关，并重排。"""
+    """设置保存后调用：读最新报告时间与晨报开关，并重排（含技能任务）。"""
     st = await db.get_settings()
     _state["report_time"] = st.get("report_time", "08:00")
     try:
@@ -252,6 +366,8 @@ async def notify_settings_changed() -> None:
     except Exception:  # noqa: BLE001 — 配置读取失败按开启处理（宁多报不漏报）
         _state["report_enabled"] = True
     _reschedule()
+    # _reschedule 会清空全部 job，因此技能任务需要在重排后重新同步（幂等）
+    await sync_skill_jobs()
 
 
 async def start() -> None:
@@ -268,6 +384,7 @@ async def start() -> None:
         _state["report_enabled"] = True
     _sched = AsyncIOScheduler(timezone="Asia/Shanghai")
     _reschedule()
+    await sync_skill_jobs()
     _sched.start()
     _state["enabled"] = True
 
@@ -281,6 +398,16 @@ async def stop() -> None:
 
 
 def status() -> dict[str, Any]:
+    skill_jobs: list[str] = []
+    if _sched is not None:
+        try:
+            skill_jobs = [
+                job.id[len(_SKILL_JOB_PREFIX):]
+                for job in _sched.get_jobs()
+                if job.id.startswith(_SKILL_JOB_PREFIX)
+            ]
+        except Exception:  # noqa: BLE001 — 状态查询失败不影响主流程
+            pass
     return {
         "enabled": _state["enabled"],
         "report_time": _state.get("report_time", "08:00"),
@@ -288,4 +415,5 @@ def status() -> dict[str, Any]:
         "next_run_at": _state["next_run_at"],
         "last_error": _state["last_error"],
         "generated": _state["generated"],
+        "skill_jobs": skill_jobs,
     }

@@ -92,4 +92,42 @@ test.describe("应用启动 & 冒烟", () => {
     await expectAi("长期记忆", /生成建议/);
     await expectAi("Agent 与技能", /^AI 生成$/);
   });
+
+  test("技能定时动作：配置时间/星期并立即触发（结果回显）", async ({ page, request }) => {
+    const api = "http://127.0.0.1:8788";
+    // 自建技能（e2e 库也可能是被复用的研发库：用独立 id + 测试完删除，避免污染）
+    const cfg = (await (await request.get(`${api}/api/agent-config`)).json()).config as {
+      skills: Record<string, unknown>;
+    };
+    cfg.skills["e2e_weekly_note"] = {
+      name: "E2E 周报提醒",
+      description: "每周日晚提醒看持仓",
+      enabled: true,
+      action: { prompt: "帮我看看这个月的支出", time: "20:00", weekdays: [6] },
+    };
+    const saveResp = await request.post(`${api}/api/agent-config`, { data: { config: cfg } });
+    expect((await saveResp.json()).ok).toBe(true);
+
+    try {
+      await page.goto("/");
+      await page.getByRole("button", { name: "设置" }).first().click();
+      await page.getByText("Agent 与技能", { exact: true }).first().click();
+
+      // 动作徽标显示 周几 + 时间；「立即触发」按钮（aria-label 带技能名）可用
+      const runBtn = page.getByRole("button", { name: "立即触发 E2E 周报提醒" });
+      await expect(runBtn).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText("周日 20:00").first()).toBeVisible();
+      await runBtn.click();
+
+      // 触发结果如实回显（走真实问答管线：确定性兜底即可产生回答）
+      await expect(page.getByText("最近一次触发结果")).toBeVisible({ timeout: 30_000 });
+    } finally {
+      // 清理：删除测试技能并保存
+      const cfg2 = (await (await request.get(`${api}/api/agent-config`)).json()).config as {
+        skills: Record<string, unknown>;
+      };
+      delete cfg2.skills["e2e_weekly_note"];
+      await request.post(`${api}/api/agent-config`, { data: { config: cfg2 } });
+    }
+  });
 });
