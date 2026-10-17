@@ -1,0 +1,18 @@
+# 小满文档站（mkdocs-material）— 本地预览: pip install mkdocs-material && mkdocs serve
+site_name: Xiaoman 小满
+site_description: 能自主干活的 AI 财务部门 — 本地优先、数字可复核、全 MCP 开放
+repo_url: https://github.com/badhope/xiaoman
+theme:
+  name: material
+  language: zh
+  features: [navigation.top, navigation.sections, content.code.copy]
+nav:
+  - 首页: index.md
+  - 快速开始: quickstart.md
+  - 自托管: self-host.md
+  - MCP 接入: mcp-guide.md
+  - 架构决策: adr/index.md
+  - 路线图: ROADMAP-v3.md
+  - 详细计划: PLAN-DETAILED.md
+  - 差异化: DIFFERENTIATION.md
+  - 代码审查: REVIEW-FINDINGS.md
