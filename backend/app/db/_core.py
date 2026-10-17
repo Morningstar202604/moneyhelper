@@ -495,10 +495,9 @@ async def close_db() -> None:
     _db = None
     _inited = False
     for c in _read_conns:
-        with_suppress = getattr(c, "close", None)
-        if with_suppress:
-            await c.close()
+        await c.close()
     _read_conns = []
+    _pool_locks.clear()
 
 
 async def _conn() -> aiosqlite.Connection:
@@ -662,13 +661,23 @@ async def reset_to_seed() -> dict[str, Any]:
 _READ_POOL_SIZE = 3
 _read_conns: list[aiosqlite.Connection] = []
 _rr = 0
-_pool_lock = asyncio.Lock()
+# 锁必须按事件循环各自持有：模块级 asyncio.Lock 会绑定导入时的循环，
+# 换循环（TestClient/多 worker）即 "bound to a different event loop"（CI 实测教训）
+_pool_locks: dict[int, asyncio.Lock] = {}
+
+
+def _get_pool_lock() -> asyncio.Lock:
+    lk = _pool_locks.get(id(asyncio.get_running_loop()))
+    if lk is None:
+        lk = asyncio.Lock()
+        _pool_locks[id(asyncio.get_running_loop())] = lk
+    return lk
 
 
 async def _read_conn() -> aiosqlite.Connection:
     """取一条读连接：池未满则建连（持锁防并发超建），满了轮询复用。仅供只读查询。"""
     global _rr
-    async with _pool_lock:
+    async with _get_pool_lock():
         if _db is None:
             await init_db()
         if len(_read_conns) < _READ_POOL_SIZE:
