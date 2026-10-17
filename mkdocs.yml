@@ -11,7 +11,9 @@ nav:
   - 快速开始: quickstart.md
   - 自托管: self-host.md
   - MCP 接入: mcp-guide.md
+  - 架构图: architecture.md
   - 架构决策: adr/index.md
+  - 规划与调研存档: planning/08-总体规划-完整版.md
   - 路线图: ROADMAP-v3.md
   - 详细计划: PLAN-DETAILED.md
   - 差异化: DIFFERENTIATION.md

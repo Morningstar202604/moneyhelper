@@ -1,0 +1,349 @@
+.
+├── .github
+│   ├── ISSUE_TEMPLATE
+│   │   ├── bug_report.md
+│   │   └── feature_request.md
+│   ├── workflows
+│   │   └── ci.yml
+│   └── PULL_REQUEST_TEMPLATE.md
+├── backend
+│   ├── app
+│   │   ├── agents
+│   │   │   ├── bookkeeping
+│   │   │   │   ├── instructions.md
+│   │   │   │   └── tools.py
+│   │   │   ├── portfolio
+│   │   │   │   ├── instructions.md
+│   │   │   │   └── tools.py
+│   │   │   ├── supervisor
+│   │   │   │   ├── instructions.md
+│   │   │   │   └── tools.py
+│   │   │   ├── README.md
+│   │   │   └── default_config.json
+│   │   ├── calculations
+│   │   │   ├── __init__.py
+│   │   │   ├── goals.py
+│   │   │   ├── health.py
+│   │   │   ├── net_worth.py
+│   │   │   └── returns.py
+│   │   ├── import_parsers
+│   │   │   ├── __init__.py
+│   │   │   ├── alipay.py
+│   │   │   ├── base.py
+│   │   │   ├── generic_csv.py
+│   │   │   └── wechat.py
+│   │   ├── routes
+│   │   │   ├── __init__.py
+│   │   │   ├── budgets.py
+│   │   │   ├── calculations.py
+│   │   │   ├── debts_subs.py
+│   │   │   ├── family.py
+│   │   │   ├── goals.py
+│   │   │   ├── import_routes.py
+│   │   │   ├── market.py
+│   │   │   ├── members.py
+│   │   │   └── provenance.py
+│   │   ├── __init__.py
+│   │   ├── agent.py
+│   │   ├── agent_config.py
+│   │   ├── agent_graph.py
+│   │   ├── analysis.py
+│   │   ├── auth.py
+│   │   ├── backup.py
+│   │   ├── context.py
+│   │   ├── csvimport.py
+│   │   ├── db.py
+│   │   ├── evaluate.py
+│   │   ├── llm.py
+│   │   ├── logging_utils.py
+│   │   ├── main.py
+│   │   ├── mcp_client.py
+│   │   ├── mcp_server.py
+│   │   ├── mem.py
+│   │   ├── nlparse.py
+│   │   ├── observability.py
+│   │   ├── provenance.py
+│   │   ├── quotes.py
+│   │   ├── react_agent.py
+│   │   ├── rules.py
+│   │   ├── scheduler.py
+│   │   ├── service.py
+│   │   ├── settings_rules.py
+│   │   ├── tools.py
+│   │   └── vault.py
+│   ├── tests
+│   │   ├── conftest.py
+│   │   ├── test_agent.py
+│   │   ├── test_agent_graph.py
+│   │   ├── test_analysis.py
+│   │   ├── test_api.py
+│   │   ├── test_backup.py
+│   │   ├── test_calculations_goals.py
+│   │   ├── test_calculations_health.py
+│   │   ├── test_calculations_net_worth.py
+│   │   ├── test_calculations_returns.py
+│   │   ├── test_csvimport.py
+│   │   ├── test_endpoints_extra.py
+│   │   ├── test_evaluate.py
+│   │   ├── test_goals_memory.py
+│   │   ├── test_i18n_lang.py
+│   │   ├── test_import_parsers.py
+│   │   ├── test_input_guards.py
+│   │   ├── test_llm.py
+│   │   ├── test_mcp_client.py
+│   │   ├── test_members.py
+│   │   ├── test_nlparse.py
+│   │   ├── test_provenance.py
+│   │   ├── test_quotes.py
+│   │   ├── test_rate_limit.py
+│   │   ├── test_react_agent.py
+│   │   ├── test_rules.py
+│   │   ├── test_scheduler.py
+│   │   ├── test_secrets.py
+│   │   ├── test_skill_actions.py
+│   │   ├── test_skills_runtime.py
+│   │   ├── test_sub_scheduler.py
+│   │   ├── test_summary_models.py
+│   │   ├── test_tools.py
+│   │   └── test_undo.py
+│   ├── .env.example
+│   ├── BUILD_EXE.md
+│   ├── MIGRATION.md
+│   ├── pytest.ini
+│   ├── requirements.txt
+│   ├── run.py
+│   └── xiaoman.spec
+├── doc-fetch-resources
+│   └── FOK9dsYqOogD1PxjOOMco3o06cg
+│       ├── html5_1.html
+│       ├── html5_2.html
+│       └── html5_3.html
+├── docs
+│   ├── demo
+│   │   ├── xiaoman-01-home.png
+│   │   ├── xiaoman-02-ai-dialogue.png
+│   │   ├── xiaoman-03-audit.png
+│   │   ├── xiaoman-04-ai-settings.png
+│   │   ├── xiaoman-05-memory-lessons.png
+│   │   ├── xiaoman-06-overview.png
+│   │   ├── xiaoman-07-healthcheck.png
+│   │   ├── xiaoman-08-skill-schedule.png
+│   │   ├── xiaoman-09-scheduled-inbox.png
+│   │   ├── xiaoman-10-ai-suggest.png
+│   │   ├── xiaoman-ai-demo-20261004.mp4
+│   │   ├── xiaoman-demo-20261004.mp4
+│   │   ├── xiaoman-demo.gif
+│   │   ├── xiaoman-demo.mp4
+│   │   └── xiaoman-features-20261004.mp4
+│   ├── research
+│   │   └── peer-projects.md
+│   ├── screenshots
+│   │   ├── 01-overview.png
+│   │   ├── 02-features.png
+│   │   ├── 03-chat-input.png
+│   │   ├── 04-settings.png
+│   │   ├── 05-features-dashboard.png
+│   │   ├── 06-chat-with-input.png
+│   │   ├── 07-settings.png
+│   │   ├── chat-zh.png
+│   │   ├── holdings-zh.png
+│   │   ├── overview-en.png
+│   │   └── overview-zh.png
+│   ├── ARCHITECTURE-v2.md
+│   ├── ARCHITECTURE.md
+│   ├── AUDIT-enterprise-deep-20261007.md
+│   ├── AUDIT-frontend.md
+│   ├── Agent演进与落地路线调研报告.html
+│   ├── CODE_STYLE.md
+│   ├── CONFIG.en.md
+│   ├── CONFIG.md
+│   ├── DEPLOY.en.md
+│   ├── DEPLOY.md
+│   ├── DEVELOPMENT.en.md
+│   ├── DEVELOPMENT.md
+│   ├── REVIEW-内部严格评审.md
+│   ├── WORKFLOW.en.md
+│   ├── WORKFLOW.md
+│   ├── promo.html
+│   └── 小满验收与交付报告.html
+├── frontend
+│   ├── e2e
+│   │   ├── chat.spec.ts
+│   │   ├── data.spec.ts
+│   │   ├── global-setup.ts
+│   │   └── smoke.spec.ts
+│   ├── public
+│   │   ├── apple-touch-icon.png
+│   │   ├── icon-192.png
+│   │   ├── icon-512.png
+│   │   ├── icon.svg
+│   │   ├── manifest.json
+│   │   ├── manifest.webmanifest
+│   │   ├── robots.txt
+│   │   └── sw.js
+│   ├── scripts
+│   │   └── bump-sw.mjs
+│   ├── src
+│   │   ├── components
+│   │   │   ├── dashboard
+│   │   │   │   ├── GoalProgressCard.tsx
+│   │   │   │   ├── HealthScoreCard.test.tsx
+│   │   │   │   ├── HealthScoreCard.tsx
+│   │   │   │   ├── NetWorthCard.test.tsx
+│   │   │   │   ├── NetWorthCard.tsx
+│   │   │   │   └── ReturnsCard.tsx
+│   │   │   ├── settings
+│   │   │   │   ├── AgentSection.tsx
+│   │   │   │   ├── AiSection.tsx
+│   │   │   │   ├── AuditSection.tsx
+│   │   │   │   ├── BudgetSection.tsx
+│   │   │   │   ├── DataSection.tsx
+│   │   │   │   ├── LogsSection.tsx
+│   │   │   │   ├── MemorySection.tsx
+│   │   │   │   ├── PrefsSection.tsx
+│   │   │   │   ├── ReportSection.tsx
+│   │   │   │   ├── RulesSection.tsx
+│   │   │   │   ├── TokenSection.tsx
+│   │   │   │   ├── ai-generate.tsx
+│   │   │   │   ├── ai-suggest-card.tsx
+│   │   │   │   ├── shared.tsx
+│   │   │   │   └── use-settings-form.ts
+│   │   │   ├── ui
+│   │   │   │   ├── alert.test.tsx
+│   │   │   │   ├── alert.tsx
+│   │   │   │   ├── badge.tsx
+│   │   │   │   ├── button.tsx
+│   │   │   │   ├── card.tsx
+│   │   │   │   ├── checkbox.tsx
+│   │   │   │   ├── command.tsx
+│   │   │   │   ├── confirm.tsx
+│   │   │   │   ├── dialog.tsx
+│   │   │   │   ├── empty-state.tsx
+│   │   │   │   ├── field-error.tsx
+│   │   │   │   ├── input.tsx
+│   │   │   │   ├── label.tsx
+│   │   │   │   ├── offline-banner.tsx
+│   │   │   │   ├── panel.tsx
+│   │   │   │   ├── password-dialog.tsx
+│   │   │   │   ├── pill-tabs.tsx
+│   │   │   │   ├── popover.tsx
+│   │   │   │   ├── progress-bar.test.tsx
+│   │   │   │   ├── progress-bar.tsx
+│   │   │   │   ├── progress.tsx
+│   │   │   │   ├── score-ring.test.tsx
+│   │   │   │   ├── score-ring.tsx
+│   │   │   │   ├── scroll-area.tsx
+│   │   │   │   ├── segmented.tsx
+│   │   │   │   ├── separator.tsx
+│   │   │   │   ├── side-panel.tsx
+│   │   │   │   ├── skeleton.tsx
+│   │   │   │   ├── slider.tsx
+│   │   │   │   ├── sorted-table.tsx
+│   │   │   │   ├── stat.tsx
+│   │   │   │   ├── switch.tsx
+│   │   │   │   ├── tabs.tsx
+│   │   │   │   └── tooltip.tsx
+│   │   │   ├── AgentPanel.tsx
+│   │   │   ├── ChatHeader.tsx
+│   │   │   ├── ChatInput.tsx
+│   │   │   ├── ChatMessageBubble.tsx
+│   │   │   ├── ChatView.tsx
+│   │   │   ├── CommandPalette.tsx
+│   │   │   ├── Dashboard.tsx
+│   │   │   ├── DataModal.tsx
+│   │   │   ├── EntryView.tsx
+│   │   │   ├── FeaturesView.tsx
+│   │   │   ├── FinishedMessages.tsx
+│   │   │   ├── GoalsPanel.tsx
+│   │   │   ├── HealthCheckDialog.tsx
+│   │   │   ├── HoldingsView.tsx
+│   │   │   ├── ImportPanel.test.tsx
+│   │   │   ├── ImportPanel.tsx
+│   │   │   ├── IndicesStrip.tsx
+│   │   │   ├── KlineDialog.tsx
+│   │   │   ├── LoginView.tsx
+│   │   │   ├── MarketView.tsx
+│   │   │   ├── MorningReportDialog.tsx
+│   │   │   ├── Onboarding.tsx
+│   │   │   ├── PositionEditDialog.tsx
+│   │   │   ├── PositionsTable.tsx
+│   │   │   ├── ScheduledOutputsPanel.tsx
+│   │   │   ├── SessionSidebar.tsx
+│   │   │   ├── SettingsView.tsx
+│   │   │   ├── SmartEvalCard.tsx
+│   │   │   ├── SummaryBlock.tsx
+│   │   │   ├── TopBar.tsx
+│   │   │   ├── chat-view-hooks.test.ts
+│   │   │   ├── chat-view-hooks.ts
+│   │   │   └── chat-view-state.ts
+│   │   ├── lib
+│   │   │   ├── lang
+│   │   │   │   ├── en.ts
+│   │   │   │   └── zh.ts
+│   │   │   ├── ErrorBoundary.tsx
+│   │   │   ├── api.ts
+│   │   │   ├── brand.tsx
+│   │   │   ├── charts.ts
+│   │   │   ├── echarts-deep.d.ts
+│   │   │   ├── format.test.ts
+│   │   │   ├── format.ts
+│   │   │   ├── i18n.test.ts
+│   │   │   ├── i18n.tsx
+│   │   │   ├── inbox.test.ts
+│   │   │   ├── inbox.ts
+│   │   │   ├── index.ts
+│   │   │   ├── level.ts
+│   │   │   ├── store.test.ts
+│   │   │   ├── store.ts
+│   │   │   ├── theme.test.ts
+│   │   │   ├── theme.tsx
+│   │   │   ├── toast.tsx
+│   │   │   ├── types.ts
+│   │   │   ├── use-calculations.ts
+│   │   │   ├── use-evaluate.ts
+│   │   │   ├── use-mutate.ts
+│   │   │   ├── use-streaming-mutate.ts
+│   │   │   ├── use-subs-overview.test.ts
+│   │   │   ├── use-subs-overview.ts
+│   │   │   └── utils.ts
+│   │   ├── test
+│   │   │   └── setup.ts
+│   │   ├── App.tsx
+│   │   ├── index.css
+│   │   ├── main.tsx
+│   │   ├── sw-register.ts
+│   │   └── vite-env.d.ts
+│   ├── tests
+│   │   ├── _harness.mjs
+│   │   ├── ui-checks.mjs
+│   │   └── ui-visual.mjs
+│   ├── .npmrc
+│   ├── components.json
+│   ├── index.html
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── playwright.config.ts
+│   ├── tsconfig.json
+│   ├── vite.config.ts
+│   └── vitest.config.ts
+├── scripts
+│   ├── dev.sh
+│   └── e2e-backend.sh
+├── .dockerignore
+├── .editorconfig
+├── .gitattributes
+├── .gitignore
+├── CHANGELOG.md
+├── CODE_OF_CONDUCT.md
+├── CONTRIBUTING.md
+├── Dockerfile
+├── LICENSE
+├── README.en.md
+├── README.md
+├── README.zh.md
+├── SECURITY.md
+├── docker-compose.yml
+├── ruff.toml
+└── start.bat
+
+34 directories, 313 files
