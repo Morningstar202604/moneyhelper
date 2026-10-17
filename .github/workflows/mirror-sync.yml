@@ -13,18 +13,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - name: push to gitcode
+      - name: push to gitcode (with retry)
         run: |
           git remote add mirror "https://badhope:${{ secrets.GITCODE_TOKEN }}@gitcode.com/badhope/xiaoman.git"
-          git push mirror main --force
-          git push mirror --tags --force
+          for i in 1 2 3; do
+            git push mirror main --force && git push mirror --tags --force && exit 0
+            echo "retry $i/3 after 20s..."; sleep 20
+          done
+          exit 1
   gitee:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - name: push to gitee
+      - name: push to gitee (with retry)
         run: |
           git remote add mirror "https://badhope:${{ secrets.GITEE_TOKEN }}@gitee.com/badhope/xiaoman.git"
-          git push mirror main --force
-          git push mirror --tags --force
+          for i in 1 2 3; do
+            git push mirror main --force && git push mirror --tags --force && exit 0
+            echo "retry $i/3 after 20s..."; sleep 20
+          done
+          exit 1
