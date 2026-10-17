@@ -1,3 +1,5 @@
+# 镜像同步：主仓(GitHub badhope) → GitCode badhope + Gitee badhope
+# 注意：GitHub Actions 不支持 secrets 动态索引，故用两个显式 job 写死 secret 名。
 name: mirror-sync
 on:
   push:
@@ -6,26 +8,23 @@ on:
 permissions:
   contents: read
 jobs:
-  mirror:
+  gitcode:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: gitcode
-            url: https://gitcode.com/badhope/xiaoman.git
-            secret: GITCODE_TOKEN
-            user: badhope
-          - name: gitee
-            url: https://gitee.com/badhope/xiaoman.git
-            secret: GITEE_TOKEN
-            user: badhope
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Push mirror to ${{ matrix.name }}
+        with: { fetch-depth: 0 }
+      - name: push to gitcode
         run: |
-          git remote add mirror "https://${{ matrix.user }}:${{ secrets[matrix.secret] }}@${{ matrix.url#https:// }}"
+          git remote add mirror "https://badhope:${{ secrets.GITCODE_TOKEN }}@gitcode.com/badhope/xiaoman.git"
+          git push mirror main --force
+          git push mirror --tags --force
+  gitee:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: push to gitee
+        run: |
+          git remote add mirror "https://badhope:${{ secrets.GITEE_TOKEN }}@gitee.com/badhope/xiaoman.git"
           git push mirror main --force
           git push mirror --tags --force
