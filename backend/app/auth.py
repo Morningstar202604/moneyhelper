@@ -42,6 +42,7 @@ def check_jwt_secret() -> None:
     if not _JWT_SECRET or _JWT_SECRET.startswith("xiaoman-dev-secret"):
         # 生成一次性随机 secret，强制开发者在部署前显式配置
         import secrets as _secrets
+
         _new = _secrets.token_hex(32)
         log.warning(
             "AUTH: JWT_SECRET 未设置或为默认值 — 已生成临时随机 secret（重启变更）。"
@@ -103,8 +104,15 @@ def verify_api_token(request: Request) -> dict[str, Any] | None:
         return None
     q_token = request.query_params.get("token", "")
     h_token = request.headers.get("authorization", "")
-    if secrets.compare_digest(q_token, api_token) or secrets.compare_digest(h_token, f"Bearer {api_token}"):
-        return {"id": 0, "username": "_shared", "role": "admin", "display_name": "共享访问"}
+    if secrets.compare_digest(q_token, api_token) or secrets.compare_digest(
+        h_token, f"Bearer {api_token}"
+    ):
+        return {
+            "id": 0,
+            "username": "_shared",
+            "role": "admin",
+            "display_name": "共享访问",
+        }
     return None
 
 
@@ -132,10 +140,16 @@ async def get_current_user(
     return user
 
 
-async def require_user(user: dict[str, Any] | None = Depends(get_current_user)) -> dict[str, Any]:
+async def require_user(
+    user: dict[str, Any] | None = Depends(get_current_user),
+) -> dict[str, Any]:
     """强制鉴权依赖：无用户即 401。用于写操作端点。"""
     if not user:
         raise HTTPException(status_code=401, detail="未登录或登录已过期")
+    # 审计归属：本请求后续所有 provenance 记录默认挂到该用户
+    from .provenance import set_request_actor
+
+    set_request_actor(str(user.get("username") or "system"))
     return user
 
 
@@ -164,33 +178,49 @@ def _rate_limited(key: str) -> bool:
 
 # --- 端点处理 ---
 
+
 async def login(req: LoginReq, request: Request | None = None) -> TokenResp:
     # 暴力破解保护：真实客户端 IP + 用户名 5 次 / 分钟（防分布式爆破）
     client_ip = "unknown"
     if request is not None:
         fwd = request.headers.get("x-forwarded-for", "")
-        client_ip = fwd.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+        client_ip = fwd.split(",")[0].strip() or (
+            request.client.host if request.client else "unknown"
+        )
     rate_key = f"{client_ip}:{req.username}"
     if _rate_limited(rate_key) or _rate_limited(f"user:{req.username}"):
-        log.warning("AUTH: rate-limited login attempt user=%s ip=%s", req.username, client_ip)
+        log.warning(
+            "AUTH: rate-limited login attempt user=%s ip=%s", req.username, client_ip
+        )
         raise HTTPException(status_code=429, detail="登录尝试过于频繁，请稍后再试")
 
     user = await db.user_get_by_username(req.username)
     if not user or user.get("disabled"):
-        log.warning("AUTH: login failed user=%s ip=%s reason=%s",
-                     req.username, client_ip, "user_not_found" if not user else "disabled")
+        log.warning(
+            "AUTH: login failed user=%s ip=%s reason=%s",
+            req.username,
+            client_ip,
+            "user_not_found" if not user else "disabled",
+        )
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     if not await db.user_verify_password(user, req.password):
-        log.warning("AUTH: login failed user=%s ip=%s reason=bad_password", req.username, client_ip)
+        log.warning(
+            "AUTH: login failed user=%s ip=%s reason=bad_password",
+            req.username,
+            client_ip,
+        )
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     await db.user_update_last_login(user["id"])
     token = _make_jwt(user)
     log.info("AUTH: login user=%s id=%d", user["username"], user["id"])
     return TokenResp(
         access_token=token,
-        user={"id": user["id"], "username": user["username"],
-              "display_name": user.get("display_name", ""),
-              "role": user.get("role", "user")},
+        user={
+            "id": user["id"],
+            "username": user["username"],
+            "display_name": user.get("display_name", ""),
+            "role": user.get("role", "user"),
+        },
     )
 
 
@@ -205,18 +235,26 @@ async def register(req: RegisterReq) -> TokenResp:
     existing = await db.user_get_by_username(req.username)
     if existing:
         raise HTTPException(status_code=409, detail="用户名已被占用")
-    uid = await db.user_create(req.username, req.password,
-                                display_name=req.display_name or req.username)
+    uid = await db.user_create(
+        req.username, req.password, display_name=req.display_name or req.username
+    )
     user = await db.user_get(uid)
     if not user:
         raise HTTPException(status_code=500, detail="创建失败")
     token = _make_jwt(user)
-    log.info("AUTH: first user registered id=%d username=%s (auto-admin)", uid, user["username"])
+    log.info(
+        "AUTH: first user registered id=%d username=%s (auto-admin)",
+        uid,
+        user["username"],
+    )
     return TokenResp(
         access_token=token,
-        user={"id": user["id"], "username": user["username"],
-              "display_name": user.get("display_name", ""),
-              "role": user.get("role", "user")},
+        user={
+            "id": user["id"],
+            "username": user["username"],
+            "display_name": user.get("display_name", ""),
+            "role": user.get("role", "user"),
+        },
     )
 
 

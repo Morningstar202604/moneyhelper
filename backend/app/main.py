@@ -79,9 +79,11 @@ async def lifespan(app_ref: FastAPI):
     await scheduler.start()
     # Langfuse 观测：懒初始化（没配 env 就 no-op）
     from . import observability
+
     observability._init()
     # Agent 配置：初始化默认角色/skills/工具配置
     from . import agent_config
+
     await agent_config.init_default_config()
     log.info("database initialised, scheduler started")
     yield
@@ -95,8 +97,8 @@ async def lifespan(app_ref: FastAPI):
     log.info("xiaoman backend shutdown complete")
     # 关闭 agent HITL 进程内注册表持有的磁盘连接（同步 sqlite3，需在 loop 关闭前清理）
     from .agent_graph import close_checkpoints
-    await close_checkpoints()
 
+    await close_checkpoints()
 
 
 # ---------------------------------------------------------------------------
@@ -121,12 +123,18 @@ async def _unhandled_exception_handler(request: Request, exc: Exception):
 # 限流：in-memory 滑动窗口，按 IP 计数；单进程部署；多进程需换 Redis。
 # ---------------------------------------------------------------------------
 _RATE_LIMIT_ENABLED = not os.getenv("XIAOMAN_DISABLE_RATE_LIMIT")
-_RATE_LIMIT_MAX = 200       # 单 IP 每分钟上限
-_RATE_LIMIT_WINDOW = 60.0   # 窗口大小（秒）
+_RATE_LIMIT_MAX = 200  # 单 IP 每分钟上限
+_RATE_LIMIT_WINDOW = 60.0  # 窗口大小（秒）
 _rate_buckets: dict[str, list[float]] = {}
+_RATE_BUCKETS_CAP = 4096
 # 跳过鉴权/限流的内部端点（health/health-check/metrics）统一枚举，避免三处不一致
-_SKIP_AUTH_PATHS = {"/api/health", "/api/health-check", "/api/metrics",
-                     "/api/auth/login", "/api/auth/register", "/api/auth/user-count"}
+_SKIP_AUTH_PATHS = {
+    "/api/health",
+    "/api/health-check",
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/user-count",
+}
 
 
 def _rate_limit_check(client_ip: str) -> tuple[bool, int]:
@@ -134,18 +142,19 @@ def _rate_limit_check(client_ip: str) -> tuple[bool, int]:
     if not _RATE_LIMIT_ENABLED:
         return True, 0
     now = time.time()
+    if len(_rate_buckets) > _RATE_BUCKETS_CAP:
+        cutoff = now - _RATE_LIMIT_WINDOW
+        for k in [k for k, v in _rate_buckets.items() if not v or v[-1] <= cutoff]:
+            _rate_buckets.pop(k, None)
     bucket = _rate_buckets.setdefault(client_ip, [])
     cutoff = now - _RATE_LIMIT_WINDOW
     _rate_buckets[client_ip] = [t for t in bucket if t > cutoff]
     bucket = _rate_buckets[client_ip]
-    if not bucket:
-        # 旧 IP 离开窗口后条目仍在 dict 里——及时清掉，防长期运行的无限膨胀
-        _rate_buckets.pop(client_ip, None)
-        return True, 0
+    # 先计数再判定：新 IP 首个请求也计入窗口（修复旧实现"首请求不计数"）
+    bucket.append(now)
     if len(bucket) >= _RATE_LIMIT_MAX:
         retry_after = int(bucket[0] + _RATE_LIMIT_WINDOW - now) + 1
         return False, max(1, retry_after)
-    bucket.append(now)
     return True, 0
 
 
@@ -160,9 +169,13 @@ async def rate_limiter_middleware(request: Request, call_next):
             return JSONResponse(
                 {"error": "请求过于频繁，请稍后再试"},
                 status_code=429,
-                headers={"Retry-After": str(retry_after), "X-RateLimit-Limit": str(_RATE_LIMIT_MAX)},
+                headers={
+                    "Retry-After": str(retry_after),
+                    "X-RateLimit-Limit": str(_RATE_LIMIT_MAX),
+                },
             )
     return await call_next(request)
+
 
 # fire-and-forget 后台任务持有集：防止 create_task 返回的 Task 在完成前被 GC
 # 取消（asyncio 只保留弱引用，无人持引用时任务可能静默失效）。
@@ -292,7 +305,9 @@ async def _maybe_create_admin() -> None:
     password = os.getenv("ADMIN_PASSWORD", "").strip()
     if username and password:
         try:
-            uid = await db.user_create(username, password, display_name=username, role="admin")
+            uid = await db.user_create(
+                username, password, display_name=username, role="admin"
+            )
             log.info("Initial admin created: id=%d username=%s", uid, username)
         except Exception as e:
             log.warning("Admin creation failed: %s", e)
@@ -569,7 +584,10 @@ async def create_transaction(payload: dict) -> dict:
     is_shared = payload.get("is_shared")
     try:
         return await db.add_transaction(
-            date, item, category, amount,
+            date,
+            item,
+            category,
+            amount,
             owner_id=owner_id,
             is_shared=is_shared,
         )
@@ -631,6 +649,7 @@ async def merge_transactions(payload: dict) -> dict:
 async def append_position(symbol: str, payload: dict) -> dict:
     """追加持仓：已有 symbol 则股数累加、成本加权平均（不覆盖），用于「合并」语义。"""
     from . import tools as _tools
+
     p = payload or {}
     async with _tools._position_write_lock:
         rows = await db.list_positions()
@@ -767,7 +786,10 @@ async def import_csv_commit(payload: dict) -> dict:
             ok += 1
         except Exception as e:  # noqa: BLE001
             # 检测事务 closed 错误（前一行失败导致 connection state 异常）→ 连接级回滚
-            if "cannot operate on a closed database" in str(e).lower() or "no active transaction" in str(e).lower():
+            if (
+                "cannot operate on a closed database" in str(e).lower()
+                or "no active transaction" in str(e).lower()
+            ):
                 # 单个失败不应影响后续行；记录并继续
                 failed.append(f"{item}(事务中断)")
                 continue
@@ -780,12 +802,10 @@ async def import_csv_commit(payload: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
-
-
 @app.get("/api/evaluate")
 async def get_evaluate(month: str | None = None) -> dict:
     """运行确定性规则引擎，返回行动项列表（按优先级排序）。
-    
+
     可选 ?month=YYYY-MM，默认本月。结果为纯本地计算，不调用 LLM。
     """
     m = (month or "").strip()
@@ -842,7 +862,7 @@ async def batch_undo(entity: str, payload: dict) -> dict:
     kind = ENTITY_TO_KIND[entity][0]
     ids = (payload or {}).get("ids")
     if not isinstance(ids, list) or not ids:
-        return JSONResponse({"error": "body.ids 需为非空列表"}, status_code=402)
+        return JSONResponse({"error": "body.ids 需为非空列表"}, status_code=400)
 
     # 第一步：先全部校验快照可用性（避免部分成功部分失败）
     snapshots: list[tuple[str, int]] = []  # (sid, undo_record_id)
@@ -925,7 +945,10 @@ async def suggest_memories() -> dict:
     from . import llm as llm_mod
 
     if not await llm_mod.llm_available():
-        return {"ok": False, "error": "未接入模型 —— 先到「设置 → AI 回答」配置模型端点"}
+        return {
+            "ok": False,
+            "error": "未接入模型 —— 先到「设置 → AI 回答」配置模型端点",
+        }
 
     runs = await db.list_runs(None, 60)
     questions: list[str] = []
@@ -945,7 +968,7 @@ async def suggest_memories() -> dict:
     system = (
         "你是用户的长期记忆整理助手。根据用户最近的提问，归纳 3-5 条值得长期记住的"
         "偏好、背景或关注点（如职业、投资风格、家庭结构、常用目标），用于以后回答时参考。"
-        "只输出 JSON：{\"suggestions\": [\"条目1\", \"条目2\", ...]}。"
+        '只输出 JSON：{"suggestions": ["条目1", "条目2", ...]}。'
         "条目以「用户」开头、每条约 15-40 字、必须是可从提问推断的事实或偏好，不要编造具体数字。"
     )
     out = await llm_mod.json_complete(system, summary, timeout=25.0)
@@ -964,7 +987,11 @@ async def suggest_memories() -> dict:
         uniq.append(it)
     if not uniq:
         return {"ok": False, "error": "没有归纳出新的偏好，再聊几句试试"}
-    return {"ok": True, "suggestions": uniq[:5], "based_on": {"questions": len(questions)}}
+    return {
+        "ok": True,
+        "suggestions": uniq[:5],
+        "based_on": {"questions": len(questions)},
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1099,13 +1126,13 @@ async def reset_portfolio() -> dict:
 # ---------------------------------------------------------------------------
 
 
-
-
 @app.get("/api/undoables")
 async def undoables(limit: int = 8) -> dict:
     """最近 N 条可撤回快照（CommandPalette 撤销面板用）。
     返回格式对齐 {entity, entity_id, snapshot_label, created_at}，便于前端直接渲染。"""
-    rows = await db.list_undo_records(limit=max(1, min(int(limit), 20)), include_consumed=False)
+    rows = await db.list_undo_records(
+        limit=max(1, min(int(limit), 20)), include_consumed=False
+    )
     items: list[dict[str, Any]] = []
     for r in rows:
         label = _undo_snapshot_label(r)
@@ -1149,6 +1176,7 @@ def _undo_snapshot_label(r: dict[str, Any]) -> str:
     }
     base = f"{name_map.get(entity, entity)} {verb}（{eid}）"
     return f"{base} · {reason}" if reason else base
+
 
 NUMERIC_KEYS = (
     "monthly_income",
@@ -1267,7 +1295,9 @@ async def put_settings(payload: dict) -> dict:
                     # vault 加密后再落库；vault 未激活 → 拒绝加密存储
                     if vault.is_active():
                         try:
-                            applied[key] = await vault.encrypt_secret(v[:AI_KEY_MAX_LEN])
+                            applied[key] = await vault.encrypt_secret(
+                                v[:AI_KEY_MAX_LEN]
+                            )
                         except Exception as e:
                             errors.append(f"API Key 加密失败：{e}")
                     else:
@@ -1770,8 +1800,6 @@ async def export_csv() -> StreamingResponse:
     )
 
 
-
-
 @app.get("/api/reports")
 async def reports(limit: int = 20) -> dict:
     return {"reports": await db.list_runs("cron", limit)}
@@ -1815,7 +1843,12 @@ async def scheduled_outputs(limit: int = 30) -> dict:
             sid = tid.split(":", 1)[1] if ":" in tid else tid
             skill = skills.get(sid) or {}
             items.append(
-                {**r, "kind": "skill", "skill_id": sid, "skill_name": str(skill.get("name") or sid)}
+                {
+                    **r,
+                    "kind": "skill",
+                    "skill_id": sid,
+                    "skill_name": str(skill.get("name") or sid),
+                }
             )
     return {"outputs": items}
 
@@ -1855,10 +1888,12 @@ async def clear_logs_endpoint() -> dict:
 # Agent 配置：角色 / skills / 工具开关
 # ---------------------------------------------------------------------------
 
+
 @app.get("/api/agent-config")
 async def get_agent_config() -> dict:
     """读当前 agent 配置（角色/skills/工具）。"""
     from . import agent_config
+
     cfg = await agent_config.get_config()
     return {"ok": True, "config": cfg}
 
@@ -1912,7 +1947,10 @@ async def generate_agent_config(payload: dict) -> dict:
     if not prompt:
         return {"ok": False, "error": "请先描述你想要的效果"}
     if not await llm.llm_available():
-        return {"ok": False, "error": "未接入模型 —— 先到「设置 → AI 回答」配置模型端点"}
+        return {
+            "ok": False,
+            "error": "未接入模型 —— 先到「设置 → AI 回答」配置模型端点",
+        }
     suggestion = await agent_config.generate_suggestion(kind, prompt, agent_name)
     if suggestion is None:
         return {"ok": False, "error": "生成失败，请换个描述再试"}

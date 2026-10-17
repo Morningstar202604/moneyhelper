@@ -35,3 +35,8 @@ backend/uvicorn.log
 backend/pytest_*.log
 frontend/vite-dev.log
 frontend/dev.log
+
+# 抓取的网页资源/大媒体不入库（README 走外链）
+doc-fetch-resources/
+*.mp4
+*.gif

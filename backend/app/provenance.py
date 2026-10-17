@@ -16,6 +16,7 @@ import asyncio
 import json
 import uuid
 from collections import deque
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -24,19 +25,21 @@ from typing import Any
 # 数据模型
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ProvenanceEntry:
     """一条审计记录：完整描述一次金额变动操作的来龙去脉。"""
-    id: str                              # UUID
-    timestamp: str                       # UTC ISO8601 时间戳
-    action: str                          # action 类型 (add_transaction/delete_position/etc.)
-    entity_type: str                     # 影响的实体类型 (transaction/position/budget/goal/etc.)
-    entity_id: str                       # 实体 ID
-    before: dict | None                  # 操作前状态摘要
-    after: dict | None                   # 操作后状态摘要
-    source: str                          # 触发来源 (api/mcp/agent/scheduler/undo)
-    username: str                        # 操作用户
-    metadata: dict                       # 额外上下文（chat thread id 等）
+
+    id: str  # UUID
+    timestamp: str  # UTC ISO8601 时间戳
+    action: str  # action 类型 (add_transaction/delete_position/etc.)
+    entity_type: str  # 影响的实体类型 (transaction/position/budget/goal/etc.)
+    entity_id: str  # 实体 ID
+    before: dict | None  # 操作前状态摘要
+    after: dict | None  # 操作后状态摘要
+    source: str  # 触发来源 (api/mcp/agent/scheduler/undo)
+    username: str  # 操作用户
+    metadata: dict  # 额外上下文（chat thread id 等）
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -69,6 +72,7 @@ _pending_tasks: set[asyncio.Task] = set()
 # 内部写入函数
 # ---------------------------------------------------------------------------
 
+
 async def _persist_entry(entry: ProvenanceEntry) -> None:
     """把单条审计写入 SQLite（独立连接，不干扰主业务连接）。"""
     from . import db
@@ -85,11 +89,17 @@ async def _persist_entry(entry: ProvenanceEntry) -> None:
                 entry.action,
                 entry.entity_type,
                 entry.entity_id,
-                json.dumps(entry.before, ensure_ascii=False) if entry.before is not None else None,
-                json.dumps(entry.after, ensure_ascii=False) if entry.after is not None else None,
+                json.dumps(entry.before, ensure_ascii=False)
+                if entry.before is not None
+                else None,
+                json.dumps(entry.after, ensure_ascii=False)
+                if entry.after is not None
+                else None,
                 entry.source,
                 entry.username,
-                json.dumps(entry.metadata, ensure_ascii=False) if entry.metadata else "{}",
+                json.dumps(entry.metadata, ensure_ascii=False)
+                if entry.metadata
+                else "{}",
             ),
         )
     except Exception:
@@ -112,6 +122,14 @@ def _schedule_persist(entry: ProvenanceEntry) -> None:
 # 公开 API
 # ---------------------------------------------------------------------------
 
+_current_actor: ContextVar[str] = ContextVar("prov_actor", default="system")
+
+
+def set_request_actor(username: str) -> None:
+    """请求中间件在鉴权后调用：本请求内所有审计记录默认归属该用户。"""
+    _current_actor.set(username or "system")
+
+
 async def record_provenance(
     action: str,
     entity_type: str,
@@ -119,7 +137,7 @@ async def record_provenance(
     before: dict | None = None,
     after: dict | None = None,
     source: str = "api",
-    username: str = "system",
+    username: str = "",
     metadata: dict | None = None,
 ) -> ProvenanceEntry:
     """记录一条审计追踪记录。
@@ -140,6 +158,8 @@ async def record_provenance(
     Returns:
         生成的 ProvenanceEntry
     """
+    username = username or _current_actor.get()
+
     entry = ProvenanceEntry(
         id=str(uuid.uuid4()),
         timestamp=datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -209,9 +229,8 @@ async def get_provenance_by_id(entry_id: str) -> dict[str, Any] | None:
                 return e.to_dict()
 
     from . import db
-    row = await db.fetch_one(
-        "SELECT * FROM provenance_log WHERE id = ?", (entry_id,)
-    )
+
+    row = await db.fetch_one("SELECT * FROM provenance_log WHERE id = ?", (entry_id,))
     if row is None:
         return None
     return _row_to_dict(row)
@@ -247,6 +266,7 @@ async def _query_sqlite(
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
     """把数据库行转为字典。"""
+
     def _safe_parse(val: str | None) -> dict | None:
         if not val:
             return None
@@ -269,7 +289,9 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
     }
 
 
-def _truncate_snapshot(snapshot: dict | None, max_keys: int = 20, max_val_len: int = 200) -> dict | None:
+def _truncate_snapshot(
+    snapshot: dict | None, max_keys: int = 20, max_val_len: int = 200
+) -> dict | None:
     """裁剪快照，防止单个审计记录过大。"""
     if snapshot is None:
         return None
@@ -289,6 +311,7 @@ def _truncate_snapshot(snapshot: dict | None, max_keys: int = 20, max_val_len: i
 # ---------------------------------------------------------------------------
 # 测试/维护辅助
 # ---------------------------------------------------------------------------
+
 
 def ring_size() -> int:
     """当前内存缓冲区中的记录数（供测试用）。"""

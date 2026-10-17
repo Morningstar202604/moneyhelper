@@ -27,10 +27,13 @@ from .logging_utils import get_logger
 
 _log = get_logger("llm")
 
+
 # 提供给 lifespan 关闭时调用的清理函数（关闭持久 HTTP 连接、恢复全局状态）。
 # 本模块当前无需显式关闭，保留空实现以避免 AttributeError。
 async def aclose() -> None:
     pass
+
+
 load_dotenv()
 
 # LiteLLM 日志噪声大（每次请求都打 INFO），压到 WARNING 以上
@@ -50,8 +53,8 @@ _PROVIDER_PREFIX: dict[str, str] = {
     "deepseek": "deepseek",
     "anthropic": "anthropic",
     "gemini": "gemini",
-    "qwen": "openai",        # 通义千问 OpenAI 兼容 → 用 openai provider + 自定义 base_url
-    "doubao": "openai",      # 豆包 OpenAI 兼容 → 用 openai provider + 自定义 base_url
+    "qwen": "openai",  # 通义千问 OpenAI 兼容 → 用 openai provider + 自定义 base_url
+    "doubao": "openai",  # 豆包 OpenAI 兼容 → 用 openai provider + 自定义 base_url
 }
 
 
@@ -76,7 +79,9 @@ async def _config() -> dict[str, Any] | None:
                     key = await vault.decrypt_secret(raw_key)
                 except Exception as e:
                     _log.warning("vault decrypt failed: %s", e)
-                    raise RuntimeError("API Key 解密失败 — 请检查 VAULT_PASSPHRASE 是否与加密时一致") from e
+                    raise RuntimeError(
+                        "API Key 解密失败 — 请检查 VAULT_PASSPHRASE 是否与加密时一致"
+                    ) from e
             else:
                 key = raw_key
         if s.get("ai_enabled") == "on" and key and model:
@@ -162,7 +167,9 @@ async def llm_available() -> bool:
 # ---------------------------------------------------------------------------
 
 
-async def stream_narrate(system: str, user: str, fallback: str) -> AsyncIterator[tuple[str, str]]:
+async def stream_narrate(
+    system: str, user: str, fallback: str
+) -> AsyncIterator[tuple[str, str]]:
     """流式调用；失败或空流时整体退回模板。产出 (文本增量, 来源)。"""
     cfg = await _config()
     if cfg is None:
@@ -195,9 +202,9 @@ async def stream_narrate(system: str, user: str, fallback: str) -> AsyncIterator
                 "temperature": 0.2,
                 "stream": True,
                 "max_tokens": 2048,
-                "num_retries": 2,           # LiteLLM 内置重试（429/5xx）
+                "num_retries": 2,  # LiteLLM 内置重试（429/5xx）
                 "retry_policy": {
-                    "retry_timeout": 30,     # 单次请求超时
+                    "retry_timeout": 30,  # 单次请求超时
                 },
             }
             # api_base + api_key 对所有提供商统一传入（OpenAI 兼容端点都需要）
@@ -224,7 +231,10 @@ async def stream_narrate(system: str, user: str, fallback: str) -> AsyncIterator
                     compl_tk = getattr(usage, "completion_tokens", 0) if usage else 0
                     _log.info(
                         "litellm stream_narrate: model=%s prompt=%d compl=%d cost=$%.4f",
-                        model, prompt_tk, compl_tk, cost or 0.0,
+                        model,
+                        prompt_tk,
+                        compl_tk,
+                        cost or 0.0,
                     )
             except Exception:
                 pass
@@ -254,7 +264,10 @@ async def stream_text_short(user: str, timeout: float = 20.0) -> str | None:
         kwargs: dict[str, Any] = {
             "model": cfg["litellm_model"],
             "messages": [
-                {"role": "system", "content": "你是长会话压缩器，只输出一段简洁的中文摘要。"},
+                {
+                    "role": "system",
+                    "content": "你是长会话压缩器，只输出一段简洁的中文摘要。",
+                },
                 {"role": "user", "content": user},
             ],
             "temperature": 0.2,
@@ -366,7 +379,9 @@ class _CompatCompletions:
         call_model = cfg["litellm_model"]
         call_model_arg = model or call_model
         if "/" not in call_model_arg:
-            call_model_arg = f"{_PROVIDER_PREFIX.get(cfg['provider'], 'openai')}/{call_model_arg}"
+            call_model_arg = (
+                f"{_PROVIDER_PREFIX.get(cfg['provider'], 'openai')}/{call_model_arg}"
+            )
 
         litellm_kwargs: dict[str, Any] = {
             "model": call_model_arg,
@@ -426,15 +441,69 @@ def model_catalog() -> list[dict[str, str]]:
     含 OpenAI / Anthropic / DeepSeek / Google / 通义 五大供应商。
     """
     return [
-        {"id": "gpt-4o-mini", "name": "GPT-4o mini", "provider": "OpenAI", "base": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
-        {"id": "gpt-4o", "name": "GPT-4o", "provider": "OpenAI", "base": "https://api.openai.com/v1", "model": "gpt-4o"},
-        {"id": "claude-3-5-sonnet-latest", "name": "Claude 3.5 Sonnet", "provider": "Anthropic", "base": "https://api.anthropic.com/v1", "model": "claude-3-5-sonnet-latest"},
-        {"id": "claude-3-5-haiku-latest", "name": "Claude 3.5 Haiku（快速廉价）", "provider": "Anthropic", "base": "https://api.anthropic.com/v1", "model": "claude-3-5-haiku-latest"},
-        {"id": "deepseek-chat", "name": "DeepSeek Chat", "provider": "DeepSeek", "base": "https://api.deepseek.com/v1", "model": "deepseek-chat"},
-        {"id": "deepseek-reasoner", "name": "DeepSeek Reasoner（thinking）", "provider": "DeepSeek", "base": "https://api.deepseek.com/v1", "model": "deepseek-reasoner"},
-        {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash", "provider": "Google", "base": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-2.0-flash"},
-        {"id": "qwen-plus", "name": "通义千问 Plus", "provider": "通义", "base": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus"},
-        {"id": "qwen-max", "name": "通义千问 Max", "provider": "通义", "base": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-max"},
+        {
+            "id": "gpt-4o-mini",
+            "name": "GPT-4o mini",
+            "provider": "OpenAI",
+            "base": "https://api.openai.com/v1",
+            "model": "gpt-4o-mini",
+        },
+        {
+            "id": "gpt-4o",
+            "name": "GPT-4o",
+            "provider": "OpenAI",
+            "base": "https://api.openai.com/v1",
+            "model": "gpt-4o",
+        },
+        {
+            "id": "claude-3-5-sonnet-latest",
+            "name": "Claude 3.5 Sonnet",
+            "provider": "Anthropic",
+            "base": "https://api.anthropic.com/v1",
+            "model": "claude-3-5-sonnet-latest",
+        },
+        {
+            "id": "claude-3-5-haiku-latest",
+            "name": "Claude 3.5 Haiku（快速廉价）",
+            "provider": "Anthropic",
+            "base": "https://api.anthropic.com/v1",
+            "model": "claude-3-5-haiku-latest",
+        },
+        {
+            "id": "deepseek-chat",
+            "name": "DeepSeek Chat",
+            "provider": "DeepSeek",
+            "base": "https://api.deepseek.com/v1",
+            "model": "deepseek-chat",
+        },
+        {
+            "id": "deepseek-reasoner",
+            "name": "DeepSeek Reasoner（thinking）",
+            "provider": "DeepSeek",
+            "base": "https://api.deepseek.com/v1",
+            "model": "deepseek-reasoner",
+        },
+        {
+            "id": "gemini-2.0-flash",
+            "name": "Gemini 2.0 Flash",
+            "provider": "Google",
+            "base": "https://generativelanguage.googleapis.com/v1beta/openai",
+            "model": "gemini-2.0-flash",
+        },
+        {
+            "id": "qwen-plus",
+            "name": "通义千问 Plus",
+            "provider": "通义",
+            "base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "model": "qwen-plus",
+        },
+        {
+            "id": "qwen-max",
+            "name": "通义千问 Max",
+            "provider": "通义",
+            "base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "model": "qwen-max",
+        },
     ]
 
 
@@ -446,12 +515,36 @@ def default_enabled_models() -> list[str]:
 def provider_presets() -> dict[str, dict[str, str]]:
     """供应商预设（供设置页使用）。"""
     return {
-        "deepseek": {"name": "DeepSeek", "base": "https://api.deepseek.com/v1", "model": "deepseek-chat"},
-        "doubao": {"name": "豆包", "base": "https://ark.cn-beijing.volces.com/api/v3", "model": ""},
-        "qwen": {"name": "通义千问", "base": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus"},
-        "openai": {"name": "OpenAI", "base": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
-        "anthropic": {"name": "Anthropic", "base": "https://api.anthropic.com/v1", "model": "claude-3-5-sonnet-latest"},
-        "gemini": {"name": "Google", "base": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-2.0-flash"},
+        "deepseek": {
+            "name": "DeepSeek",
+            "base": "https://api.deepseek.com/v1",
+            "model": "deepseek-chat",
+        },
+        "doubao": {
+            "name": "豆包",
+            "base": "https://ark.cn-beijing.volces.com/api/v3",
+            "model": "",
+        },
+        "qwen": {
+            "name": "通义千问",
+            "base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "model": "qwen-plus",
+        },
+        "openai": {
+            "name": "OpenAI",
+            "base": "https://api.openai.com/v1",
+            "model": "gpt-4o-mini",
+        },
+        "anthropic": {
+            "name": "Anthropic",
+            "base": "https://api.anthropic.com/v1",
+            "model": "claude-3-5-sonnet-latest",
+        },
+        "gemini": {
+            "name": "Google",
+            "base": "https://generativelanguage.googleapis.com/v1beta/openai",
+            "model": "gemini-2.0-flash",
+        },
     }
 
 
@@ -488,10 +581,11 @@ async def litellm_chat(
             temperature=temperature,
             timeout=timeout,
             api_base=cfg.get("base") or None,
-            api_key=cfg.get("api_key") or None,
+            api_key=cfg.get("key") or None,
         )
         return resp.choices[0].message.content
     except Exception as e:  # pragma: no cover - 降级路径
         from .logging_utils import get_logger
+
         get_logger(__name__).warning("litellm.chat_failed", error=str(e))
         return None

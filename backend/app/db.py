@@ -32,8 +32,16 @@ _active_member_id: dict[str, int | None] = {}  # session_key → member_id
 
 # 预定义配色池，轮流给新成员分配
 _AVATAR_COLORS = [
-    "#b8891f", "#2e7d32", "#1565c0", "#6a1b9a", "#c62828",
-    "#00838f", "#ef6c00", "#37474f", "#ad1457", "#3949ab",
+    "#b8891f",
+    "#2e7d32",
+    "#1565c0",
+    "#6a1b9a",
+    "#c62828",
+    "#00838f",
+    "#ef6c00",
+    "#37474f",
+    "#ad1457",
+    "#3949ab",
 ]
 
 
@@ -52,10 +60,12 @@ async def _fetch_member(member_id: int) -> dict[str, Any] | None:
     conn = await _conn()
     cur = await conn.execute(
         "SELECT id, username, display_name, role, avatar_color, created_at "
-        "FROM members WHERE id=?", (member_id,)
+        "FROM members WHERE id=?",
+        (member_id,),
     )
     row = await cur.fetchone()
     return dict(row) if row else None
+
 
 # --------------------------------------------------------------------------
 # 种子数据：一套典型中产家庭的示例（用户可在"记账"页改成自己的真实数据）
@@ -405,7 +415,9 @@ async def init_db() -> None:
     _db = await aiosqlite.connect(str(DB_PATH))
     _db.row_factory = aiosqlite.Row
     await _db.execute("PRAGMA journal_mode=WAL")
-    await _db.execute("PRAGMA foreign_keys=ON")   # SQLite 默认关外键；显式打开以启用 FK 约束/级联
+    await _db.execute(
+        "PRAGMA foreign_keys=ON"
+    )  # SQLite 默认关外键；显式打开以启用 FK 约束/级联
     await _db.executescript(SCHEMA)
     await _migrate_add_columns()
     # 全新库（settings 表为空）不再自动种示例：空账本起步，用户自己记账/加持仓。
@@ -469,10 +481,13 @@ async def _migrate_add_columns() -> None:
 # 用户体系（多租户基础）
 # --------------------------------------------------------------------------
 
-async def user_create(username: str, password: str, display_name: str = "",
-                      role: str = "user") -> int:
+
+async def user_create(
+    username: str, password: str, display_name: str = "", role: str = "user"
+) -> int:
     """创建用户，返回行 id。username 唯一；密码 bcrypt 哈希。"""
     from passlib.hash import bcrypt
+
     pw_hash = bcrypt.using(rounds=12).hash(password)
     conn = await _conn()
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -489,7 +504,8 @@ async def user_get_by_username(username: str) -> dict[str, Any] | None:
     conn = await _conn()
     cur = await conn.execute(
         "SELECT id, username, password_hash, display_name, role, disabled, last_login, created_at "
-        "FROM users WHERE username=?", (username,)
+        "FROM users WHERE username=?",
+        (username,),
     )
     row = await cur.fetchone()
     return dict(row) if row else None
@@ -499,7 +515,8 @@ async def user_get(uid: int) -> dict[str, Any] | None:
     conn = await _conn()
     cur = await conn.execute(
         "SELECT id, username, password_hash, display_name, role, disabled, last_login, created_at "
-        "FROM users WHERE id=?", (uid,)
+        "FROM users WHERE id=?",
+        (uid,),
     )
     row = await cur.fetchone()
     return dict(row) if row else None
@@ -507,6 +524,7 @@ async def user_get(uid: int) -> dict[str, Any] | None:
 
 async def user_verify_password(user: dict[str, Any], password: str) -> bool:
     from passlib.hash import bcrypt
+
     try:
         return bcrypt.verify(password, user["password_hash"])
     except Exception:
@@ -554,7 +572,19 @@ def _clean_due_day(v: object) -> str:
     return ""
 
 
-_COUNT_ALLOWED_TABLES = frozenset({"transactions", "positions", "budgets", "goals", "subscriptions", "members", "runs", "audit_log", "transactions_fts"})
+_COUNT_ALLOWED_TABLES = frozenset(
+    {
+        "transactions",
+        "positions",
+        "budgets",
+        "goals",
+        "subscriptions",
+        "members",
+        "runs",
+        "audit_log",
+        "transactions_fts",
+    }
+)
 _LIST_LIMIT_MAX = 500
 
 
@@ -772,21 +802,27 @@ async def budget_usage(month: str) -> dict[str, Any]:
             continue
         budget = float(r["amount"] or 0)
         spent = round(spent_by_cat.get(key, 0.0), 2)
-        cat_usage.append({
-            "category": "总预算" if key == "__total" else key,
-            "budget": budget,
-            "spent": spent,
-            "pct": round(spent / budget * 100, 1) if budget else 0,
-            "over": spent > budget,
-        })
+        cat_usage.append(
+            {
+                "category": "总预算" if key == "__total" else key,
+                "budget": budget,
+                "spent": spent,
+                "pct": round(spent / budget * 100, 1) if budget else 0,
+                "over": spent > budget,
+            }
+        )
 
     total_pct = round(total_spent / total_budget * 100, 1) if total_budget else 0
     now = datetime.now().astimezone()
     next_month = datetime(
         now.year + (now.month == 12), (now.month % 12) + 1, 1, tzinfo=now.tzinfo
     )
-    days_left = max(1, (next_month - now.replace(hour=0, minute=0, second=0, microsecond=0)).days)
-    left_daily = round((total_budget - total_spent) / days_left, 2) if total_budget else 0.0
+    days_left = max(
+        1, (next_month - now.replace(hour=0, minute=0, second=0, microsecond=0)).days
+    )
+    left_daily = (
+        round((total_budget - total_spent) / days_left, 2) if total_budget else 0.0
+    )
 
     return {
         "total_budget": total_budget,
@@ -1082,9 +1118,87 @@ async def delete_watchlist(symbol: str) -> dict[str, Any]:
     return {"ok": True, "deleted": cur.rowcount}
 
 
+async def add_transactions_batch(
+    entries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """批量入账唯一事务入口（一句话多笔 / CSV 导入走这里）。
+
+    全部条目先校验、后入账：任一条校验失败直接抛错，一条都不写；
+    写入阶段单事务包裹（BEGIN...COMMIT），中途任何失败整体回滚——
+    保证"多笔记账要么全成、要么全无"的真实原子性。
+    entries 元素即 add_transaction 的关键字参数。
+    """
+    if not entries:
+        return []
+    # 阶段一：全部校验（不触碰数据库写入）
+    cleaned: list[dict[str, Any]] = []
+    for i, e in enumerate(entries):
+        d = str(e.get("date", "")).strip()
+        amt = float(e.get("amount", 0))
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d):
+            raise ValueError(f"第 {i + 1} 条日期需为 YYYY-MM-DD：{d!r}") from None
+        try:
+            datetime.strptime(d, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError(f"第 {i + 1} 条不是有效日历日：{d!r}") from None
+        if amt == 0 or amt != amt:
+            raise ValueError(f"第 {i + 1} 条金额不能为 0 或 NaN")
+        cleaned.append(
+            {
+                "date": d,
+                "item": str(e.get("item", "")).strip()[:80] or "未命名",
+                "category": str(e.get("category", "")).strip()[:20] or "其他",
+                "amount": amt,
+                "owner_id": e.get("owner_id"),
+                "is_shared": e.get("is_shared"),
+            }
+        )
+
+    # 阶段二：解析归属（校验通过后，写库前完成）
+    for c in cleaned:
+        if c["owner_id"] is None:
+            active = _active_member_id.get(_ACTIVE_KEY)
+            if active is not None:
+                c["owner_id"] = active
+        if c["is_shared"] is None and c["owner_id"] is not None:
+            m = await _fetch_member(c["owner_id"])
+            c["is_shared"] = bool(m and m.get("role") in ("owner", "admin"))
+        if c["is_shared"] is None:
+            c["is_shared"] = 1
+
+    conn = await _conn()
+    results: list[dict[str, Any]] = []
+    await conn.execute("BEGIN")
+    try:
+        for c in cleaned:
+            cur = await conn.execute(
+                "INSERT INTO transactions(date,item,category,amount,owner_id,is_shared) VALUES(?,?,?,?,?,?)",
+                (
+                    c["date"],
+                    c["item"],
+                    c["category"],
+                    c["amount"],
+                    c["owner_id"],
+                    1 if c["is_shared"] else 0,
+                ),
+            )
+            await _record_snapshot("transaction", str(cur.lastrowid), "{}")
+            results.append({"ok": True, "id": cur.lastrowid})
+        await _mark_user_data(conn)
+        await conn.commit()
+        return results
+    except Exception:
+        await conn.rollback()
+        raise
+
+
 async def add_transaction(
-    date: str, item: str, category: str, amount: float,
-    owner_id: int | None = None, is_shared: bool | None = None,
+    date: str,
+    item: str,
+    category: str,
+    amount: float,
+    owner_id: int | None = None,
+    is_shared: bool | None = None,
 ) -> dict[str, Any]:
     """入账唯一入口：所有路径（手动 / 一句话记账 / CSV 导入）都必须经过这里。
 
@@ -1175,7 +1289,12 @@ async def update_transaction(
     row = await cur.fetchone()
     if row is None:
         raise ValueError(f"流水 {tx_id} 不存在")
-    old_date, old_item, old_cat, old_amt = row["date"], row["item"], row["category"], row["amount"]
+    old_date, old_item, old_cat, old_amt = (
+        row["date"],
+        row["item"],
+        row["category"],
+        row["amount"],
+    )
     old_owner = row["owner_id"]
     old_shared = row["is_shared"]
     # 撤销快照：写入操作前的全量旧行（4 列），撤回时恢复
@@ -2662,6 +2781,7 @@ async def _restore_table(
 # 家庭成员 CRUD
 # --------------------------------------------------------------------------
 
+
 async def member_create(
     display_name: str,
     role: str = "member",
@@ -2673,13 +2793,17 @@ async def member_create(
     if role not in valid_roles:
         role = "member"
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    uname = (username or f"member_{now.replace(':', '').replace('-', '').replace('T', '_')}")[:40]
+    uname = (
+        username or f"member_{now.replace(':', '').replace('-', '').replace('T', '_')}"
+    )[:40]
     # 保底唯一
     base = uname
     counter = 1
     conn = await _conn()
     while True:
-        row = await (await conn.execute("SELECT id FROM members WHERE username=?", (uname,))).fetchone()
+        row = await (
+            await conn.execute("SELECT id FROM members WHERE username=?", (uname,))
+        ).fetchone()
         if row is None:
             break
         uname = f"{base}_{counter}"[:40]
@@ -2738,7 +2862,9 @@ async def member_delete(member_id: int) -> dict[str, Any]:
     """移除成员（该成员的流水 owner_id 置 NULL，不级联删除）。"""
     conn = await _conn()
     # 软切断：该成员的流水不再归属任何人（保持流水不计丢）
-    await conn.execute("UPDATE transactions SET owner_id=NULL WHERE owner_id=?", (member_id,))
+    await conn.execute(
+        "UPDATE transactions SET owner_id=NULL WHERE owner_id=?", (member_id,)
+    )
     cur = await conn.execute("DELETE FROM members WHERE id=?", (member_id,))
     # 清理借贷中涉及此成员的行
     await conn.execute(
@@ -2752,6 +2878,7 @@ async def member_delete(member_id: int) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 # 成员间借贷 CRUD
 # --------------------------------------------------------------------------
+
 
 async def loan_create(
     from_member_id: int,
@@ -2812,6 +2939,7 @@ async def loan_delete(loan_id: int) -> dict[str, Any]:
 # 成员汇总 / 家庭仪表板
 # --------------------------------------------------------------------------
 
+
 async def member_summary(member_id: int) -> dict[str, Any]:
     """查询单个成员的收支汇总"""
     income = await fetch_one(
@@ -2855,17 +2983,19 @@ async def member_outstanding_loans() -> list[dict[str, Any]]:
     members = {m["id"]: m["display_name"] for m in await list_members()}
     result = []
     for ln in loans:
-        result.append({
-            "id": ln["id"],
-            "from_member_id": ln["from_member_id"],
-            "from_name": members.get(ln["from_member_id"], ""),
-            "to_member_id": ln["to_member_id"],
-            "to_name": members.get(ln["to_member_id"], ""),
-            "amount": ln["amount"],
-            "currency": ln["currency"],
-            "note": ln["note"],
-            "created_at": ln["created_at"],
-        })
+        result.append(
+            {
+                "id": ln["id"],
+                "from_member_id": ln["from_member_id"],
+                "from_name": members.get(ln["from_member_id"], ""),
+                "to_member_id": ln["to_member_id"],
+                "to_name": members.get(ln["to_member_id"], ""),
+                "amount": ln["amount"],
+                "currency": ln["currency"],
+                "note": ln["note"],
+                "created_at": ln["created_at"],
+            }
+        )
     return result
 
 
@@ -2888,17 +3018,21 @@ async def family_summary() -> dict[str, Any]:
     member_stats = []
     for m in members:
         s = await member_summary(m["id"])
-        member_stats.append({
-            "id": m["id"],
-            "display_name": m["display_name"],
-            "role": m["role"],
-            "avatar_color": m["avatar_color"],
-            "income": s["income"],
-            "expense": s["expense"],
-            "balance": round(s["income"] - s["expense"], 2),
-            "pct": round(s["expense"] / total_expense * 100, 1) if total_expense > 0 else 0.0,
-            "transaction_count": s["transaction_count"],
-        })
+        member_stats.append(
+            {
+                "id": m["id"],
+                "display_name": m["display_name"],
+                "role": m["role"],
+                "avatar_color": m["avatar_color"],
+                "income": s["income"],
+                "expense": s["expense"],
+                "balance": round(s["income"] - s["expense"], 2),
+                "pct": round(s["expense"] / total_expense * 100, 1)
+                if total_expense > 0
+                else 0.0,
+                "transaction_count": s["transaction_count"],
+            }
+        )
 
     # 未结清借贷
     loans = await member_outstanding_loans()

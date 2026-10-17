@@ -63,7 +63,9 @@ _emit_ctx: ContextVar[Emit | None] = ContextVar("wo_emit", default=None)
 
 # LangGraph 线程状态**磁盘持久化**：checkpoint 落 backend/data/agent_checkpoints.db，
 # 与主库 wealth.db 隔离（checkpoint 存图运行态，不是账本数据）。WAL 模式支持多连接。
-_CHECKPOINT_DB = Path(__file__).resolve().parent.parent / "data" / "agent_checkpoints.db"
+_CHECKPOINT_DB = (
+    Path(__file__).resolve().parent.parent / "data" / "agent_checkpoints.db"
+)
 
 # HITL confirm 并发锁与 token 注册表最大容量：两个数据结构共用同一上限，
 # 防止用户反复触发 buy/sell 永不 confirm 导致无限膨胀。
@@ -155,9 +157,11 @@ async def _save_pending(token: str, thread_id: str) -> None:
 
 async def _load_pending(token: str) -> str | None:
     def _r() -> str | None:
-        row = _pending_sql().execute(
-            "SELECT thread_id FROM pending WHERE token=?", (token,)
-        ).fetchone()
+        row = (
+            _pending_sql()
+            .execute("SELECT thread_id FROM pending WHERE token=?", (token,))
+            .fetchone()
+        )
         return row[0] if row else None
 
     return await asyncio.to_thread(_r)
@@ -196,7 +200,9 @@ def _now_ms() -> int:
 _PENDING_APPROVAL_TTL_MINUTES = 30
 
 
-async def _pending_confirm_context(question: str, thread_id: str | None) -> dict[str, Any] | None:
+async def _pending_confirm_context(
+    question: str, thread_id: str | None
+) -> dict[str, Any] | None:
     """上一轮为 nl_pending 待确认时，把「确认/取消」短回复识别为审批回执。
 
     仅当该线程最后一条 run 的 route 是 nl_pending、未过 TTL 且回复命中词表才算，否则返回 None。
@@ -212,7 +218,9 @@ async def _pending_confirm_context(question: str, thread_id: str | None) -> dict
         return None
     try:
         created = datetime.fromisoformat(str(runs[0].get("created_at") or ""))
-        if datetime.now().astimezone() - created > timedelta(minutes=_PENDING_APPROVAL_TTL_MINUTES):
+        if datetime.now().astimezone() - created > timedelta(
+            minutes=_PENDING_APPROVAL_TTL_MINUTES
+        ):
             return None
     except ValueError:
         pass  # 时间戳异常不阻断（按未过期处理）
@@ -261,7 +269,9 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
             if segments and tid and await db.claim_pending_nl(str(tid)):
                 return {
                     "route": "bookkeeping",
-                    "reason": "Large-amount approval: user confirmed" if en_lang else "大额审批：用户确认入账",
+                    "reason": "Large-amount approval: user confirmed"
+                    if en_lang
+                    else "大额审批：用户确认入账",
                     "parsed": segments[0],
                     "confirm": True,
                     "pending_question": pending_ctx["question"],
@@ -269,7 +279,9 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
         elif tid and await db.claim_pending_nl(str(tid)):
             return {
                 "route": "nl_cancel",
-                "reason": "Large-amount approval: user cancelled" if en_lang else "大额审批：用户取消",
+                "reason": "Large-amount approval: user cancelled"
+                if en_lang
+                else "大额审批：用户取消",
             }
         # claim 失败（已被并发回执消费）或原句不可解析：落回常规路由，不重复入账
 
@@ -281,14 +293,19 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
     long_mem_on = await agent_config.is_skill_enabled("long_memory")
     mem_hits = await mem.recall(q) if long_mem_on else []
     if mem_hits:
-        log.info("mem.recalled count=%s sample=%s", len(mem_hits), mem_hits[0].get("memory", "")[:60])
+        log.info(
+            "mem.recalled count=%s sample=%s",
+            len(mem_hits),
+            mem_hits[0].get("memory", "")[:60],
+        )
 
     route, reason = service.route_question(q, state.get("lang", "zh"))
     if route == "general" and await service._is_finance_followup(q, tid):
         route = "both"
         reason = (
             "Follow-up to the previous finance question"
-            if state.get("lang") == "en" else "承接上一轮财务提问的省略追问"
+            if state.get("lang") == "en"
+            else "承接上一轮财务提问的省略追问"
         )
 
     # 动作指令优先（卖出/清仓/晨报/备份）：先于记账检测，否则「卖出 600519」
@@ -302,7 +319,9 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
         # 真正写入 mem0 长记忆（不是只返回路由，而是真存）；技能关闭时跳过写入，
         # 由 memory 节点产出「已关闭」的明确回执（见 service._try_save_memory）
         if long_mem_on:
-            mem.remember(q)
+            await asyncio.to_thread(
+                mem.remember, q
+            )  # mem0 内部含网络调用，避免阻塞事件循环
         reason_mem = (
             "Recognized as a memory instruction — saving to long-term memory"
             if state.get("lang") == "en"
@@ -326,7 +345,8 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
                 route = llm_route
                 reason = (
                     "Model recognized this as a finance question"
-                    if en_lang else "模型判定这是理财问题"
+                    if en_lang
+                    else "模型判定这是理财问题"
                 )
             else:
                 return {"route": "general", "reason": reason, "mode": "deterministic"}
@@ -342,7 +362,11 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
     plan_steps: list[dict[str, Any]] = []
     if mode == "agent":
         plan_steps = [
-            {"id": "supervisor", "label": "Understand" if en_st else "理解意图", "detail": reason},
+            {
+                "id": "supervisor",
+                "label": "Understand" if en_st else "理解意图",
+                "detail": reason,
+            },
             {
                 "id": "reason",
                 "label": "Reason" if en_st else "自主分析",
@@ -359,7 +383,9 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
                 {
                     "id": "market",
                     "label": "View holdings" if en_st else "查看持仓",
-                    "detail": "Holdings · Quotes · P&L · Concentration" if en_st else "持仓·行情·盈亏·集中度",
+                    "detail": "Holdings · Quotes · P&L · Concentration"
+                    if en_st
+                    else "持仓·行情·盈亏·集中度",
                 }
             )
         if "ledger" in routes:
@@ -367,34 +393,50 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
                 {
                     "id": "ledger",
                     "label": "Ledger" if en_st else "核对账本",
-                    "detail": "Income · Expenses · Cash · Debt" if en_st else "收支·结余·负债·应急金",
+                    "detail": "Income · Expenses · Cash · Debt"
+                    if en_st
+                    else "收支·结余·负债·应急金",
                 }
             )
         plan_steps.append(
             {
                 "id": "risk",
                 "label": "Risk review" if en_st else "风险复核",
-                "detail": "Concentration · Emergency fund · High-interest debt" if en_st else "集中度·应急金·高息负债",
+                "detail": "Concentration · Emergency fund · High-interest debt"
+                if en_st
+                else "集中度·应急金·高息负债",
             }
         )
         plan_steps.append(
             {
                 "id": "finalize",
                 "label": "Compose answer" if en_st else "整理成文",
-                "detail": "Summarize conclusion & figures" if en_st else "汇总结论与数字",
+                "detail": "Summarize conclusion & figures"
+                if en_st
+                else "汇总结论与数字",
             }
         )
     # Agent 行为可配置：关闭「展示执行计划」时不再发计划卡（推理轨迹/面板同步隐藏）
     _agent_plan = (await db.get_settings()).get("agent_plan", "on") != "off"
     if plan_steps and _agent_plan:
-        await _emit({"type": "plan", "data": {"steps": plan_steps, "mode": mode, "route": route}})
+        await _emit(
+            {
+                "type": "plan",
+                "data": {"steps": plan_steps, "mode": mode, "route": route},
+            }
+        )
 
     # 确定性模式发"理解问题"步骤；agent 模式不发（工具调用过程即说明，避免重复）
     if mode == "deterministic":
-        await _emit({
-            "type": "step", "id": "supervisor", "label": "Understand" if en_st else "理解问题",
-            "detail": f"{reason}，开始分析" if not en_st else reason, "phase": "done",
-        })
+        await _emit(
+            {
+                "type": "step",
+                "id": "supervisor",
+                "label": "Understand" if en_st else "理解问题",
+                "detail": f"{reason}，开始分析" if not en_st else reason,
+                "phase": "done",
+            }
+        )
     return {"route": route, "reason": reason, "mode": mode, "routes": routes}
 
 
@@ -413,13 +455,19 @@ async def record(state: AgentState) -> dict[str, Any]:
 
     # 门槛判定按全部分段（与入账同口径）；任一段超阈值即触发审批
     segments = service._nl_segments(src_q)
-    breach = max(segments, key=lambda p: abs(float(p.get("amount", 0)))) if segments else parsed
+    breach = (
+        max(segments, key=lambda p: abs(float(p.get("amount", 0))))
+        if segments
+        else parsed
+    )
     amount = abs(float(breach.get("amount", 0)))
 
     # 大额审批：任一段 >5000 元先确认
     if amount > 5000 and not confirm:
         direction = "收入" if float(breach.get("amount", 0)) > 0 else "支出"
-        extra = f"，本句共 {len(segments)} 笔，确认后一起入账" if len(segments) > 1 else ""
+        extra = (
+            f"，本句共 {len(segments)} 笔，确认后一起入账" if len(segments) > 1 else ""
+        )
         answer = (
             f"这笔{direction} {amount:,.0f} 元金额较大，确认要记吗？\n\n"
             f"记的是：{breach.get('item', '未命名')}（{breach.get('category', '其他')}）{extra}\n"
@@ -441,7 +489,10 @@ async def record(state: AgentState) -> dict[str, Any]:
         return {"result": result}
 
     result = await service._try_nl_add(
-        state.get("pending_question") or state["question"], state["reason"], _emit, state.get("lang", "zh")
+        state.get("pending_question") or state["question"],
+        state["reason"],
+        _emit,
+        state.get("lang", "zh"),
     )
     assert result is not None
     result.setdefault("actions", [{"tab": "ledger"}])
@@ -456,7 +507,9 @@ async def nl_cancel(state: AgentState) -> dict[str, Any]:
             "answer": "OK — not recorded." if en else "好，这笔不记了。",
             "level": "已取消",
             "route": "nl_cancel",
-            "route_reason": "Large-amount approval: user cancelled" if en else "大额审批：用户取消",
+            "route_reason": "Large-amount approval: user cancelled"
+            if en
+            else "大额审批：用户取消",
             "metrics": {},
             "flags": [],
             "llm": "template",
@@ -476,16 +529,20 @@ async def action(state: AgentState) -> dict[str, Any]:
     用 Command(resume) 恢复图：节点从 interrupt 返回，按用户决定执行/取消并落库，
     最终结果（answer）由图续跑产出。整个 HITL 生命周期都在 LangGraph 内。
     """
-    result = await tools.run_action(state["question"], state.get("lang", "zh"), emit=_emit)
+    result = await tools.run_action(
+        state["question"], state.get("lang", "zh"), emit=_emit
+    )
     en = state.get("lang") == "en"
     if result.get("pending_token"):
         token = result["pending_token"]
         # 挂起图，等待用户确认；resume 后这里返回 Command(resume) 传入的决策。
-        decision = interrupt({
-            "token": token,
-            "summary": result["pending_summary"],
-            "answer": result["answer"],
-        })
+        decision = interrupt(
+            {
+                "token": token,
+                "summary": result["pending_summary"],
+                "answer": result["answer"],
+            }
+        )
         if isinstance(decision, dict) and decision.get("decision") == "confirm":
             pending = await db.get_pending_action(token)
             if pending:
@@ -500,7 +557,8 @@ async def action(state: AgentState) -> dict[str, Any]:
                             "route": "action",
                             "route_reason": (
                                 "Write action confirmed by human (LangGraph interrupt/resume)"
-                                if en else "写操作已人工确认（LangGraph interrupt/resume）"
+                                if en
+                                else "写操作已人工确认（LangGraph interrupt/resume）"
                             ),
                             "metrics": {},
                             "flags": [],
@@ -529,7 +587,9 @@ async def action(state: AgentState) -> dict[str, Any]:
         else:
             await db.mark_pending_action(token, "cancelled")
             result = {
-                "answer": "Cancelled — no changes were made." if en else "已取消该操作，未做任何改动。",
+                "answer": "Cancelled — no changes were made."
+                if en
+                else "已取消该操作，未做任何改动。",
                 "level": "已取消",
                 "route": "action",
                 "route_reason": "Write action cancelled" if en else "写操作已取消",
@@ -543,7 +603,9 @@ async def action(state: AgentState) -> dict[str, Any]:
 
 async def memory(state: AgentState) -> dict[str, Any]:
     """记忆 agent：把「记住/记得 …」指令确定性写入长期记忆并回执（规则级，无需模型）。"""
-    result = await service._try_save_memory(state["question"], _emit, state.get("lang", "zh"))
+    result = await service._try_save_memory(
+        state["question"], _emit, state.get("lang", "zh")
+    )
     assert result is not None
     return {"result": result}
 
@@ -554,8 +616,29 @@ async def collect_market(state: AgentState) -> dict[str, Any]:
         return {}
     det = state.get("mode") == "deterministic"
     if det:
-        await _emit({"type": "step", "id": "market", "label": "View holdings" if state.get("lang") == "en" else "查看持仓", "detail": "Fetch holdings & quotes, compute P&L and concentration" if state.get("lang") == "en" else "拉取持仓与行情，计算盈亏与集中度", "phase": "start"})
-        await _emit({"type": "tool", "data": {"id": "market", "name": "get_market_view", "status": "running", "node": "collect_market", "ts": time.time() * 1000}})
+        await _emit(
+            {
+                "type": "step",
+                "id": "market",
+                "label": "View holdings" if state.get("lang") == "en" else "查看持仓",
+                "detail": "Fetch holdings & quotes, compute P&L and concentration"
+                if state.get("lang") == "en"
+                else "拉取持仓与行情，计算盈亏与集中度",
+                "phase": "start",
+            }
+        )
+        await _emit(
+            {
+                "type": "tool",
+                "data": {
+                    "id": "market",
+                    "name": "get_market_view",
+                    "status": "running",
+                    "node": "collect_market",
+                    "ts": time.time() * 1000,
+                },
+            }
+        )
     started = time.monotonic()
     positions = await db.list_positions()
     live = await quotes.live_quotes(positions)
@@ -568,11 +651,28 @@ async def collect_market(state: AgentState) -> dict[str, Any]:
             if en
             else f"总市值 {market['total_market_value']:,.0f} 元，累计{'浮盈' if market['total_pnl'] >= 0 else '浮亏'} {abs(market['total_pnl']):,.0f} 元"
         )
-        await _emit({"type": "tool", "data": {"name": "get_market_view", "status": "done", "summary": summary, "duration_ms": duration_ms, "node": "collect_market", "ts": _now_ms()}})
-        await _emit({
-            "type": "step", "id": "market", "label": "View holdings" if state.get("lang") == "en" else "查看持仓",
-            "detail": summary, "phase": "done",
-        })
+        await _emit(
+            {
+                "type": "tool",
+                "data": {
+                    "name": "get_market_view",
+                    "status": "done",
+                    "summary": summary,
+                    "duration_ms": duration_ms,
+                    "node": "collect_market",
+                    "ts": _now_ms(),
+                },
+            }
+        )
+        await _emit(
+            {
+                "type": "step",
+                "id": "market",
+                "label": "View holdings" if state.get("lang") == "en" else "查看持仓",
+                "detail": summary,
+                "phase": "done",
+            }
+        )
     # positions/live 写入 state 供 collect_ledger、finalize 复用（同轮只拉一次）
     return {"market": market, "positions": positions, "live": live}
 
@@ -583,8 +683,28 @@ async def collect_ledger(state: AgentState) -> dict[str, Any]:
         return {}
     det = state.get("mode") == "deterministic"
     if det:
-        await _emit({"type": "step", "id": "ledger", "label": "Ledger" if state.get("lang") == "en" else "核对账本", "detail": "Income · Expenses · Subscriptions · Debt · Emergency fund" if state.get("lang") == "en" else "汇总本月收支、订阅、负债与应急金", "phase": "start"})
-        await _emit({"type": "tool", "data": {"name": "get_ledger_view", "status": "running", "node": "collect_ledger", "ts": _now_ms()}})
+        await _emit(
+            {
+                "type": "step",
+                "id": "ledger",
+                "label": "Ledger" if state.get("lang") == "en" else "核对账本",
+                "detail": "Income · Expenses · Subscriptions · Debt · Emergency fund"
+                if state.get("lang") == "en"
+                else "汇总本月收支、订阅、负债与应急金",
+                "phase": "start",
+            }
+        )
+        await _emit(
+            {
+                "type": "tool",
+                "data": {
+                    "name": "get_ledger_view",
+                    "status": "running",
+                    "node": "collect_ledger",
+                    "ts": _now_ms(),
+                },
+            }
+        )
     started = time.monotonic()
     positions = state.get("positions")
     if positions is None:
@@ -609,11 +729,28 @@ async def collect_ledger(state: AgentState) -> dict[str, Any]:
             if en
             else f"本月结余 {ledger['net']:,.0f} 元，负债月供 {ledger['debt_monthly']:,.0f} 元"
         )
-        await _emit({"type": "tool", "data": {"name": "get_ledger_view", "status": "done", "summary": summary, "duration_ms": duration_ms, "node": "collect_ledger", "ts": _now_ms()}})
-        await _emit({
-            "type": "step", "id": "ledger", "label": "Ledger" if state.get("lang") == "en" else "核对账本",
-            "detail": summary, "phase": "done",
-        })
+        await _emit(
+            {
+                "type": "tool",
+                "data": {
+                    "name": "get_ledger_view",
+                    "status": "done",
+                    "summary": summary,
+                    "duration_ms": duration_ms,
+                    "node": "collect_ledger",
+                    "ts": _now_ms(),
+                },
+            }
+        )
+        await _emit(
+            {
+                "type": "step",
+                "id": "ledger",
+                "label": "Ledger" if state.get("lang") == "en" else "核对账本",
+                "detail": summary,
+                "phase": "done",
+            }
+        )
     return {"ledger": ledger}
 
 
@@ -621,29 +758,71 @@ async def risk(state: AgentState) -> dict[str, Any]:
     """风控 agent：跑规则告警。确定性模式发步骤事件 + 工具调用事件。"""
     det = state.get("mode") == "deterministic"
     if det:
-        await _emit({"type": "tool", "data": {"name": "get_risk_flags", "status": "running", "node": "risk", "ts": _now_ms()}})
+        await _emit(
+            {
+                "type": "tool",
+                "data": {
+                    "name": "get_risk_flags",
+                    "status": "running",
+                    "node": "risk",
+                    "ts": _now_ms(),
+                },
+            }
+        )
     started = time.monotonic()
-    flags = analysis.risk_checks(state.get("market"), state.get("ledger"), state.get("lang", "zh"))
+    flags = analysis.risk_checks(
+        state.get("market"), state.get("ledger"), state.get("lang", "zh")
+    )
     duration_ms = int((time.monotonic() - started) * 1000)
     if det:
         detail = (
-            f"Found {len(flags)} item(s) to watch: " + "; ".join(f["text"] for f in flags[:2])
-            if flags
-            else "No significant risks found"
-        ) if state.get("lang") == "en" else (
-            f"发现 {len(flags)} 项需关注：" + "；".join(f["text"] for f in flags[:2]) if flags else "未发现明显风险项"
+            (
+                f"Found {len(flags)} item(s) to watch: "
+                + "; ".join(f["text"] for f in flags[:2])
+                if flags
+                else "No significant risks found"
+            )
+            if state.get("lang") == "en"
+            else (
+                f"发现 {len(flags)} 项需关注："
+                + "；".join(f["text"] for f in flags[:2])
+                if flags
+                else "未发现明显风险项"
+            )
         )
-        await _emit({"type": "tool", "data": {"name": "get_risk_flags", "status": "done", "summary": detail, "duration_ms": duration_ms, "node": "risk", "ts": _now_ms()}})
-        await _emit({
-            "type": "step", "id": "risk", "label": "Risk review" if state.get("lang") == "en" else "风险复核", "detail": detail, "phase": "done",
-        })
+        await _emit(
+            {
+                "type": "tool",
+                "data": {
+                    "name": "get_risk_flags",
+                    "status": "done",
+                    "summary": detail,
+                    "duration_ms": duration_ms,
+                    "node": "risk",
+                    "ts": _now_ms(),
+                },
+            }
+        )
+        await _emit(
+            {
+                "type": "step",
+                "id": "risk",
+                "label": "Risk review" if state.get("lang") == "en" else "风险复核",
+                "detail": detail,
+                "phase": "done",
+            }
+        )
     return {"flags": flags}
 
 
 async def general(state: AgentState) -> dict[str, Any]:
     """通用 agent：复用既有通用路径（带同会话记忆、不带财务数据）。"""
     result = await service._run_general(
-        state["question"], state["reason"], _emit, state.get("thread_id"), state.get("lang", "zh")
+        state["question"],
+        state["reason"],
+        _emit,
+        state.get("thread_id"),
+        state.get("lang", "zh"),
     )
     return {"result": result}
 
@@ -676,10 +855,14 @@ async def finalize(state: AgentState) -> dict[str, Any]:
             history = await service._build_history(tid)
             # 优先用 LangGraph 官方 create_react_agent；失败降级手写 loop
             try:
-                result = await react_agent.run_react_agent(q, agent.AGENT_SYSTEM, state.get("lang", "zh"))
+                result = await react_agent.run_react_agent(
+                    q, agent.AGENT_SYSTEM, state.get("lang", "zh")
+                )
             except Exception as react_err:
                 log.warning("react_agent.fallback: %s — 降级手写 run_agent", react_err)
-                result = await agent.run_agent(q, _emit, history, state.get("lang", "zh"))
+                result = await agent.run_agent(
+                    q, _emit, history, state.get("lang", "zh")
+                )
             live = state.get("live")
             if live is None:
                 live = await quotes.live_quotes(positions)
@@ -703,7 +886,11 @@ async def finalize(state: AgentState) -> dict[str, Any]:
             advice = analysis.next_step_advice(flags, True, state.get("lang", "zh"))
             if advice:
                 answer = answer.rstrip() + "\n\n" + advice
-            disclaimer = analysis.DISCLAIMER_EN if state.get("lang") == "en" else analysis.DISCLAIMER
+            disclaimer = (
+                analysis.DISCLAIMER_EN
+                if state.get("lang") == "en"
+                else analysis.DISCLAIMER
+            )
             if disclaimer not in answer:
                 answer = answer + "\n\n— " + disclaimer
             return {
@@ -743,7 +930,13 @@ async def finalize(state: AgentState) -> dict[str, Any]:
     wants_health = any(w in q for w in analysis.HEALTH_WORDS)
     if wants_health and has_data:
         fallback = analysis.health_report_text(
-            analysis.health_check(market, ledger, flags, await db.list_goals(), lang=state.get("lang", "zh")),
+            analysis.health_check(
+                market,
+                ledger,
+                flags,
+                await db.list_goals(),
+                lang=state.get("lang", "zh"),
+            ),
             state.get("lang", "zh"),
         )
     elif wants_health:
@@ -781,7 +974,17 @@ async def finalize(state: AgentState) -> dict[str, Any]:
         user_obj["history"] = history
     user = json.dumps(user_obj, ensure_ascii=False)
 
-    await _emit({"type": "step", "id": "finalize", "label": "Compose answer" if state.get("lang") == "en" else "整理成文", "detail": "Summarize conclusion & figures" if state.get("lang") == "en" else "汇总结论与数字", "phase": "start"})
+    await _emit(
+        {
+            "type": "step",
+            "id": "finalize",
+            "label": "Compose answer" if state.get("lang") == "en" else "整理成文",
+            "detail": "Summarize conclusion & figures"
+            if state.get("lang") == "en"
+            else "汇总结论与数字",
+            "phase": "start",
+        }
+    )
 
     chunks: list[str] = []
     src = "template"
@@ -795,27 +998,39 @@ async def finalize(state: AgentState) -> dict[str, Any]:
     advice = analysis.next_step_advice(flags, has_data, state.get("lang", "zh"))
     if advice:
         answer = answer.rstrip() + "\n\n" + advice
-    disclaimer = analysis.DISCLAIMER_EN if state.get("lang") == "en" else analysis.DISCLAIMER
+    disclaimer = (
+        analysis.DISCLAIMER_EN if state.get("lang") == "en" else analysis.DISCLAIMER
+    )
     if disclaimer not in answer:
         answer = answer + "\n\n— " + disclaimer
 
-    await _emit({"type": "step", "id": "finalize", "label": "Compose answer" if state.get("lang") == "en" else "整理成文", "detail": "Done" if state.get("lang") == "en" else "已完成", "phase": "done"})
+    await _emit(
+        {
+            "type": "step",
+            "id": "finalize",
+            "label": "Compose answer" if state.get("lang") == "en" else "整理成文",
+            "detail": "Done" if state.get("lang") == "en" else "已完成",
+            "phase": "done",
+        }
+    )
 
     # 结构化数据卡：前端把数字渲染成对话内嵌小卡（4 宫格 / mini 环形 / 持仓预览），
     # 不再纯文字叙述。前端不认识就忽略，向后兼容。
     if has_data and ("market" in routes or "ledger" in routes):
-        await _emit({
-            "type": "card",
-            "block": {
-                "kind": "finance_snapshot",
-                "data": {
-                    "route": route,
-                    "market": market,
-                    "ledger": ledger,
-                    "flags": flags,
+        await _emit(
+            {
+                "type": "card",
+                "block": {
+                    "kind": "finance_snapshot",
+                    "data": {
+                        "route": route,
+                        "market": market,
+                        "ledger": ledger,
+                        "flags": flags,
+                    },
                 },
-            },
-        })
+            }
+        )
 
     return {
         "result": {
@@ -877,7 +1092,14 @@ def _build_graph() -> Any:
     g.add_conditional_edges(
         "supervisor",
         _supervisor_route,
-        {"record": "record", "nl_cancel": "nl_cancel", "memory": "memory", "general": "general", "action": "action", "finance": "collect_market"},
+        {
+            "record": "record",
+            "nl_cancel": "nl_cancel",
+            "memory": "memory",
+            "general": "general",
+            "action": "action",
+            "finance": "collect_market",
+        },
     )
     # 多智能体管线：市场 agent → 账本 agent → 风控 agent → 成文 agent
     # （顺序边：单连接 aiosqlite 不支持跨节点并发读写，结构并行、执行串行）
@@ -906,7 +1128,9 @@ def get_graph() -> Any:
     return _graph
 
 
-async def run_graph(question: str, emit: Emit, thread_id: str | None = None, lang: str = "zh") -> dict[str, Any]:
+async def run_graph(
+    question: str, emit: Emit, thread_id: str | None = None, lang: str = "zh"
+) -> dict[str, Any]:
     """跑一轮图，返回最终结果（供 service.run_question 使用）。
 
     用 LangGraph 原生 astream 流式执行（stream_mode=[updates,values]），并给每个线程挂
@@ -945,14 +1169,21 @@ async def run_graph(question: str, emit: Emit, thread_id: str | None = None, lan
                     _HITL_THREADS.pop(oldest, None)
                 _HITL_THREADS[token] = config
                 await _save_pending(token, config["configurable"]["thread_id"])
-                log.info("run_graph: interrupt registered token=%s threads=%d", token[:12], len(_HITL_THREADS))
+                log.info(
+                    "run_graph: interrupt registered token=%s threads=%d",
+                    token[:12],
+                    len(_HITL_THREADS),
+                )
             result: dict[str, Any] = {
-                "answer": payload.get("answer", "Awaiting confirmation" if lang == "en" else "需要确认"),
+                "answer": payload.get(
+                    "answer", "Awaiting confirmation" if lang == "en" else "需要确认"
+                ),
                 "level": "待确认",
                 "route": "action",
                 "route_reason": (
                     "Write action needs manual confirmation (LangGraph interrupt)"
-                    if lang == "en" else "写操作需人工确认（LangGraph interrupt）"
+                    if lang == "en"
+                    else "写操作需人工确认（LangGraph interrupt）"
                 ),
                 "metrics": {},
                 "flags": [],
@@ -987,7 +1218,12 @@ async def resume_action(token: str, decision: str) -> dict[str, Any] | None:
         tid = await _load_pending(token)
         if tid:
             config = {"configurable": {"thread_id": tid}}
-    log.info("resume_action: token=%s found=%s threads=%d", token[:12], config is not None, len(_HITL_THREADS))
+    log.info(
+        "resume_action: token=%s found=%s threads=%d",
+        token[:12],
+        config is not None,
+        len(_HITL_THREADS),
+    )
     if config is None:
         return None
     final_state: dict[str, Any] | None = None

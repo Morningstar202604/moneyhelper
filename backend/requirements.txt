@@ -6,6 +6,7 @@ aiosqlite>=0.22,<0.23        # 异步 SQLite，不阻塞事件循环
 httpx>=0.28,<0.29            # 行情（东财 push2 / push2his）
 litellm>=1.77,<2            # 统一 LLM 接入（OpenAI/Anthropic/DeepSeek/Gemini/通义/豆包）——替掉自研 llm.py openai SDK 直连
 openai>=3.19,<4              # LiteLLM 依赖；保留以兼容其他潜在调用
+tiktoken>=0.8,<1                # 上下文 token 精确计数（context.py 直接依赖，勿靠传递依赖）
 cn2an>=0.5.24,<0.6           # 中文数字金额（三千块 / 一万二 / 五毛）
 python-dotenv>=1.0,<2
 apscheduler>=3.10,<4         # 定时晨报（替代自研 asyncio 循环）

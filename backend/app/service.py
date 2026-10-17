@@ -25,13 +25,86 @@ from . import db, llm, nlparse
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
 
-MARKET_WORDS = ("股票", "基金", "持仓", "仓位", "组合", "收益", "亏", "涨", "跌", "etf", "市值", "资产", "集中度", "配置", "自选", "加自选", "走势", "k线", "股价", "现价", "行情")
-LEDGER_WORDS = ("花", "消费", "支出", "记账", "账", "预算", "订阅", "会员", "还款", "负债", "房贷", "信用卡", "现金流", "存", "省", "应急金", "储蓄", "收入", "余额", "工资")
+MARKET_WORDS = (
+    "股票",
+    "基金",
+    "持仓",
+    "仓位",
+    "组合",
+    "收益",
+    "亏",
+    "涨",
+    "跌",
+    "etf",
+    "市值",
+    "资产",
+    "集中度",
+    "配置",
+    "自选",
+    "加自选",
+    "走势",
+    "k线",
+    "股价",
+    "现价",
+    "行情",
+)
+LEDGER_WORDS = (
+    "花",
+    "消费",
+    "支出",
+    "记账",
+    "账",
+    "预算",
+    "订阅",
+    "会员",
+    "还款",
+    "负债",
+    "房贷",
+    "信用卡",
+    "现金流",
+    "存",
+    "省",
+    "应急金",
+    "储蓄",
+    "收入",
+    "余额",
+    "工资",
+)
 # 目标/体检专用词：命中即按「市场+账本」全量财务路由（体检与目标进度需要完整数据）。
 # 刻意不用「目标」「进度」这类宽泛词，避免「人生目标」这类非财务问法被误伤（宁缺毋滥）。
-GOAL_WORDS = ("体检", "健康检查", "存够", "攒够", "首付", "买房", "买车", "还差多少", "建议月存", "攒钱", "存款目标", "攒首付")
+GOAL_WORDS = (
+    "体检",
+    "健康检查",
+    "存够",
+    "攒够",
+    "首付",
+    "买房",
+    "买车",
+    "还差多少",
+    "建议月存",
+    "攒钱",
+    "存款目标",
+    "攒首付",
+)
 # 动作指令：命中即确定性执行工具（不依赖模型）。词选窄、选动作明确，避免误伤日常问法。
-ACTION_WORDS = ("买入", "买进", "建仓", "加仓", "卖出", "卖掉", "清仓", "减仓", "抛售", "晨报", "备份", "默认首页", "涨跌颜色", "颜色主题", "换颜色", "切换语言")
+ACTION_WORDS = (
+    "买入",
+    "买进",
+    "建仓",
+    "加仓",
+    "卖出",
+    "卖掉",
+    "清仓",
+    "减仓",
+    "抛售",
+    "晨报",
+    "备份",
+    "默认首页",
+    "涨跌颜色",
+    "颜色主题",
+    "换颜色",
+    "切换语言",
+)
 # 记忆动词：短句 + 无问号 → 对话内「记住/记得 …」直接存长期记忆（规则级，无需模型）
 MEMORY_VERBS = ("记住", "记得")
 
@@ -57,9 +130,9 @@ HISTORY_ANSWER_CHARS = 400
 
 # 长会话压缩：会话问答轮次超过阈值后，把较早轮次压缩成结构化摘要落库，
 # 只在上下文里保留摘要 + 最近 K 轮完整（避免 token 无限增长，同时保住长程记忆）。
-SUMMARY_TRIGGER_TURNS = 8   # 超过该轮次才触发压缩
-SUMMARY_KEEP_TURNS = 4      # 压缩后仍保留的最近完整轮次（与 HISTORY_TURNS 一致）
-SUMMARY_MAX_CHARS = 2000    # 摘要单条上限（落库截断与注入截断）
+SUMMARY_TRIGGER_TURNS = 8  # 超过该轮次才触发压缩
+SUMMARY_KEEP_TURNS = 4  # 压缩后仍保留的最近完整轮次（与 HISTORY_TURNS 一致）
+SUMMARY_MAX_CHARS = 2000  # 摘要单条上限（落库截断与注入截断）
 
 # 省略式追问：短句 + 指代词（「那上个月呢？」本身不含财务关键词，需承接上一轮）
 FOLLOWUP_MARKS = ("那", "它", "这个", "上个月", "上月", "刚才", "刚刚", "其中", "前面")
@@ -92,7 +165,14 @@ async def _is_finance_followup(question: str, thread_id: str | None) -> bool:
         return True
     # 词表之外：上一轮本身就是财务路由（记账/动作/分析）也算承接上下文
     return str(prev.get("route") or "") in (
-        "nl_add", "bookkeeping", "record", "action", "market", "ledger", "goal", "both",
+        "nl_add",
+        "bookkeeping",
+        "record",
+        "action",
+        "market",
+        "ledger",
+        "goal",
+        "both",
     )
 
 
@@ -107,10 +187,24 @@ def _looks_like_record(question: str) -> bool:
 # 大额审批回执短语：仅「去空白/标点后精确命中词表」才算审批回复，防止普通短聊被误判。
 # 词表保持显式（不含「好/是/对」等日常用语），降低 pending 上下文中的误触面。
 _CONFIRM_REPLIES = {
-    "确认", "确认入账", "确认记账", "确定", "记吧", "入账", "ok", "yes", "confirm",
+    "确认",
+    "确认入账",
+    "确认记账",
+    "确定",
+    "记吧",
+    "入账",
+    "ok",
+    "yes",
+    "confirm",
 }
 _CANCEL_REPLIES = {
-    "取消", "不记了", "不用了", "不记账", "算了", "no", "cancel",
+    "取消",
+    "不记了",
+    "不用了",
+    "不记账",
+    "算了",
+    "no",
+    "cancel",
 }
 
 
@@ -138,7 +232,9 @@ def _nl_segments(question: str) -> list[dict[str, Any]]:
     return [p for p in (nlparse.parse(part) for part in parts) if p is not None]
 
 
-async def _try_nl_add(question: str, reason: str, emit: Emit, lang: str = "zh") -> dict[str, Any] | None:
+async def _try_nl_add(
+    question: str, reason: str, emit: Emit, lang: str = "zh"
+) -> dict[str, Any] | None:
     """对话内一句话记账：规则解析（无需模型）→ 入账 → 回执（含撤销路径）。
 
     支持一句多笔（用逗号/顿号/分号/和/及 分隔），逐段独立解析；全部可解析才入账（原子）。
@@ -148,19 +244,31 @@ async def _try_nl_add(question: str, reason: str, emit: Emit, lang: str = "zh") 
         return None
 
     for parsed in parsed_all:
-        await emit({
-            "type": "step", "id": "nl",
-            "label": "识别记账" if lang == "zh" else "Recording",
-            "detail": (
-                f"{parsed['item']} {abs(parsed['amount']):.2f} 元（{parsed['category']}）"
-                if lang == "zh"
-                else f"{parsed['item']} {abs(parsed['amount']):.2f} CNY ({parsed['category']})"
-            ),
-            "phase": "start",
-        })
-    inserted = [
-        await db.add_transaction(p["date"], p["item"], p["category"], p["amount"]) for p in parsed_all
-    ]
+        await emit(
+            {
+                "type": "step",
+                "id": "nl",
+                "label": "识别记账" if lang == "zh" else "Recording",
+                "detail": (
+                    f"{parsed['item']} {abs(parsed['amount']):.2f} 元（{parsed['category']}）"
+                    if lang == "zh"
+                    else f"{parsed['item']} {abs(parsed['amount']):.2f} CNY ({parsed['category']})"
+                ),
+                "phase": "start",
+            }
+        )
+    # 原子批量入账：任一条失败整体回滚（承诺"全部可解析才入账"的真实实现）
+    inserted = await db.add_transactions_batch(
+        [
+            {
+                "date": p["date"],
+                "item": p["item"],
+                "category": p["category"],
+                "amount": p["amount"],
+            }
+            for p in parsed_all
+        ]
+    )
     if lang == "zh":
         lines = [
             f"{p['date']} {p['item']} {abs(p['amount']):,.2f} 元"
@@ -168,9 +276,17 @@ async def _try_nl_add(question: str, reason: str, emit: Emit, lang: str = "zh") 
             for p in parsed_all
         ]
         if len(lines) == 1:
-            answer = "已记一笔：" + lines[0] + "。\n\n记错了可以在「记账」页删掉这一条。"
+            answer = (
+                "已记一笔：" + lines[0] + "。\n\n记错了可以在「记账」页删掉这一条。"
+            )
         else:
-            answer = "已记 " + str(len(lines)) + " 笔：\n" + "\n".join("· " + line for line in lines) + "\n\n记错了可以在「记账」页删掉。"
+            answer = (
+                "已记 "
+                + str(len(lines))
+                + " 笔：\n"
+                + "\n".join("· " + line for line in lines)
+                + "\n\n记错了可以在「记账」页删掉。"
+            )
     else:
         lines = [
             f"{p['date']} {p['item']} {abs(p['amount']):,.2f} CNY"
@@ -178,20 +294,36 @@ async def _try_nl_add(question: str, reason: str, emit: Emit, lang: str = "zh") 
             for p in parsed_all
         ]
         if len(lines) == 1:
-            answer = "Recorded: " + lines[0] + ".\n\nMade a mistake? Delete it on the Ledger page."
+            answer = (
+                "Recorded: "
+                + lines[0]
+                + ".\n\nMade a mistake? Delete it on the Ledger page."
+            )
         else:
-            answer = "Recorded " + str(len(lines)) + " entries:\n" + "\n".join("· " + line for line in lines) + "\n\nDelete on the Ledger page if wrong."
+            answer = (
+                "Recorded "
+                + str(len(lines))
+                + " entries:\n"
+                + "\n".join("· " + line for line in lines)
+                + "\n\nDelete on the Ledger page if wrong."
+            )
     for p in parsed_all:
-        await emit({
-            "type": "step", "id": "nl", "label": "已入账",
-            "detail": f"{p['category']} {abs(p['amount']):,.2f} 元", "phase": "done",
-        })
+        await emit(
+            {
+                "type": "step",
+                "id": "nl",
+                "label": "已入账",
+                "detail": f"{p['category']} {abs(p['amount']):,.2f} 元",
+                "phase": "done",
+            }
+        )
     return {
         "answer": answer,
         "level": "已记账",
         "route": "nl_add",
         "route_reason": (
-            f"识别为一句话记账：{reason}" if lang == "zh"
+            f"识别为一句话记账：{reason}"
+            if lang == "zh"
             else f"Recognized as one-sentence bookkeeping: {reason}"
         ),
         "metrics": {},
@@ -220,17 +352,26 @@ def route_question(question: str, lang: str = "zh") -> tuple[str, str]:
     hit_g = [w for w in GOAL_WORDS if w in q]
     if hit_g:
         if en:
-            return "goal", "You want a financial health check or to see how a goal is tracking"
+            return (
+                "goal",
+                "You want a financial health check or to see how a goal is tracking",
+            )
         return "goal", f"你想看看财务体检 / 目标进度（{hit_g[0]}）"
     hit_m = [w for w in MARKET_WORDS if w in q]
     hit_l = [w for w in LEDGER_WORDS if w in q]
     if hit_m and hit_l:
         if en:
-            return "both", "You want both your holdings and your money flows in one picture"
+            return (
+                "both",
+                "You want both your holdings and your money flows in one picture",
+            )
         return "both", f"你想同时看持仓和收支（{hit_m[0]} / {hit_l[0]}）"
     if hit_m:
         if en:
-            return "market", "You want the current state of your holdings and market quotes"
+            return (
+                "market",
+                "You want the current state of your holdings and market quotes",
+            )
         return "market", f"你想看持仓盈亏和行情（{hit_m[0]}）"
     if hit_l:
         if en:
@@ -269,7 +410,7 @@ async def classify_question_llm(question: str, lang: str = "zh") -> str | None:
     只管「是否理财问题及其域」，宁缺毋滥；模型不可用 / 输出非法一律返回 None（调用方保持 general）。
     """
     system = (
-        "你是意图分类器。只输出 JSON：{\"route\": \"market|ledger|both|goal|general\"}。"
+        '你是意图分类器。只输出 JSON：{"route": "market|ledger|both|goal|general"}。'
         "market=股票/基金/持仓/行情/走势/某个标的价格；ledger=收支/记账/预算/负债；"
         "both=同时涉及持仓与收支；goal=财务体检/储蓄目标进度；general=其它（写作/闲聊/编程等）。"
     )
@@ -280,7 +421,9 @@ async def classify_question_llm(question: str, lang: str = "zh") -> str | None:
     return route if route in ("market", "ledger", "both", "goal", "general") else None
 
 
-async def _try_save_memory(question: str, emit: Emit, lang: str = "zh") -> dict[str, Any] | None:
+async def _try_save_memory(
+    question: str, emit: Emit, lang: str = "zh"
+) -> dict[str, Any] | None:
     """对话内记忆指令：规则提取内容 → 存长期记忆 → 回执（无需模型）。
 
     提取「记住/记得」之后的内容；提取不到有效内容（如单独一个「记住」）返回 None。
@@ -320,11 +463,15 @@ async def _try_save_memory(question: str, emit: Emit, lang: str = "zh") -> dict[
         return None
 
     out = await db.add_memory(content)
-    await emit({
-        "type": "step", "id": "memory",
-        "label": "已记住" if lang == "zh" else "Remembered",
-        "detail": content[:30] + ("…" if len(content) > 30 else ""), "phase": "done",
-    })
+    await emit(
+        {
+            "type": "step",
+            "id": "memory",
+            "label": "已记住" if lang == "zh" else "Remembered",
+            "detail": content[:30] + ("…" if len(content) > 30 else ""),
+            "phase": "done",
+        }
+    )
     if lang == "zh":
         answer = (
             f"好，我记住了：{content}。\n\n"
@@ -336,7 +483,9 @@ async def _try_save_memory(question: str, emit: Emit, lang: str = "zh") -> dict[
             f"Got it — I've remembered: {content}.\n\n"
             "I'll reference it for related questions; view or delete it in Settings → Long-term memory."
         )
-        route_reason = "Recognized as a memory instruction — saved directly to long-term memory"
+        route_reason = (
+            "Recognized as a memory instruction — saved directly to long-term memory"
+        )
     return {
         "answer": answer,
         "level": "已记住",
@@ -409,7 +558,8 @@ def _heuristic_summary(exchanges: list[dict[str, Any]]) -> str:
             continue
         # 记忆指令 / 明确结论：整条问题值得留
         if (
-            any(v in q for v in MEMORY_VERBS) or any(w in q for w in ("体检", "结论", "建议", "记住"))
+            any(v in q for v in MEMORY_VERBS)
+            or any(w in q for w in ("体检", "结论", "建议", "记住"))
         ) and len(q) <= 40:
             facts.append(q)
         # 含数字的陈述句（金额/比例/日期）→ 抽出关键片段
@@ -418,7 +568,11 @@ def _heuristic_summary(exchanges: list[dict[str, Any]]) -> str:
                 facts.append(seg.strip("。，！、 "))
                 break
     if not facts:
-        facts = [str(e.get("question") or "").strip() for e in exchanges[:3] if str(e.get("question") or "").strip()]
+        facts = [
+            str(e.get("question") or "").strip()
+            for e in exchanges[:3]
+            if str(e.get("question") or "").strip()
+        ]
     return "；".join(dict.fromkeys(f for f in facts if f))[:SUMMARY_MAX_CHARS]
 
 
@@ -447,7 +601,11 @@ async def ensure_session_summary(thread_id: str) -> dict[str, Any] | None:
         return None
     # 时间正序；保留最近 K 轮完整，更早轮次纳入摘要
     # 保留最近 K 轮完整；更早轮次纳入摘要
-    cover_until_id = all_runs[-SUMMARY_KEEP_TURNS]["id"] if len(all_runs) > SUMMARY_KEEP_TURNS else all_runs[-1]["id"]
+    cover_until_id = (
+        all_runs[-SUMMARY_KEEP_TURNS]["id"]
+        if len(all_runs) > SUMMARY_KEEP_TURNS
+        else all_runs[-1]["id"]
+    )
     to_cover = [r for r in all_runs if r["id"] < cover_until_id]
     if not to_cover:
         return None
@@ -488,12 +646,16 @@ async def _summarize_exchanges(
         "关键问题与结论；③用户让助手记住的内容。要求：不编造、不含口头语、不超过 400 字、"
         "用要点式（每行一条），只输出摘要本身。"
     )
-    data = await llm.json_complete(sys, "请压缩以下会话：\n\n" + "\n".join(block), timeout=15.0)
+    data = await llm.json_complete(
+        sys, "请压缩以下会话：\n\n" + "\n".join(block), timeout=15.0
+    )
     text = data.get("summary") if isinstance(data, dict) else None
     if isinstance(text, str) and text.strip():
         return text.strip()[:SUMMARY_MAX_CHARS], "llm"
     # json 里没有 summary 字段时，退化为让模型直接输出文本（兼容不返回 JSON 的端点）
-    text = await llm.stream_text_short("请压缩以下会话，只输出一段不超过 400 字的中文摘要：\n\n" + "\n".join(block))
+    text = await llm.stream_text_short(
+        "请压缩以下会话，只输出一段不超过 400 字的中文摘要：\n\n" + "\n".join(block)
+    )
     if text:
         return text[:SUMMARY_MAX_CHARS], "llm"
     raise RuntimeError("summary empty")
@@ -525,7 +687,13 @@ GENERAL_FALLBACK_EN = (
 )
 
 
-async def _run_general(question: str, reason: str, emit: Emit, thread_id: str | None = None, lang: str = "zh") -> dict[str, Any]:
+async def _run_general(
+    question: str,
+    reason: str,
+    emit: Emit,
+    thread_id: str | None = None,
+    lang: str = "zh",
+) -> dict[str, Any]:
     """默认路径：通用 agent。
 
     - 带同会话的通用上下文（它得记得上文，否则不叫 agent）
@@ -538,6 +706,7 @@ async def _run_general(question: str, reason: str, emit: Emit, thread_id: str | 
     history = await _build_history(thread_id, only_route="general")
 
     from . import agent as agent_mod
+
     if await llm.llm_available():
         try:
             result = await agent_mod.run_agent(
@@ -550,13 +719,15 @@ async def _run_general(question: str, reason: str, emit: Emit, thread_id: str | 
                 impl_map=agent_mod.GENERAL_IMPL,
                 inject_memories=False,
             )
-            result.update({
-                "level": "",
-                "route": "general",
-                "route_reason": reason,
-                "metrics": {},
-                "flags": [],
-            })
+            result.update(
+                {
+                    "level": "",
+                    "route": "general",
+                    "route_reason": reason,
+                    "metrics": {},
+                    "flags": [],
+                }
+            )
             return result
         except agent_mod.AgentUnavailable:
             # 模型已接入但本次工具循环失败（限流/网络波动/不收敛）：如实说明，绝不冒充「未接入模型」。
@@ -611,18 +782,22 @@ def _metrics_from(
 ) -> dict[str, float]:
     metrics: dict[str, float] = {}
     if market:
-        metrics.update({
-            "total_market_value": market["total_market_value"],
-            "total_pnl": market["total_pnl"],
-            "total_pnl_pct": market["total_pnl_pct"],
-        })
+        metrics.update(
+            {
+                "total_market_value": market["total_market_value"],
+                "total_pnl": market["total_pnl"],
+                "total_pnl_pct": market["total_pnl_pct"],
+            }
+        )
     if ledger:
-        metrics.update({
-            "net": ledger["net"],
-            "savings_rate": ledger["savings_rate"],
-            "debt_monthly": ledger["debt_monthly"],
-            "dti_pct": ledger["dti_pct"],
-        })
+        metrics.update(
+            {
+                "net": ledger["net"],
+                "savings_rate": ledger["savings_rate"],
+                "debt_monthly": ledger["debt_monthly"],
+                "dti_pct": ledger["dti_pct"],
+            }
+        )
     return metrics
 
 
