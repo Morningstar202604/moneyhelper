@@ -21,7 +21,7 @@
 
 ```bash
 cd backend
-.venv/bin/python -m pytest tests -q --cov=app   # 185+ 用例全绿，覆盖率 75%+ 基线
+.venv/bin/python -m pytest tests -q --cov=app   # 486 个用例全绿
 .venv/bin/python -m ruff check app tests        # 0 错误
 cd frontend && npm run build                    # tsc + vite 构建通过
 ```

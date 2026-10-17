@@ -1,6 +1,6 @@
-# Xiaoman READMEs
+# 小满 README 索引
 
-- **English (primary): [README.md](README.md)** — GitHub renders this file by default
-- **简体中文: [README.zh.md](README.zh.md)**
+- **简体中文（主版本）：[README.zh.md](README.zh.md)**
+- **English: [README.md](README.md)**
 
-This stub only exists so that old links to `README.en.md` keep working; the English README now lives in [README.md](README.md), and the Chinese README lives in [README.zh.md](README.zh.md).
+本文件仅用于兼容指向 `README.en.md` 的旧链接。
