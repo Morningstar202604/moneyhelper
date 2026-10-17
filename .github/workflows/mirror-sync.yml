@@ -20,14 +20,6 @@ jobs:
             url: https://gitee.com/badhope/xiaoman.git
             secret: GITEE_TOKEN
             user: badhope
-          - name: github-morningstar
-            url: https://github.com/Morningstar202604/xiaoman.git
-            secret: GH_MORNINGSTAR_TOKEN
-            user: Morningstar202604
-          - name: github-x33834
-            url: https://github.com/x33834/xiaoman.git
-            secret: GH_X33834_TOKEN
-            user: x33834
     steps:
       - uses: actions/checkout@v4
         with:
