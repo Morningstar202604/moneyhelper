@@ -1,0 +1,119 @@
+# xiaoman 总体规划（完整版 · 唯一主计划）
+> 2026-10-17 · 汇总 01-07 全部调研结论 + 用户 6 条新共识 · 本文档为唯一执行依据
+> 拓扑：主仓 GitHub/badhope，镜像 GitCode/Gitee/Morningstar/x33834（Actions 自动同步已上线）
+
+## 〇、定位修正（响应共识 6）
+**弃用口号**："local-first 隐私"降级为部署选项之一，不再当核心卖点。
+**新定位**：**"能自主干活的财务部门"** —— 不只是一个记账工具，而是一个可编排、可复核、可接管的 AI 财务团队。
+**真实差异化（企业/HR 视角能看懂的）**：
+1. **自主闭环**：老板一句话 → 多 agent 自主分工、找问题、干活、汇总成报告（别人是问答，我们是部门）
+2. **数字可复核**：每个数字都有 provenance 链路（审计=企业刚需，也是"AI 幻觉"问题的正面回答）
+3. **中国账单原生**：微信/支付宝/银行 PDF 真实解析落地（ChatGPT/大厂不做的脏活）
+4. **部署形态无关**：云端 API / 自托管 / 桌面单机 三种形态同一套核心（卖方案不卖部署方式）
+5. **中老年友好可视化**：大字/图表先行/语音录入，切入财政决策主力人群（见第四节）
+6. **全 MCP 开放**：账本能力可被任何 AI 接管（生态位=标准制定者姿态）
+
+## 一、仓库与 CI/CD（共识 1，已完成部分 ✅）
+- ✅ 主仓 origin=github/badhope；`.github/workflows/mirror-sync.yml` push 自动镜像 4 仓（secrets 已写入）
+- ✅ `scripts/push-all.sh` 本地一键五仓
+- ⚠️ x33834 令牌只读（拉✅/推❌401），需补 write 权限；期间该仓手动维护
+- 计划：semantic-release 版本管理（conventional commits 已具备）→ tag 自动发 Release 附带 EXE 产物；changelog 自动生成
+
+## 二、模块化架构（共识 2，改造蓝图）
+```
+xiaoman/
+├── core/            # 纯 Python 核心包（无 FastAPI 依赖，可被任何壳复用）
+│   ├── ledger/      # 记账/事务/undo（拆自 db.py，按域分文件）
+│   ├── finance/     # calculations/* 确定性计算引擎（现成，原样归位）
+│   ├── ingest/      # 支付宝/微信/银行PDF/OCR 导入器（含导入器插件协议）
+│   ├── agents/      # 部门智能体（supervisor/bookkeeping/portfolio/risk/audit）
+│   ├── provenance/  # 审计链路（升级为贯穿全链路 span）
+│   └── config/      # pydantic-settings 全量配置 schema
+├── server/          # FastAPI 壳（拆薄 main.py：路由+SSE+鉴权）
+├── mcp/             # MCP Server 全量暴露 + 接入 SDK（type-safe）
+├── cli/             # typer CLI（复用 core）
+├── desktop/         # Tauri 壳（EXE/DMG/AppImage 产物）
+├── web/             # 现 frontend（React19+Vite）
+├── docs/            # 文档站（mkdocs-material，见第七节）
+└── deploy/          # docker-compose / helm / 云端 one-click
+```
+原则：core 不依赖任何壳；壳可以薄到只剩 IO。db.py(2927)/main.py(1940) 拆解进上述结构。
+**风险**：大拆易引入回归 → 拆一步跑一次 520 测试基线，测试先行锁行为。
+
+## 三、财务部门多智能体（共识 5 · 核心战略）
+### 现框架评估
+- LangGraph 1.x 支持：Send API 并行分发（map-reduce）、checkpoint、interrupt（HITL）——**框架能力够，无需换**
+- 缺口：①现 agent_graph 是线性流水线，无并行部门；②单 aiosqlite 连接是并发瓶颈；③无任务汇总成报告的 aggregate 节点
+### 升级设计（v3 目标形态）
+```
+老板命令("把上季度财务给我盘一遍")
+  → supervisor: 任务分解成工单（JSON 工单 schema）
+  → Send API 并行派发：
+      记账员 agent（数据清洗/补漏/分类核对）
+      会计 agent（报表生成：损益/现金流/净值）
+      风控 agent（异常交易/订阅涨价/预算漂移）
+      投资 agent（持仓复盘/集中度/再平衡建议）
+  → 每个部门自主迭代（各自工具循环，写各自工作日志）
+  → 秘书 agent（aggregate）：合并冲突、数字对账、统一口径
+  → 呈批件给老板（HITL interrupt：批准/追问/驳回）
+```
+- **改造点**：DB 换 WAL+读写连接池（读并行、写串行）；工单 schema pydantic 化；每部门独立 thread_id 支持断点续跑；工作日志=事件流落库（前端可视化"部门工作实况"）
+- **卖相**：前端看板=部门工位图，agent 干活实时滚动——演示即传播（可视化战略联动）
+
+## 四、可视化战略（共识 4 · 增长引擎）
+原则：**图表先行，文字兜底；一句话结论永远在最上面**。
+- 分层呈现：①结论层（一句话+涨跌箭头）②图表层（趋势/占比/对比）③明细层（可展开表格）
+- **适老化模式**（中老年=财政大用户）：大字号档/高对比主题/关键数字 ≥20px/减少同屏信息密度/语音提问（语音输入已有底子）；"看不懂就问"按钮→自然语言解释当前图表
+- 图表栈：ECharts（中文生态/适老主题/无需 SSR）替换或封装现图表组件；懒加载图表库（dynamic import，首屏不载）
+- 可视化清单：净资产长周期曲线（主视图）/ 月度现金流瀑布 / 支出分类树图 / 订阅时间线 / 部门工作实况看板 / 财务健康五维雷达 / 预算进度环
+- 优化策略：图表数据后端预聚合（SQL 物化/缓存），不传明细到前端再算；空状态给引导示例
+
+## 五、多端矩阵（共识 3 · 后端之外的完整考虑）
+| 端 | 技术 | 要点 |
+|---|---|---|
+| Web/PWA | 现 React19+Vite | 代码分割+懒加载（Route-level code splitting）；SSE 断线 Last-Event-ID 重连；离线缓存账本只读视图 |
+| CLI | typer + rich | `xm add 午饭 28` / `xm report` / `xm agent run`；core 直调零网络；管道输出 JSON 供脚本化 |
+| 桌面 EXE | Tauri 2（复用 web 前端） | Windows/macOS/Linux 三产物；内嵌 server（sidecar）本地一键启动；自动更新（tauri updater）；体积目标 <30MB |
+| 云端形态 | 同一 server + Postgres 可选 | docker-compose 一键；多租户=现 JWT 体系扩展租户字段 |
+**共同工程点**：core 版本统一（monorepo+changesets）；三端同一套 MCP 工具协议（CLI/Tauri/云 API 都是 MCP client）；i18n 资源集中（zh/en 已有，结构保留）
+
+## 六、性能与体验优化策略清单（贯穿实施）
+- 后端：aiosqlite→连接池+WAL；查询分页默认化；行情 TTL 缓存（cachetools 已装）；mem.remember 移 to_thread；长会话摘要改增量
+- 前端：路由懒加载；虚拟滚动长列表（交易明细）；图表 dynamic import；SWR 缓存已有→补 stale-while-revalidate 策略；骨架屏替代转圈
+- 资产：图片/视频全部外链；构建产物 brotli；Service Worker 版本策略（现 bump-sw 保留）
+- 数据：账本>10万行基准测试入 CI（防性能回退）
+
+## 七、文档战略（共识 1 · 写得好才有人看）
+- 文档站：mkdocs-material，部署 GitHub Pages；结构：快速开始（5分钟）/ 自托管 / MCP 接入（三平台教程）/ 部门模式玩法 / 适老模式指南 / 架构决策记录（ADR）
+- 差异化写法：每个文档页开头 30 秒价值声明+截图；教程用真实微信/支付宝截图（打码）；对比表（vs ChatGPT/vs 钱迹/vs Actual）敢放
+- 仓库卫生：doc-fetch-resources 删除；README 收敛 2 份；docs/ 分区归档；视频外链
+- CHANGELOG 自动化 + 开发日志（学钱迹透明运营）
+
+## 八、实施里程碑（顺序即优先级）
+| 阶段 | 内容 | 产出 |
+|---|---|---|
+| M0 稳固（本周） | 修 3 P1 + mem 阻塞 + tiktoken 声明 + 仓库瘦身 | 干净基线 |
+| M1 模块化（1-2周） | core/server/mcp/cli 四包拆分，测试锁行为 | 可维护骨架 |
+| M2 协议补课（1周） | 工具全量 MCP+Streamable HTTP+Elicitation；AG-UI 映射；官方 saver | 生态就位 |
+| M3 部门模式（2-3周） | 工单分解/Send 并行/秘书汇总/呈批 HITL/实况看板 | 核心差异化上线 |
+| M4 多端（2周） | CLI 发布 + Tauri EXE 三平台 + semantic-release 自动发版 | 全端矩阵 |
+| M5 可视化+适老（2周） | ECharts 分层呈现 + 适老模式 + 图表问答 | 增长引擎 |
+| M6 文档站+获客（1周） | mkdocs 站 + MCP 教程三连 + Registry 上架 | 流量入口 |
+**依赖关系**：M0→M1→M2 串行；M3 依赖 M1；M4/M5 可与 M3 并行；M6 收尾。
+
+## 九、风险与应对
+| 风险 | 概率 | 应对 |
+|---|---|---|
+| 大拆分引入回归 | 高 | 测试先行锁行为（520 基线）+ 每步小提交 |
+| 并行 agent 撞库 | 中 | 读写连接池隔离 + 工单分域互斥 |
+| LLM 成本失控（部门模式多 agent） | 中 | 分级模型路由（LiteLLM 已备）+ 部门可配平价模型 + token 预算上限 |
+| OpenAI/大厂正面竞争 | 高 | 不拼通用问答，拼中国账单解析+自主闭环+可复核（第六节定位） |
+| x33834 令牌不可用 | 低 | CI 失败不阻塞（fail-fast=false），补权限后自动恢复 |
+| 中老年用户不会部署 | 中 | 云端形态代管 + 桌面 EXE 一键装 + 首次运行向导 |
+| 巨石拆分期间双端不一致 | 中 | core 单一实现，壳只做 IO，禁止复制逻辑 |
+
+## 十、验收口径（什么叫做成）
+1. 老板一句"盘一下上季度"，30 秒内出四部门汇总呈批件，数字全部带 provenance 可点开溯源
+2. 一个完全不懂技术的中老年人，EXE 装完→语音问"这个月钱花哪了"→图表+大字结论
+3. 外部 AI（Claude Code）通过 MCP 完成记账-查询-报表全流程
+4. `git push` 一次，五仓+Release 产物（EXE/DMG）全自动
