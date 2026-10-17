@@ -9,7 +9,8 @@ import json
 
 import httpx
 import pytest
-from app import llm
+from app import llm, vault
+from app.routes.settings import put_settings
 
 SSE_HEAD = {"content-type": "text/event-stream"}
 
@@ -243,14 +244,13 @@ async def test_empty_model_falls_back_to_default(monkeypatch) -> None:
 
 async def test_long_api_key_accepted(temp_db, monkeypatch) -> None:
     """长 key（>500 字，旧上限）可存：AI_KEY_MAX_LEN=2000 不报错。"""
-    from app import main, vault
     # vault 已通过 conftest VAULT_PASSPHRASE 初始化；若未激活则兜底初始化
     if not vault.is_active():
         vault.init_master_passphrase("test-passphrase-for-unit-tests-12345")
         vault.activate()
 
     long_key = "k" * 1500
-    r = await main.put_settings({"settings": {"ai_api_key": long_key, "ai_enabled": "on", "ai_base_url": "", "ai_model": ""}})
+    r = await put_settings({"settings": {"ai_api_key": long_key, "ai_enabled": "on", "ai_base_url": "", "ai_model": ""}})
     assert not r["errors"], r["errors"]
     # vault 激活后 ai_api_key 被加密存储，解密后应等于原始 key
     from app.vault import decrypt_secret
@@ -261,22 +261,21 @@ async def test_long_api_key_accepted(temp_db, monkeypatch) -> None:
 
 async def test_api_key_over_2000_rejected(temp_db, monkeypatch) -> None:
     """超长 key（>2000）拒绝，避免误存异常数据。"""
-    from app import main, vault
+    from app import vault
     if not vault.is_active():
         vault.init_master_passphrase("test-passphrase-for-unit-tests-12345")
         vault.activate()
 
-    r = await main.put_settings({"settings": {"ai_api_key": "k" * 2001}})
+    r = await put_settings({"settings": {"ai_api_key": "k" * 2001}})
     assert any("过长" in e for e in r["errors"])
     assert "ai_api_key" not in r["applied"]
 
 
 async def test_base_url_requires_http_prefix_when_set(temp_db) -> None:
     """填了 base_url 但没 http 前缀 → 报错；留空 → 通过。"""
-    from app import main
 
-    r1 = await main.put_settings({"settings": {"ai_base_url": "not-a-url"}})
+    r1 = await put_settings({"settings": {"ai_base_url": "not-a-url"}})
     assert any("http" in e for e in r1["errors"])
-    r2 = await main.put_settings({"settings": {"ai_base_url": ""}})
+    r2 = await put_settings({"settings": {"ai_base_url": ""}})
     assert not r2["errors"]
     assert r2["applied"]["ai_base_url"] == ""

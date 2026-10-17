@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 from app import db, llm, main, service, tools
+from app.routes.settings import put_settings
 
 
 @pytest.fixture(autouse=True)
@@ -129,11 +130,11 @@ async def test_model_catalog_and_defaults() -> None:
 
 async def test_enabled_models_validation(_temp_db) -> None:
     """put_settings 只收目录内合法模型；非法项报错不写入。"""
-    r = await main.put_settings({"settings": {"enabled_models": "deepseek-chat,gpt-4o-mini"}})
+    r = await put_settings({"settings": {"enabled_models": "deepseek-chat,gpt-4o-mini"}})
     assert not r["errors"], r["errors"]
     assert r["applied"]["enabled_models"] == "deepseek-chat,gpt-4o-mini"
 
-    r2 = await main.put_settings({"settings": {"enabled_models": "not-a-model"}})
+    r2 = await put_settings({"settings": {"enabled_models": "not-a-model"}})
     assert any("没有可用的模型" in e for e in r2["errors"])
     assert "enabled_models" not in r2["applied"]
 

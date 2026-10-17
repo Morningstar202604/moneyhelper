@@ -13,5 +13,7 @@ from .import_routes import router as import_router
 from .market import router as market_router
 from .members import router as members_router
 from .provenance import router as provenance_router
+from .settings import router as settings_router
 
-__all__ = ["budgets_router", "calculations_router", "debts_subs_router", "family_router", "goals_router", "import_router", "market_router", "members_router", "provenance_router"]
+__all__ = ["budgets_router", "calculations_router", "debts_subs_router", "family_router", "goals_router", "import_router", "market_router", "members_router", "provenance_router",
+           "settings_router"]

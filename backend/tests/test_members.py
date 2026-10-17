@@ -27,7 +27,7 @@ async def client(tmp_path, monkeypatch):
     """独立的临时数据库 + ASGI 客户端，每个测试函数全隔离。"""
     from app import db, main
 
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test_wealth.db")
+    monkeypatch.setattr(db._core, "DB_PATH", tmp_path / "test_wealth.db")
     # 强制重置 inited 标志，让 init_db 重新执行
     db._inited = False
     db._db = None

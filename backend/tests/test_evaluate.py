@@ -25,7 +25,7 @@ from app.evaluate import EvalItem
 
 @pytest.fixture(autouse=True)
 async def _temp_db(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "wealth.db")
+    monkeypatch.setattr(db._core, "DB_PATH", tmp_path / "wealth.db")
     await db.init_db()
     await db.reset_to_seed()
     yield
