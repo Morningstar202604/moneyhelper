@@ -44,6 +44,10 @@ Entries discovered by the Agent during task execution should follow this format:
     - github-x33834: https://github.com/X33834/xiaoman.git
   - 凭据已存入 /root/.git-platform-env（环境变量）、/root/.git-credentials（credential store）、/root/.netrc，权限 600
   - 注意：x33834 与 badhope 两个 GitHub 账号的 token 已失效（401），公开仓库可读但推送会失败；有效 token 为 Morningstar202604 的
+  - 推送避坑（2026-10-18 实测）：
+    - 环境注入的 credential helper（/app/agent/bin/agent git-credential-helper）对 GitHub 返回 500，GitHub 推送需用显式凭据 URL：git push "https://x-access-token:${GITHUB_TOKEN_MORNINGSTAR}@github.com/Morningstar202604/xiaoman.git" main（token 不回显到输出）
+    - gitee/gitcode 用远程名正常推送
+    - 重新克隆后远程名只有 origin，需重建：rename origin→gitee，add gitcode/github-morningstar/github-badhope/github-x33834；scripts/push-all.sh 里的远程名与实际拓扑已不符，勿直接使用
   - 2026-10-18 探测时 4 个平台同步在 ad8ce8a，仅 GitHub/X33834 落后在 fb06e72；克隆源为 gitee
   - 项目主目录：/workspace/xiaoman，推送时用 `git push <remote> main` 逐个推送
 
