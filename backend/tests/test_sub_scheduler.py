@@ -54,7 +54,7 @@ class _FixedDatetime:
 
 async def _reset_subs():
     """清空 subscriptions（避免 reset_to_seed() 的演示数据污染 due_day 测试）。"""
-    await db.fetch_all("DELETE FROM subscriptions")
+    await db.execute("DELETE FROM subscriptions")
 
 
 @pytest.mark.anyio

@@ -468,6 +468,27 @@ from .routes.settings import _mask_secret  # noqa: E402 — 与路由块同址�
 
 app.include_router(budgets_router)
 app.include_router(settings_router)
+
+# ---------------------------------------------------------------------------
+# M3 财务部门模式：一句话 → 工单分解 → 四部门并行 → 秘书呈批
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/department/run")
+async def department_run(payload: dict) -> dict:
+    """部门模式入口（JSON 版；SSE 实况看板事件流为下一迭代）。"""
+    from .department import run_department_mode
+
+    q = str((payload or {}).get("question", "")).strip()
+    if not q:
+        return JSONResponse({"error": "question 必填"}, status_code=400)
+    events: list[dict] = []
+
+    async def emit(e: dict) -> None:
+        events.append(e)
+
+    report = await run_department_mode(q, emit)
+    return {"report": report, "events": events}
 app.include_router(goals_router)
 app.include_router(debts_subs_router)
 app.include_router(market_router)

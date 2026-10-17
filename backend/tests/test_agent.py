@@ -156,7 +156,7 @@ def _reset(monkeypatch):
 
 async def test_tool_market_view_with_empty_positions(temp_db):
     # init_db 会播种示例数据；先清空持仓模拟"还没有持仓"
-    await db.fetch_all("DELETE FROM positions")
+    await db.execute("DELETE FROM positions")
     out = json.loads(await tools.tool_get_market_view({}))
     assert out["empty"] is True
 

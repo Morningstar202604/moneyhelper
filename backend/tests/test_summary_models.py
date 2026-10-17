@@ -201,7 +201,7 @@ async def test_memory_forget(_temp_db) -> None:
     # 手动把 last_used 改到很久以前
     import datetime as _dt
     old = (_dt.datetime.now().astimezone() - _dt.timedelta(days=400)).isoformat(timespec="seconds")
-    await db.fetch_all("UPDATE user_memory SET last_used=?", (old,))
+    await db.execute("UPDATE user_memory SET last_used=?", (old,))
     out = await db.forget_memory(180)
     assert out["deleted"] == 1
 

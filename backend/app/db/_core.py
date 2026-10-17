@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 from datetime import datetime
@@ -423,6 +424,8 @@ async def init_db() -> None:
     _db = await aiosqlite.connect(str(DB_PATH))
     _db.row_factory = aiosqlite.Row
     await _db.execute("PRAGMA journal_mode=WAL")
+    await _db.execute("PRAGMA busy_timeout=5000")
+    await _db.execute("PRAGMA synchronous=NORMAL")
     await _db.execute(
         "PRAGMA foreign_keys=ON"
     )  # SQLite 默认关外键；显式打开以启用 FK 约束/级联
@@ -486,11 +489,16 @@ async def _migrate_add_columns() -> None:
 
 
 async def close_db() -> None:
-    global _db, _inited
+    global _db, _inited, _read_conns
     if _db is not None:
         await _db.close()
     _db = None
     _inited = False
+    for c in _read_conns:
+        with_suppress = getattr(c, "close", None)
+        if with_suppress:
+            await c.close()
+    _read_conns = []
 
 
 async def _conn() -> aiosqlite.Connection:
@@ -615,6 +623,7 @@ async def _migrate_sessions_from_runs() -> None:
             " VALUES(?,?,?,?)",
             (r["thread_id"], str(r["question"])[:40] or "新会话", now, now),
         )
+    await conn.commit()  # M1.3：读池时代所有写路径必须真实提交，否则读池不可见
 
 
 async def reset_to_seed() -> dict[str, Any]:
@@ -648,18 +657,53 @@ async def reset_to_seed() -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 
+# 读连接池（M1.3）：WAL 下多读者并发，写仍走 _conn 单连接串行——
+# 部门模式（M3）多 agent 并行取数的地基。池在首次读取时惰性建连。
+_READ_POOL_SIZE = 3
+_read_conns: list[aiosqlite.Connection] = []
+_rr = 0
+_pool_lock = asyncio.Lock()
+
+
+async def _read_conn() -> aiosqlite.Connection:
+    """取一条读连接：池未满则建连（持锁防并发超建），满了轮询复用。仅供只读查询。"""
+    global _rr
+    async with _pool_lock:
+        if _db is None:
+            await init_db()
+        if len(_read_conns) < _READ_POOL_SIZE:
+            # mode=ro 物理只读：任何写语句打进读池都会立刻报错，而不是
+            # 开启隐式写事务持有 RESERVED 锁把写连接锁死（M1.3 实测教训）
+            c = await aiosqlite.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+            c.row_factory = aiosqlite.Row
+            await c.execute("PRAGMA busy_timeout=5000")
+            _read_conns.append(c)
+            return c
+        c = _read_conns[_rr % _READ_POOL_SIZE]
+        _rr += 1
+        return c
+
+
 async def fetch_all(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
-    conn = await _conn()
+    conn = await _read_conn()
     cur = await conn.execute(sql, params)
-    rows = await cur.fetchall()
+    try:
+        rows = await cur.fetchall()
+    finally:
+        await cur.close()  # 显式终结语句：游标悬挂会长期持有读锁（M1.3 教训）
     return [dict(r) for r in rows]
 
 
 async def fetch_one(sql: str, params: tuple = ()) -> aiosqlite.Row | None:
     """执行查询并返回单行结果（无匹配返回 None）。"""
-    conn = await _conn()
+    conn = await _read_conn()
     cur = await conn.execute(sql, params)
-    return await cur.fetchone()
+    try:
+        row = await cur.fetchone()
+        await cur.fetchall()  # 耗尽游标终结语句，释放读锁
+        return row
+    finally:
+        await cur.close()
 
 
 async def execute(sql: str, params: tuple = ()) -> None:

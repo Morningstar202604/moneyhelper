@@ -1081,7 +1081,7 @@ async def test_import_backup_roundtrip(client) -> None:
         await client.post("/api/portfolio/reset")  # 幂等：重播种后再删
         from app import db
 
-        await db.fetch_all(f"DELETE FROM {t}")
+        await db.execute(f"DELETE FROM {t}")
     await client.delete("/api/sessions/1")
 
     r = await client.post("/api/import/backup", json=backup)

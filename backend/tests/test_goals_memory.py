@@ -285,8 +285,8 @@ async def test_backup_roundtrip_covers_goals_memory(client) -> None:
     assert len(backup["goals"]) == 1 and len(backup["memory"]) == 1
 
     # 清空两表后恢复
-    await db.fetch_all("DELETE FROM goals")
-    await db.fetch_all("DELETE FROM user_memory")
+    await db.execute("DELETE FROM goals")
+    await db.execute("DELETE FROM user_memory")
     r = await client.post("/api/import/backup", json=backup)
     assert r.status_code == 200
     assert (await client.get("/api/goals")).json()["goals"][0]["pct"] == 20.0
@@ -319,7 +319,7 @@ async def test_health_check_empty_data_score(_temp_db, monkeypatch) -> None:
     monkeypatch.setattr(service.llm, "llm_available", _no_llm)
     # 清空全部业务数据（持仓/流水/负债/订阅/目标）
     for t in ("positions", "transactions", "debts", "subscriptions", "goals"):
-        await db.fetch_all(f"DELETE FROM {t}")
+        await db.execute(f"DELETE FROM {t}")
     _events, result = await _run_graph_collect(service.run_question, "帮我体检一下")
     assert "综合评分" not in result["answer"], "空库不应给出分数体检报告"
     report = analysis.health_check(None, None, [], [])
