@@ -42,16 +42,16 @@ async def test_single_entry_still_works(temp_db):
 
 # --- P2: 限流首请求计数 ---
 def test_rate_limit_counts_first_request(monkeypatch):
-    from app import main
+    from app import middleware as mw
 
-    monkeypatch.setattr(main, "_RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(mw, "_RATE_LIMIT_ENABLED", True)
     ip = "203.0.113.77"
-    main._rate_buckets.pop(ip, None)
-    ok1, _ = main._rate_limit_check(ip)
+    mw._rate_buckets.pop(ip, None)
+    ok1, _ = mw._rate_limit_check(ip)
     assert ok1 is True
     # 首个请求必须已计数：窗口内再打满 MAX-1 次即触发限流
-    for _ in range(main._RATE_LIMIT_MAX - 1):
-        ok, retry = main._rate_limit_check(ip)
+    for _ in range(mw._RATE_LIMIT_MAX - 1):
+        ok, retry = mw._rate_limit_check(ip)
     assert ok is False and retry >= 1
 
 

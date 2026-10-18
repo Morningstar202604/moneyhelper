@@ -1,0 +1,299 @@
+"""全局中间件栈：异常兜底 / 限流 / 鉴权 / Host 防护 / 安全响应头 / 观测计数 / 审计。
+
+从 main.py 拆出（M1.4）。注册顺序即原 main.py 定义顺序，执行语义不变：
+请求流向 audit_logger → metrics_counter → security_headers → host_guard →
+api_auth → CORS → rate_limiter → 路由（后注册者为外层）。
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import time
+from collections.abc import Coroutine
+from typing import Any
+from urllib.parse import urlsplit
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
+
+from . import db
+from .auth import verify_api_token
+from .logging_utils import get_logger as _get_logger
+
+log = _get_logger(__name__)
+
+# 跳过鉴权/限流的内部端点（health/health-check/metrics）统一枚举，避免三处不一致
+_SKIP_AUTH_PATHS = {
+    "/api/health",
+    "/api/health-check",
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/user-count",
+}
+
+# ---------------------------------------------------------------------------
+# 限流：in-memory 滑动窗口，按 IP 计数；单进程部署；多进程需换 Redis。
+# ---------------------------------------------------------------------------
+_RATE_LIMIT_ENABLED = not os.getenv("XIAOMAN_DISABLE_RATE_LIMIT")
+_RATE_LIMIT_MAX = 200  # 单 IP 每分钟上限
+_RATE_LIMIT_WINDOW = 60.0  # 窗口大小（秒）
+_rate_buckets: dict[str, list[float]] = {}
+_RATE_BUCKETS_CAP = 4096
+
+
+def _rate_limit_check(client_ip: str) -> tuple[bool, int]:
+    """返回 (是否放行, 0=放行 or 秒数=retry_after)。"""
+    if not _RATE_LIMIT_ENABLED:
+        return True, 0
+    now = time.time()
+    if len(_rate_buckets) > _RATE_BUCKETS_CAP:
+        cutoff = now - _RATE_LIMIT_WINDOW
+        for k in [k for k, v in _rate_buckets.items() if not v or v[-1] <= cutoff]:
+            _rate_buckets.pop(k, None)
+    bucket = _rate_buckets.setdefault(client_ip, [])
+    cutoff = now - _RATE_LIMIT_WINDOW
+    _rate_buckets[client_ip] = [t for t in bucket if t > cutoff]
+    bucket = _rate_buckets[client_ip]
+    # 先计数再判定：新 IP 首个请求也计入窗口（修复旧实现"首请求不计数"）
+    bucket.append(now)
+    if len(bucket) >= _RATE_LIMIT_MAX:
+        retry_after = int(bucket[0] + _RATE_LIMIT_WINDOW - now) + 1
+        return False, max(1, retry_after)
+    return True, 0
+
+
+async def rate_limiter_middleware(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/api/") and path not in _SKIP_AUTH_PATHS:
+        client = request.client
+        ip = client.host if client else "127.0.0.1"
+        ok, retry_after = _rate_limit_check(ip)
+        if not ok:
+            return JSONResponse(
+                {"error": "请求过于频繁，请稍后再试"},
+                status_code=429,
+                headers={
+                    "Retry-After": str(retry_after),
+                    "X-RateLimit-Limit": str(_RATE_LIMIT_MAX),
+                },
+            )
+    return await call_next(request)
+
+
+# fire-and-forget 后台任务持有集：防止 create_task 返回的 Task 在完成前被 GC
+# 取消（asyncio 只保留弱引用，无人持引用时任务可能静默失效）。
+_background_tasks: set[asyncio.Task[None]] = set()
+
+
+def spawn_background(coro: Coroutine[Any, Any, None]) -> None:
+    """登记后台任务并自动在完成时移除引用；登记失败不影响主流程。"""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+
+async def api_auth(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/api/") and path not in _SKIP_AUTH_PATHS:
+        key = os.getenv("API_TOKEN", "").strip()
+        # 鉴权逻辑共用 auth.verify_api_token（timing-safe 比对）
+        if key and verify_api_token(request) is None:
+            return JSONResponse({"error": "需要访问口令"}, status_code=401)
+    return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
+# 无口令模式的 Host/Origin 防护（DNS rebinding / 跨站读取）：
+# 未设 API_TOKEN 时仅放行本机与 ALLOWED_HOSTS 白名单；/api/health 恒免检；
+# 设了口令则以口令为准（反代部署不拦截）。注册在 api_auth 之后 = 更外层。
+# ---------------------------------------------------------------------------
+
+_LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1", "[::1]", "testserver"}
+
+
+def _hostname(value: str) -> str:
+    """剥离端口的主机名（支持 host:port 与 [v6]:port）。"""
+    v = (value or "").strip().lower()
+    if v.startswith("["):
+        return v.split("]", 1)[0] + "]"
+    return v.rsplit(":", 1)[0] if v.count(":") == 1 else v
+
+
+def _allowed_hosts() -> set[str]:
+    extra = {
+        h.strip().lower()
+        for h in os.getenv("ALLOWED_HOSTS", "").split(",")
+        if h.strip()
+    }
+    return _LOCAL_HOSTS | extra
+
+
+def _host_allowed(host: str, allowed: set[str]) -> bool:
+    """ALLOWED_HOSTS 含 * 时放行所有主机名（预览域名等不可枚举的场景）。"""
+    if "*" in allowed:
+        return True
+    return host in allowed
+
+
+async def host_guard(request: Request, call_next):
+    path = request.url.path
+    if (
+        path.startswith("/api/")
+        and path not in _SKIP_AUTH_PATHS
+        and not os.getenv("API_TOKEN", "").strip()
+    ):
+        allowed = _allowed_hosts()
+        host = _hostname(request.headers.get("host", ""))
+        if host and not _host_allowed(host, allowed):
+            return JSONResponse(
+                {
+                    "error": "不允许的 Host：未设置 API_TOKEN 时仅限本机/内网访问，"
+                    "如需按主机名部署请设置 ALLOWED_HOSTS 或 API_TOKEN"
+                },
+                status_code=403,
+            )
+        origin = request.headers.get("origin", "")
+        if origin:
+            oh = (urlsplit(origin).hostname or "").lower()
+            if oh and not _host_allowed(oh, allowed) and oh != host:
+                return JSONResponse({"error": "不允许的 Origin"}, status_code=403)
+    return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
+# 安全响应头：所有响应统一加固（防 MIME 嗅探 / 点击劫持 / 敏感来源泄露）
+# 用 setdefault 避免覆盖下游主动设置；不设 CSP，避免破坏 Vite 内联 module 与 echarts。
+# ---------------------------------------------------------------------------
+
+
+async def security_headers(request: Request, call_next):
+    resp = await call_next(request)
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    # 本机语音输入用麦克风（voice_input），故保留 microphone；其余能力收紧
+    resp.headers.setdefault(
+        "Permissions-Policy",
+        "camera=(), geolocation=(), payment=(), usb=(), microphone=(self)",
+    )
+    resp.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# 轻量观测：请求计数 / 错误 / 运行时长（Prometheus 文本格式，可直接被采集器抓取）
+# ---------------------------------------------------------------------------
+_START_TS = time.monotonic()
+METRICS: dict[str, int] = {"requests": 0, "errors": 0, "auth_401": 0, "messages": 0}
+
+
+async def metrics_counter(request: Request, call_next):
+    METRICS["requests"] += 1
+    resp = await call_next(request)
+    if resp.status_code >= 500:
+        METRICS["errors"] += 1
+    elif resp.status_code == 401:
+        METRICS["auth_401"] += 1
+    return resp
+
+
+def metrics_body() -> Response:
+    """渲染 Prometheus 文本格式（/api/metrics 用）。"""
+    body = "\n".join(
+        [
+            "# TYPE xiaoman_requests_total counter",
+            f"xiaoman_requests_total {METRICS['requests']}",
+            "# TYPE xiaoman_errors_total counter",
+            f"xiaoman_errors_total {METRICS['errors']}",
+            "# TYPE xiaoman_auth_401_total counter",
+            f"xiaoman_auth_401_total {METRICS['auth_401']}",
+            "# TYPE xiaoman_messages_total counter",
+            f"xiaoman_messages_total {METRICS['messages']}",
+            "# TYPE xiaoman_uptime_seconds gauge",
+            f"xiaoman_uptime_seconds {time.monotonic() - _START_TS:.1f}",
+            "",
+        ]
+    )
+    return Response(content=body, media_type="text/plain; version=0.0.4; charset=utf-8")
+
+
+# 注：messages 计数沿用原 main.py 行为——初始化并在 /api/metrics 导出，暂无递增点。
+
+
+# 审计日志（P2 金融级治理）：记录写操作与敏感读，便于追溯。
+# - 写类（非 GET /api/*）：统一审计，排除健康/指标/审计自身等低敏或自引用路径；
+# - 敏感读（导出、设置、备份相关）：单独标记 READ_SENSITIVE；
+# - 触发鉴权（401/403）：标记 AUTH。
+AUDIT_SKIP_PREFIXES = (
+    "/api/health",
+    "/api/metrics",
+    "/api/audit",
+    "/api/bootstrap",
+    "/api/dashboard",
+    "/api/quotes",
+    "/api/market",
+    "/api/kline",
+    "/api/reports",
+)
+AUDIT_SENSITIVE_READ = ("/api/export", "/api/settings", "/api/reflections")
+
+
+async def audit_logger(request: Request, call_next):
+    started = time.monotonic()
+    path = request.url.path
+    method = request.method
+    resp = await call_next(request)
+    if not path.startswith("/api/"):
+        return resp
+    duration_ms = int((time.monotonic() - started) * 1000)
+    try:
+        actor = (request.client.host if request.client else "") or ""
+        action = None
+        # 敏感读：导出/设置/口令
+        if method == "GET" and path in AUDIT_SENSITIVE_READ:
+            action = "READ_SENSITIVE"
+        elif method != "GET" and not path.startswith(AUDIT_SKIP_PREFIXES):
+            action = "WRITE"
+        elif resp.status_code == 401:
+            action = "AUTH"
+        if action:
+            await db.add_audit_log(
+                action=action,
+                method=method,
+                path=path,
+                status=resp.status_code,
+                actor=actor,
+                detail=f"{method} {path}",
+                duration_ms=duration_ms,
+            )
+    except Exception:  # noqa: BLE001 — 审计失败不影响请求
+        pass
+    return resp
+
+
+# 兼容别名：旧 main.py 内部曾以 _metrics_counter / _audit_logger 引用
+_metrics_counter = metrics_counter
+_audit_logger = audit_logger
+
+
+def setup(app: FastAPI) -> None:
+    """按原 main.py 定义顺序把全部中间件注册到 app（语义不变）。"""
+    app.middleware("http")(rate_limiter_middleware)
+
+    _dev_origins = {"http://127.0.0.1:5198", "http://localhost:5198"}
+    if os.getenv("CORS_ALLOW_ALL") == "1":  # 仅调试用
+        _dev_origins = None
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(_dev_origins) if _dev_origins is not None else ["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    app.middleware("http")(api_auth)
+    app.middleware("http")(host_guard)
+    app.middleware("http")(security_headers)
+    app.middleware("http")(metrics_counter)
+    app.middleware("http")(audit_logger)
