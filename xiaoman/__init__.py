@@ -20,6 +20,38 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 __version__ = "2.1.0"
+
+
+def _ensure_app_importable() -> None:
+    """让 `app.*`（既有实现）在任意工作目录下都能导入。
+
+    门面层通过 re-export 暴露 `app.*` 的实现，所以导入本包的前提是 `app` 可见。
+    源码运行（仓库内）时它就在 `backend/` 下；用 `pip install .` 安装后
+    `backend/` 可能不在 sys.path 中，这里按两种布局依次探测：
+
+    - 源码布局：<repo>/xiaoman/__init__.py  → <repo>/backend
+    - 安装布局：<site-packages>/xiaoman/__init__.py → 无 backend，需用户设 PYTHONPATH
+
+    探测失败不抛错：只影响 core/server 门面，`xiaoman.cli --help` 之类应仍可用。
+    """
+    if "app" in sys.modules:
+        return
+    candidates = [
+        Path(__file__).resolve().parent.parent / "backend",  # 源码布局
+        Path.cwd() / "backend",  # 从仓库根运行
+        Path.cwd(),  # 已在 backend/ 下运行
+    ]
+    for cand in candidates:
+        if (cand / "app" / "__init__.py").is_file():
+            if str(cand) not in sys.path:
+                sys.path.insert(0, str(cand))
+            return
+
+
+_ensure_app_importable()
 
 __all__ = ["__version__"]

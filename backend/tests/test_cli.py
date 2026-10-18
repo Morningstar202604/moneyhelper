@@ -104,3 +104,28 @@ def test_server_facade_exposes_same_app():
     from xiaoman.server import app as facade
 
     assert facade is legacy
+
+
+def test_facade_importable_from_any_cwd(tmp_path, monkeypatch):
+    """门面层必须在任意工作目录下可用（安装成命令后 cwd 不是仓库）。
+
+    xiaoman 包通过 re-export 暴露 app.* 的实现，所以导入前必须能定位 backend/。
+    此前只在仓库内可导入：`pip install -e .` 后在 /tmp 下执行 xiaoman CLI 会
+    直接 ModuleNotFoundError: No module named 'app'。
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    code = "import xiaoman, xiaoman.core, xiaoman.server; print(xiaoman.__version__)"
+    out = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=str(tmp_path),
+        capture_output=True,
+        text=True,
+        env={**__import__("os").environ, "PYTHONPATH": str(repo)},
+        timeout=120,
+    )
+    assert out.returncode == 0, out.stderr[-800:]
+    assert out.stdout.strip() == "2.1.0"
