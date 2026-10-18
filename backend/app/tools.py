@@ -21,7 +21,7 @@ from typing import Any
 
 import httpx
 
-from . import analysis, backup, db, nlparse, scheduler
+from . import analysis, backup, db, nlparse, scheduler, tool_schemas
 from .logging_utils import get_logger
 from .provenance import record_provenance
 from .quotes import invalidate_quotes_cache, quote_now
@@ -614,276 +614,66 @@ async def tool_record_position(args: dict[str, Any]) -> str:
 # 工具注册表：OpenAI function calling 的 JSON Schema + 执行体
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# 工具注册表：入参 schema 来自 tool_schemas.py（单一真源，M2.1）
+# ---------------------------------------------------------------------------
+#
+# 改造前这里是 270 行手写的 JSON Schema 字面量，与 mcp_server.py 的函数签名
+# 各自维护同一份额外真相，两份已经漂移。现在 schema 只在 tool_schemas.py
+# 定义一次，此处仅声明「哪些工具属于财务技能包」以及它们的描述文案。
+# 描述文案保留在这里而非模型里：它是给模型的调用指引，与参数定义是两件事。
+
+FINANCE_TOOL_NAMES: tuple[tuple[str, str], ...] = (
+    ("get_market_view",
+     "查询用户持仓组合：总市值、累计盈亏、前几大持仓、集中度告警。适合回答关于持仓、盈亏、资产、集中度的问题。"),
+    ("get_ledger_view",
+     "查询用户账本：本月收入、支出、结余、储蓄率、支出分类、订阅、负债、应急金。适合回答关于钱花到哪、结余、负债、应急金的问题。"),
+    ("get_risk_flags",
+     "运行风控规则：集中度超限、应急金不足、高息负债、负债收入比偏高、储蓄率偏低等告警。适合回答「我有什么风险」「哪里需要关注」。"),
+    ("get_budget",
+     "查询预算设置与实时使用情况。适合回答关于预算、超支、还剩多少钱能花的问题。"),
+    ("get_trend",
+     "查询近几个月收支趋势（收入/支出/结余）。适合回答「钱花得越来越多吗」「这个月和上个月比」等问题。"),
+    ("record_transaction",
+     "一句话记账：把用户的记账指令（如「昨天打车 32 元」「工资 8000 已到账」）解析并写入账本。仅当用户明确表达记账意图时调用。"),
+    ("get_kline",
+     "查询某标的的K线走势（A股/ETF）。适合回答「某只股票最近走势如何」。"),
+    ("get_goals",
+     "查询用户的财务目标：目标金额、已存金额、进度百分比、距截止月、建议月存。适合回答「我存够了吗」「目标进展如何」「还差多少」。"),
+    ("get_user_memory",
+     "查询用户的长期记忆：用户主动告知的长期信息（家庭、职业、偏好、未来计划等）。回答涉及用户背景或长期规划时先查记忆；可用 query 按关键词检索相关记忆，或用 kind 过滤类型（fact/preference/goal_related）。"),
+    ("save_user_memory",
+     "记住一条用户的长期信息（如「明年计划买房」「每月收入 2 万」「有一个孩子」）。当用户在对话中主动透露可用于未来的背景信息时调用；临时性、一次性信息不要记。"),
+    ("get_lessons",
+     "查询经验库：之前工具调用的踩坑记录（工具失败后反思时参考，避免重复犯同样的错误）。"),
+    ("get_health_check",
+     "跑一次结构化财务体检：资产配置 / 现金流 / 负债 / 应急金 / 目标进度 五个维度的评分与建议。适合回答「帮我体检一下」「我的财务状况怎么样」「哪里需要改进」。"),
+    ("search_symbol",
+     "搜索 A股/基金/指数（按代码或名称，如「茅台」「600519」）。用于用户想了解某只标的但不知道代码，或要先找到标的再决定看行情/加自选。"),
+    ("get_quote",
+     "查询单只标的实时行情：现价、涨跌幅、来源（东财/新浪）。适合「茅台现在多少钱」「今天涨了吗」等问题。"),
+    ("add_to_watchlist",
+     "把某只标的加入自选（用户表达「关注/盯一下/加自选」时调用）。成功后用户可在行情页自选 Tab 看到。"),
+    ("remove_from_watchlist",
+     "把某只标的自自选移除（用户表达「不看了/移除自选」时调用）。"),
+    ("get_watchlist",
+     "查询用户自选列表及其实时行情。适合「我的自选现在怎么样」「自选里谁涨了」。"),
+    ("record_position",
+     "记录一笔买入持仓（用户表达「买了/买入/建仓/补仓」并给出代码或名称与数量成本时调用）。成功后总览与持仓页自动更新。"),
+    ("sell_position",
+     "卖出/减仓持仓（用户表达「卖出/卖掉/清仓/减仓/抛售」并给出代码时调用；数量省略=全部清仓）。成功后持仓页自动更新。"),
+    ("trigger_morning_report",
+     "立即生成今日晨报（组合+账本+财务目标体检）。用户说「生成晨报/今日晨报/帮我体检」时调用。空库会提示先有数据。"),
+    ("backup_now",
+     "生成本地加密备份包（口令只显示一次）。用户说「备份/导出存档」时调用。"),
+    ("set_setting",
+     "修改应用偏好：涨跌颜色 color_scheme（cn 红涨绿跌 / us 绿涨红跌）、默认首页 default_tab（overview/holdings/market/ledger/chat）、语言 lang（zh/en）、数字格式 compact_numbers、快捷建议 show_suggestions（on/off）、晨报时间 morning_report_time（HH:MM）。"),
+)
+
 TOOLS: list[dict[str, Any]] = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_market_view",
-            "description": "查询用户持仓组合：总市值、累计盈亏、前几大持仓、集中度告警。适合回答关于持仓、盈亏、资产、集中度的问题。",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_ledger_view",
-            "description": "查询用户账本：本月收入、支出、结余、储蓄率、支出分类、订阅、负债、应急金。适合回答关于钱花到哪、结余、负债、应急金的问题。",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_risk_flags",
-            "description": "运行风控规则：集中度超限、应急金不足、高息负债、负债收入比偏高、储蓄率偏低等告警。适合回答「我有什么风险」「哪里需要关注」。",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_budget",
-            "description": "查询预算设置与实时使用情况。适合回答关于预算、超支、还剩多少钱能花的问题。",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "month": {
-                        "type": "string",
-                        "description": "月份 YYYY-MM，可省略（默认本月）",
-                    }
-                },
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_trend",
-            "description": "查询近几个月收支趋势（收入/支出/结余）。适合回答「钱花得越来越多吗」「这个月和上个月比」等问题。",
-            "parameters": {
-                "type": "object",
-                "properties": {"months": {"type": "integer", "description": "月份数 1-24，默认 6"}},
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "record_transaction",
-            "description": "一句话记账：把用户的记账指令（如「昨天打车 32 元」「工资 8000 已到账」）解析并写入账本。仅当用户明确表达记账意图时调用。",
-            "parameters": {
-                "type": "object",
-                "properties": {"text": {"type": "string", "description": "用户原话"}},
-                "required": ["text"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_kline",
-            "description": "查询某标的的K线走势（A股/ETF）。适合回答「某只股票最近走势如何」。",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "symbol": {"type": "string", "description": "6位证券代码，如 600519"},
-                    "period": {"type": "string", "enum": ["daily", "weekly", "monthly"]},
-                    "limit": {"type": "integer", "description": "返回点数，默认 60"},
-                },
-                "required": ["symbol"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_goals",
-            "description": "查询用户的财务目标：目标金额、已存金额、进度百分比、距截止月、建议月存。适合回答「我存够了吗」「目标进展如何」「还差多少」。",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_user_memory",
-            "description": "查询用户的长期记忆：用户主动告知的长期信息（家庭、职业、偏好、未来计划等）。回答涉及用户背景或长期规划时先查记忆；可用 query 按关键词检索相关记忆，或用 kind 过滤类型（fact/preference/goal_related）。",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "检索关键词（可选）：返回与该话题相关的记忆"},
-                    "kind": {"type": "string", "description": "按类型过滤（可选）：fact / preference / goal_related"},
-                },
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "save_user_memory",
-            "description": "记住一条用户的长期信息（如「明年计划买房」「每月收入 2 万」「有一个孩子」）。当用户在对话中主动透露可用于未来的背景信息时调用；临时性、一次性信息不要记。",
-            "parameters": {
-                "type": "object",
-                "properties": {"content": {"type": "string", "description": "要记住的内容（一句话，含具体事实）"}},
-                "required": ["content"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_lessons",
-            "description": "查询经验库：之前工具调用的踩坑记录（工具失败后反思时参考，避免重复犯同样的错误）。",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_health_check",
-            "description": "跑一次结构化财务体检：资产配置 / 现金流 / 负债 / 应急金 / 目标进度 五个维度的评分与建议。适合回答「帮我体检一下」「我的财务状况怎么样」「哪里需要改进」。",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_symbol",
-            "description": "搜索 A股/基金/指数（按代码或名称，如「茅台」「600519」）。用于用户想了解某只标的但不知道代码，或要先找到标的再决定看行情/加自选。",
-            "parameters": {
-                "type": "object",
-                "properties": {"query": {"type": "string", "description": "搜索关键词，代码或名称"}},
-                "required": ["query"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_quote",
-            "description": "查询单只标的实时行情：现价、涨跌幅、来源（东财/新浪）。适合「茅台现在多少钱」「今天涨了吗」等问题。",
-            "parameters": {
-                "type": "object",
-                "properties": {"symbol": {"type": "string", "description": "6 位代码，如 600519"}},
-                "required": ["symbol"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "add_to_watchlist",
-            "description": "把某只标的加入自选（用户表达「关注/盯一下/加自选」时调用）。成功后用户可在行情页自选 Tab 看到。",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "symbol": {"type": "string", "description": "6 位代码"},
-                    "name": {"type": "string", "description": "标的名称（可省略，自动获取）"},
-                    "kind": {"type": "string", "description": "股票/基金/指数"},
-                },
-                "required": ["symbol"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "remove_from_watchlist",
-            "description": "把某只标的自自选移除（用户表达「不看了/移除自选」时调用）。",
-            "parameters": {
-                "type": "object",
-                "properties": {"symbol": {"type": "string", "description": "6 位代码"}},
-                "required": ["symbol"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_watchlist",
-            "description": "查询用户自选列表及其实时行情。适合「我的自选现在怎么样」「自选里谁涨了」。",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "record_position",
-            "description": "记录一笔买入持仓（用户表达「买了/买入/建仓/补仓」并给出代码或名称与数量成本时调用）。成功后总览与持仓页自动更新。",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "symbol": {"type": "string", "description": "6 位代码"},
-                    "name": {"type": "string", "description": "名称（可省略，自动获取）"},
-                    "kind": {"type": "string", "description": "股票/基金/ETF"},
-                    "shares": {"type": "number", "description": "份额/股数"},
-                    "cost": {"type": "number", "description": "成本价（买入价）"},
-                    "last": {"type": "number", "description": "现价（可省略，自动获取）"},
-                    "buy_date": {"type": "string", "description": "买入日期 YYYY-MM-DD，可省略默认今天"},
-                },
-                "required": ["symbol", "shares", "cost"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "sell_position",
-            "description": "卖出/减仓持仓（用户表达「卖出/卖掉/清仓/减仓/抛售」并给出代码时调用；数量省略=全部清仓）。成功后持仓页自动更新。",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "symbol": {"type": "string", "description": "6 位代码"},
-                    "shares": {"type": "number", "description": "卖出份额/股数（省略=清仓全部）"},
-                },
-                "required": ["symbol"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "trigger_morning_report",
-            "description": "立即生成今日晨报（组合+账本+财务目标体检）。用户说「生成晨报/今日晨报/帮我体检」时调用。空库会提示先有数据。",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "backup_now",
-            "description": "生成本地加密备份包（口令只显示一次）。用户说「备份/导出存档」时调用。",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "set_setting",
-            "description": "修改应用偏好：涨跌颜色 color_scheme（cn 红涨绿跌 / us 绿涨红跌）、默认首页 default_tab（overview/holdings/market/ledger/chat）、语言 lang（zh/en）、数字格式 compact_numbers、快捷建议 show_suggestions（on/off）、晨报时间 morning_report_time（HH:MM）。",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "key": {"type": "string", "description": "设置键名，见工具描述"},
-                    "value": {"type": "string", "description": "设置值，见工具描述"},
-                },
-                "required": ["key", "value"],
-                "additionalProperties": False,
-            },
-        },
-    },
+    tool_schemas.function_schema(name, desc) for name, desc in FINANCE_TOOL_NAMES
 ]
+
 
 TOOL_IMPL: dict[str, Any] = {
     "get_market_view": tool_get_market_view,
@@ -993,14 +783,18 @@ async def tool_web_search(args: dict[str, Any]) -> str:
 
 # 通用技能包：领域无关工具（时间 / 联网搜索），供 general（非财务）分支装配，
 # 让「通用 Agent 内核」不依赖任何财务能力 —— 这是「先 Agent、后财务」的落点。
-GENERAL_TOOLS: list[dict[str, Any]] = [
-    _fn("get_now", "查询当前日期与时间（服务器本地时区）。适合回答「今天几号」「现在几点」等时间问题。"),
-    _fn(
+GENERAL_TOOL_NAMES: tuple[tuple[str, str], ...] = (
+    (
+        "get_now",
+        "查询当前日期与时间（服务器本地时区）。适合回答「今天几号」「现在几点」等时间问题。",
+    ),
+    (
         "web_search",
         "联网搜索，返回相关结果标题。适合回答最新新闻、时事、科普等需要外部信息的问题。",
-        properties={"q": {"type": "string", "description": "搜索关键词"}},
-        required=["q"],
     ),
+)
+GENERAL_TOOLS: list[dict[str, Any]] = [
+    tool_schemas.function_schema(name, desc) for name, desc in GENERAL_TOOL_NAMES
 ]
 GENERAL_IMPL: dict[str, Any] = {"get_now": tool_get_now, "web_search": tool_web_search}
 

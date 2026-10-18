@@ -48,16 +48,16 @@
 | `context.py` | 86 | 4 | 0 | 上下文工程 —— 用 tiktoken（OpenAI 官方）精确管理上下文窗口。 |
 | `csvimport.py` | 175 | 8 | 0 | 账单 CSV 解析与列映射：解析常见平台导出格式（微信/支付宝/银行 CSV、Excel 另存的 UTF-8 CSV）。 |
 | `db/__init__.py` | 276 | 0 | 0 | db 门面：保持 `from . import db` / `db.X` 旧用法 100% 兼容（M1 拆分，见 docs/PLAN-DETAILED.md M |
-| `db/_core.py` | 471 | 29 | 0 | 组合库 + 运行历史持久化（aiosqlite，单连接串行，不阻塞事件循环）。 |
+| `db/_core.py` | 490 | 30 | 0 | 组合库 + 运行历史持久化（aiosqlite，单连接串行，不阻塞事件循环）。 |
 | `db/_schema.py` | 341 | 0 | 0 | 数据库 schema 与种子数据（从 _core.py 拆出）。 |
 | `db/audit.py` | 116 | 7 | 0 | 审计与附件域：审计日志 + 附件元数据。 |
-| `db/backup.py` | 226 | 4 | 0 | 数据可移植域：全量导出/导入/月度趋势。 |
+| `db/backup.py` | 237 | 5 | 0 | 数据可移植域：全量导出/导入/月度趋势。 |
 | `db/budgets.py` | 130 | 5 | 0 | 预算域：月度预算设置与用量统计。 |
 | `db/debts.py` | 96 | 4 | 0 | 负债与订阅域。 |
 | `db/family.py` | 296 | 13 | 0 | 家庭域：成员/成员间借贷/家庭汇总。 |
 | `db/goals.py` | 103 | 4 | 0 | 财务目标域 CRUD。 |
 | `db/history.py` | 410 | 23 | 0 | 历史域：问答 runs/会话 sessions/会话摘要/待确认动作。 |
-| `db/ledger.py` | 318 | 5 | 0 | 流水域：入账（单笔/批量原子）/改删/合并。 |
+| `db/ledger.py` | 319 | 5 | 0 | 流水域：入账（单笔/批量原子）/改删/合并。 |
 | `db/memory.py` | 242 | 14 | 0 | 记忆域：user_memory + reflections。 |
 | `db/portfolio.py` | 241 | 8 | 0 | 持仓域：持仓 CRUD/合并 + 自选股。 |
 | `db/undo.py` | 227 | 6 | 0 | 撤销域：快照记录/恢复/应用（供 main 的 undo 端点与各写入口使用）。 |
@@ -73,7 +73,7 @@
 | `logging_utils.py` | 118 | 6 | 1 | 统一日志：RotatingFileHandler 落 backend/logs/xiaoman.log，控制台输出。 |
 | `main.py` | 222 | 7 | 0 | FastAPI 入口（薄装配层，M1.4 拆分后）：中间件注册 + 路由装配 + lifespan + 静态托管。 |
 | `mcp_client.py` | 161 | 8 | 0 | MCP 客户端：基于官方 `mcp` SDK（StreamableHTTP 传输），不自研协议实现。 |
-| `mcp_server.py` | 527 | 45 | 2 | MCP Server：把小满所有工具暴露为标准 MCP 协议。 |
+| `mcp_server.py` | 569 | 46 | 2 | MCP Server：把小满所有工具暴露为标准 MCP 协议。 |
 | `mem.py` | 149 | 8 | 0 | 长记忆层 —— 接 mem0（2026 年 local-first 首选）。 |
 | `middleware.py` | 330 | 14 | 0 | 全局中间件栈：异常兜底 / 限流 / 鉴权 / Host 防护 / 安全响应头 / 观测计数 / 审计。 |
 | `nlparse.py` | 323 | 8 | 0 | 自然语言记账解析：规则引擎优先（本地秒回），AI 兜底（歧义/未知分类）。 |
@@ -108,7 +108,8 @@
 | `scheduler.py` | 419 | 18 | 0 | 定时任务（APScheduler）：每日晨报 + 订阅到期巡检。 |
 | `service.py` | 821 | 20 | 0 | 问答服务：把用户的提问跑成一份可复核的财务回答。 |
 | `settings_rules.py` | 41 | 3 | 0 | tx_rules 的 settings 表读写：把规则 JSON 序列化后存到 settings 表的 "tx_rules" key。 |
-| `tools.py` | 1300 | 33 | 0 | Agent 工具层：把确定性分析内核暴露成 LLM 可调用的工具（function calling）。 |
+| `tool_schemas.py` | 308 | 3 | 32 | 工具入参的 pydantic 模型 —— schema 的单一真源（M2.1）。 |
+| `tools.py` | 1094 | 33 | 0 | Agent 工具层：把确定性分析内核暴露成 LLM 可调用的工具（function calling）。 |
 | `vault.py` | 145 | 10 | 0 | 加密密钥管理系统：DB 内敏感字段加密存储。 |
 
-合计 80 个文件、18977 行。
+合计 81 个文件、19152 行。
