@@ -1,0 +1,6 @@
+# 文档站依赖（mkdocs-material）
+# 安装：pip install -r docs/requirements.txt
+# 预览：mkdocs serve
+# 构建：mkdocs build --strict
+mkdocs-material>=9.5,<10
+pymdown-extensions>=10.0,<11

@@ -1,20 +1,85 @@
-# 小满文档站（mkdocs-material）— 本地预览: pip install mkdocs-material && mkdocs serve
+# 小满文档站（mkdocs-material）
+#
+# 本地预览：
+#   pip install -r docs/requirements.txt
+#   mkdocs serve            # http://127.0.0.1:8000
+# 构建静态站：
+#   mkdocs build --strict   # 严格模式：任何坏链/缺文件即失败
+
 site_name: Xiaoman 小满
 site_description: 能自主干活的 AI 财务部门 — 本地优先、数字可复核、全 MCP 开放
+site_url: https://badhope.github.io/xiaoman/
 repo_url: https://github.com/badhope/xiaoman
+repo_name: badhope/xiaoman
+
 theme:
   name: material
   language: zh
-  features: [navigation.top, navigation.sections, content.code.copy]
+  features:
+    - navigation.top
+    - navigation.sections
+    - navigation.indexes
+    - navigation.tracking
+    - content.code.copy
+    - content.code.annotate
+    - search.suggest
+    - search.highlight
+    - toc.follow
+  palette:
+    # 跟随系统深浅色：文档站不该强迫读者在两个主题里做选择
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: 切换深色
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: 切换浅色
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search:
+      lang:
+        - zh
+        - en
+
 nav:
   - 首页: index.md
+  - 文档地图: doc-map.md
   - 快速开始: quickstart.md
-  - 自托管: self-host.md
+  - 自托管部署: self-host.md
+  - 命令行: cli.md
   - MCP 接入: mcp-guide.md
-  - 架构图: architecture.md
-  - 架构决策: adr/index.md
-  - 规划与调研存档: planning/08-总体规划-完整版.md
-  - 路线图: ROADMAP-v3.md
-  - 详细计划: PLAN-DETAILED.md
-  - 差异化: DIFFERENTIATION.md
-  - 代码审查: REVIEW-FINDINGS.md
+  - 架构:
+      - 架构总览: architecture.md
+      - 架构决策记录: adr/index.md
+  - 路线图:
+      - 路线图: ROADMAP-v3.md
+      - 详细计划: PLAN-DETAILED.md
+      - 差异化: DIFFERENTIATION.md
+      - 总体规划（存档）: planning/08-总体规划-完整版.md
+  - 质量:
+      - 代码审查发现: REVIEW-FINDINGS.md
+
+# 严格构建：nav 里写错文件名会直接失败，避免文档站悄悄缺页
+strict: true

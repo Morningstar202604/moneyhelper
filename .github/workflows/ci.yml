@@ -22,7 +22,9 @@ jobs:
       - name: 安装依赖
         run: pip install -q -r backend/requirements.txt
       - name: 静态检查（ruff）
-        run: cd backend && python -m ruff check app tests
+        run: |
+          cd backend && python -m ruff check app tests
+          cd .. && python -m ruff check xiaoman
       - name: 单元测试（pytest）
         env:
           XIAOMAN_DISABLE_RATE_LIMIT: "1"
@@ -46,3 +48,24 @@ jobs:
         run: cd frontend && npx vitest run
       - name: 构建验证
         run: cd frontend && npx vite build
+
+  hygiene:
+    # 仓库卫生：防止大文件与文档站坏链把仓库体积/信任度慢慢蛀空。
+    # 阈值 1MB：本项目最大的单文件是图标（0.4MB），超过 1MB 基本是误提交的
+    # 二进制/数据集/构建产物。
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 检查大文件（>1MB）
+        run: |
+          bad=$(git ls-files -z | xargs -0 -I{} sh -c 'test -f "{}" && s=$(stat -c%s "{}") && [ "$s" -gt 1048576 ] && echo "$s {}"' | sort -rn || true)
+          if [ -n "$bad" ]; then
+            echo "以下文件超过 1MB，请改用外链或移出仓库："
+            echo "$bad"
+            exit 1
+          fi
+          echo "无超大文件"
+      - name: 文档站严格构建（坏链即失败）
+        run: |
+          pip install -q -r docs/requirements.txt
+          mkdocs build --strict

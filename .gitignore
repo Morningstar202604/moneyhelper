@@ -1,5 +1,7 @@
 # 依赖与产物
 backend/.venv/
+# 文档站构建产物
+site/
 backend/__pycache__/
 **/__pycache__/
 frontend/node_modules/
