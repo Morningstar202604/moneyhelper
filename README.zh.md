@@ -157,6 +157,7 @@ docs/                部署 / 配置 / 工作流 / 架构 / 规划文档（见�
 | [命令行](docs/cli.md) | `xiaoman add / ls / report / balance / ask`，离线优先，本地与远程同一套命令 |
 | [模块清单](docs/module-map.md) | 每个后端模块的体量、结构与职责 |
 | [开发指南](docs/DEVELOPMENT.md) | 代码地图 + 加工具/加设置教程 + 发布流程（[英](docs/DEVELOPMENT.en.md)） |
+| [实施进度](docs/PROGRESS.md) | 已完成/剩余一页看清 |
 | [路线图](docs/ROADMAP-v3.md) | v3 方向 → [详细计划](docs/PLAN-DETAILED.md) |
 | [规划归档](docs/planning/) | 审查报告 / 差异化分析 / 调研等十份文档 |
 | [变更日志](CHANGELOG.md) | 完整版本历史 |

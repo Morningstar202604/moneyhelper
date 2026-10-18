@@ -151,6 +151,7 @@ docs/                Deploy / config / workflow / architecture / planning
 | [CLI](docs/cli.md) | `xiaoman add / ls / report / balance / ask` — offline-first, same commands in local or remote mode |
 | [Module map](docs/module-map.md) | Every backend module: size, structure, responsibility |
 | [Development guide](docs/DEVELOPMENT.en.md) | Code map + add-tool/setting tutorials + release flow ([中文](docs/DEVELOPMENT.md)) |
+| [Progress](docs/PROGRESS.md) | What is done, what is left, in one page |
 | [Roadmap](docs/ROADMAP-v3.md) | v3 direction → [detailed plan](docs/PLAN-DETAILED.md) |
 | [Planning archive](docs/planning/) | Reviews / differentiation / research docs |
 | [Changelog](CHANGELOG.md) | Full version history |

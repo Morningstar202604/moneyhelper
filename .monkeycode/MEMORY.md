@@ -62,3 +62,22 @@ Entries discovered by the Agent during task execution should follow this format:
   - 技术栈：backend = Python FastAPI + LangGraph 多 Agent（supervisor/bookkeeping/portfolio）+ SQLite 本地存储 + LiteLLM 多模型接入 + MCP Server（fastmcp）；frontend = React 19 + Vite + shadcn/ui + TanStack Table
   - 关键特性：数据 100% 本地、确定性引擎算账（模型只分类不碰数字）、SSE 流式、PWA、Arize Phoenix 可观测、mem0 记忆
   - 文档集中在 docs/（ARCHITECTURE-v2.md、PLAN-DETAILED.md、ROADMAP-v3.md 等）
+
+[进度真源：docs/PROGRESS.md]
+- Date: 2026-10-18
+- Context: 用户询问"到底还有多少没做"，并要求处理上下文、砍掉多余部分、以后不用再读规划文档
+- Category: Workflow & Collaboration
+- Instructions:
+  - 任何"还剩什么/做到哪了"的问题，只读 `docs/PROGRESS.md`，不要回头读 `docs/PLAN-DETAILED.md` 或 `docs/planning/` 下的规划文档
+  - 每完成一个里程碑必须更新 PROGRESS.md 的状态表与变更记录，保持它是唯一进度真源
+  - 规划文档只在需要"某一步的具体做法"时查阅，不用于判断进度
+  - 重复文档已清理：`docs/planning/10-详细实施计划-步骤版.md` 与 `docs/PLAN-DETAILED.md` 曾逐字重复（仅测试数不同），存档已删除
+
+[环境：磁盘与缓存维护]
+- Date: 2026-10-18
+- Context: 磁盘 20G 长期处于 91% 占用，多次因 pip/uv 缓存积压触发 No space left on device
+- Category: Environment Configuration
+- Instructions:
+  - 可用空间约 1.9G，装依赖优先用 `backend/.venv/bin/uv pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple`
+  - 定期清理：`.ruff_cache`、`backend/.pytest_cache`、`frontend/test-results`、项目内 `__pycache__`（都不入库，已写进 .gitignore）
+  - 全局缓存 `~/.cache/uv`（629M）与 `~/.cache/ms-playwright`（658M）按需保留，不要盲目删——重装成本高
