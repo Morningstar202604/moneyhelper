@@ -239,6 +239,14 @@ async def test_self_mcp_end_to_end(xiaoman_mcp_up, temp_db) -> None:
         assert r.status_code == 200, f"/mcp 无斜杠不可用：{r.status_code}"
         assert "protocolVersion" in r.text
 
+        # 注意：elicitation 是**客户端**能力（ClientCapabilities.elicitation），
+        # 服务端 ServerCapabilities 里没有这个字段。所以这里只断言服务端
+        # 正常完成了握手；审批能否弹出取决于客户端是否声明支持，
+        # 不支持的客户端在 _confirm_write 里 fail-closed。
+        data_line = next(ln for ln in r.text.splitlines() if ln.startswith("data:"))
+        caps = json.loads(data_line[len("data:"):].strip())["result"]["capabilities"]
+        assert "tools" in caps
+
     # 4) 三件套：查询 → 记账 → 再查询
     before = json.loads(await mcp_client.call_mcp_tool("self", "get_ledger_view", {}))
     assert "expense" in before

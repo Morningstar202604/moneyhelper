@@ -29,7 +29,7 @@ log = get_logger(__name__)
 
 # MCP Server：fastmcp 版本与 FastAPI 版本可能冲突，import 失败就降级 no-op
 try:
-    from fastmcp import FastMCP
+    from fastmcp import Context, FastMCP
     mcp = FastMCP("xiaoman-finance")
     MCP_AVAILABLE = True
 except Exception as e:  # pragma: no cover
@@ -139,22 +139,91 @@ async def get_watchlist() -> str:
     return await xtools.tool_get_watchlist({})
 
 
+
+# ---------------------------------------------------------------------------
+# 写操作审批（M2.3）：MCP 侧的 elicitation 门禁
+# ---------------------------------------------------------------------------
+#
+# 改造前 MCP 的写工具完全没有审批：任何接入的 MCP 客户端都能直接改账本，
+# 与大额阈值（Web 对话里 >5000 元要确认）完全脱节。MCP 规范提供
+# elicitation（服务端向客户端请求用户输入），正好承载这个语义：
+#
+#   Web 对话：超阈值 → route=nl_pending，问「确认/取消」
+#   MCP     ：超阈值 → ctx.elicit(...)，客户端弹表单，用户点接受/拒绝
+#
+# 两条路径共用 approval.threshold 与 approval.format_approval_prompt，
+# 保证"什么算大额"和"怎么问"一致。
+#
+# 客户端不支持 elicitation 时（老客户端 / 无 UI 的自动化场景）必须 **拒绝执行**，
+# 而不是静默放行——审批是安全网，宁可失败也不能悄悄写入。
+
+
+async def _confirm_write(ctx: Any, summary: str, amount: float) -> bool:
+    """向客户端请求大额写操作确认；返回 True 表示用户同意。
+
+    非大额直接返回 True（不打扰用户）；客户端不支持 elicitation 时返回 False
+    （fail-closed）。
+    """
+    from . import approval
+
+    if not await approval.needs_approval(amount):
+        return True
+    if ctx is None:
+        log.warning("mcp.approval_no_context: 大额写操作缺少 Context，拒绝执行")
+        return False
+
+    from fastmcp.server.elicitation import (
+        AcceptedElicitation,
+        CancelledElicitation,
+        DeclinedElicitation,
+    )
+
+    try:
+        result = await ctx.elicit(approval.format_approval_prompt(summary, amount))
+    except Exception as exc:  # noqa: BLE001 — 客户端不支持 elicitation 等
+        log.warning("mcp.approval_failed: %s — 拒绝执行写操作", exc)
+        return False
+
+    if isinstance(result, AcceptedElicitation):
+        return True
+    if isinstance(result, (DeclinedElicitation, CancelledElicitation)):
+        return False
+    return False
+
+
 # ---------------------------------------------------------------------------
 # 记账 / 记忆工具
 # ---------------------------------------------------------------------------
 
 
 @mcp.tool()
-async def record_transaction(text: str) -> str:
-    """一句话记账：把用户的记账指令（如「昨天打车 32」「工资 8000 已到账」）解析并写入账本。"""
+async def record_transaction(text: str, ctx: Context | None = None) -> str:
+    """一句话记账：把用户的记账指令（如「昨天打车 32」「工资 8000 已到账」）解析并写入账本。
+    金额超过审批阈值时会先请用户确认。"""
+    from . import nlparse
+
+    parsed = nlparse.parse(text) or await nlparse.parse_with_ai(text)
+    if parsed is None:
+        # 交给底层实现给出统一的解析失败提示
+        return await xtools.tool_record_transaction({"text": text})
+    from . import approval
+
+    summary = approval.describe_transaction(parsed)
+    if not await _confirm_write(ctx, summary, float(parsed.get("amount", 0))):
+        return "已取消：用户未确认这笔大额记账，账本未改动。"
     return await xtools.tool_record_transaction({"text": text})
 
 
 @mcp.tool()
 async def record_position(symbol: str, shares: float, cost: float, last: float = 0,
                           name: str = "", kind: str = "股票", industry: str = "其他",
-                          buy_date: str = "") -> str:
-    """记录一笔买入持仓。symbol=代码(6位), shares=份额, cost=成本价, last=现价(自动获取可省略)。"""
+                          buy_date: str = "", ctx: Context | None = None) -> str:
+    """记录一笔买入持仓。symbol=代码(6位), shares=份额, cost=成本价, last=现价(自动获取可省略)。
+    买入金额超过审批阈值时会先请用户确认。"""
+    amount = float(shares or 0) * float(cost or 0)
+    summary = f"买入 {name or symbol} {shares:g} 份 × {cost:g} 元"
+    if not await _confirm_write(ctx, summary, amount):
+        return "已取消：用户未确认这笔大额买入，持仓未改动。"
     return await xtools.tool_record_position({
         "symbol": symbol, "shares": shares, "cost": cost, "last": last,
         "name": name, "kind": kind, "industry": industry, "buy_date": buy_date,
@@ -162,8 +231,21 @@ async def record_position(symbol: str, shares: float, cost: float, last: float =
 
 
 @mcp.tool()
-async def sell_position(symbol: str, shares: float = 0) -> str:
-    """卖出/减仓持仓。symbol=代码, shares=份额(省略=全部清仓)。"""
+async def sell_position(symbol: str, shares: float = 0, ctx: Context | None = None) -> str:
+    """卖出/减仓持仓。symbol=代码, shares=份额(省略=全部清仓)。
+    卖出金额超过审批阈值时会先请用户确认。"""
+    # 卖出金额 = 份额 × 现价；现价取不到时按 0 处理（不触发审批，但底层会拒绝无现价卖出）
+    try:
+        from .quotes import quote_now
+
+        q = await quote_now(symbol)
+        price = float((q or {}).get("price") or 0)
+    except Exception:  # noqa: BLE001 — 行情不可用不影响审批判定的降级
+        price = 0.0
+    amount = float(shares or 0) * price
+    summary = f"卖出 {symbol} {shares:g} 份" if shares else f"清仓 {symbol}"
+    if not await _confirm_write(ctx, summary, amount):
+        return "已取消：用户未确认这笔大额卖出，持仓未改动。"
     return await xtools.tool_sell_position({"symbol": symbol, "shares": shares})
 
 

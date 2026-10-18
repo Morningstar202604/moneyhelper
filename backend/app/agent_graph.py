@@ -462,17 +462,31 @@ async def record(state: AgentState) -> dict[str, Any]:
     )
     amount = abs(float(breach.get("amount", 0)))
 
-    # 大额审批：任一段 >5000 元先确认
-    if amount > 5000 and not confirm:
+    # 大额审批：任一段超阈值先确认（阈值与 MCP 侧共用 approval.threshold）
+    from . import approval
+
+    if amount > await approval.threshold() and not confirm:
         direction = "收入" if float(breach.get("amount", 0)) > 0 else "支出"
         extra = (
             f"，本句共 {len(segments)} 笔，确认后一起入账" if len(segments) > 1 else ""
         )
-        answer = (
-            f"这笔{direction} {amount:,.0f} 元金额较大，确认要记吗？\n\n"
-            f"记的是：{breach.get('item', '未命名')}（{breach.get('category', '其他')}）{extra}\n"
-            f"回复「确认」就入账，回复「取消」就不记。"
-        )
+        lang = state.get("lang", "zh")
+        # 摘要描述与 MCP 侧共用 approval.describe_transaction，保证两条路径
+        # 对"这笔是什么"的说法一致；交互指引（回复确认/取消）属于 Web 形态，
+        # 留在本层而不是塞进共享模块。
+        summary = approval.describe_transaction(breach, lang)
+        if lang == "en":
+            answer = (
+                f"{approval.format_approval_prompt(summary, amount, lang='en')}\n\n"
+                f"Record: {summary}{extra}\n"
+                f'Reply "confirm" to record, "cancel" to skip.'
+            )
+        else:
+            answer = (
+                f"{approval.format_approval_prompt(summary, amount, extra=extra.lstrip('，'), lang='zh')}\n\n"
+                f"记的是：{summary}\n"
+                f"回复「确认」就入账，回复「取消」就不记。"
+            )
         result = {
             "answer": answer,
             "level": "待确认",
