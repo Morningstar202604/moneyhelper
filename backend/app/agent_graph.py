@@ -989,6 +989,10 @@ async def finalize(state: AgentState) -> dict[str, Any]:
     chunks: list[str] = []
     src = "template"
     async for delta, s in llm.stream_narrate(system, user, fallback):
+        if s == "reasoning":
+            # 思考过程单列事件，不混进正文
+            await _emit({"type": "thinking", "data": {"content": delta}})
+            continue
         src = s
         chunks.append(delta)
         await _emit({"type": "text", "delta": delta})

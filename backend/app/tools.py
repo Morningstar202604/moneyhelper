@@ -205,7 +205,6 @@ async def tool_record_transaction(args: dict[str, Any]) -> str:
         before=None,
         after=parsed,
         source="mcp",
-        username="system",
     )
     return json.dumps(
         {
@@ -426,8 +425,7 @@ async def tool_sell_position(args: dict[str, Any]) -> str:
                 before=before,
                 after=None,
                 source="mcp",
-                username="system",
-            )
+                    )
             return f"已清仓卖出 {cur['name']}（{symbol}）：{cur['shares']:g} 份全部平仓，持仓已移除。"
         new_shares = cur["shares"] - shares
         after = {**cur, "shares": new_shares}
@@ -451,8 +449,7 @@ async def tool_sell_position(args: dict[str, Any]) -> str:
             before=before,
             after=after,
             source="mcp",
-            username="system",
-        )
+            )
         return (
             f"已卖出 {cur['name']}（{symbol}）{shares:g} 份，剩余 {new_shares:g} 份（成本 {cur['cost']:g} 不变）。"
             "可在持仓页查看最新盈亏。"
@@ -606,7 +603,6 @@ async def tool_record_position(args: dict[str, Any]) -> str:
         before=None,
         after=position_data,
         source="mcp",
-        username="system",
     )
     return (
         f"已记录买入 {name}（{symbol}）：{shares:g} 份 × 成本 {cost:g}，现价 {last:g}。"

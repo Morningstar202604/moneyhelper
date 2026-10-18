@@ -30,7 +30,6 @@ async def create_debt(payload: dict) -> dict:
         before=None,
         after=payload or {},
         source="api",
-        username="system",
     )
     return out
 
@@ -47,7 +46,6 @@ async def remove_debt(name: str) -> dict:
         before=before,
         after=None,
         source="api",
-        username="system",
     )
     return result
 
@@ -71,7 +69,6 @@ async def create_subscription(payload: dict) -> dict:
         before=None,
         after=payload or {},
         source="api",
-        username="system",
     )
     return out
 
@@ -88,6 +85,5 @@ async def remove_subscription(name: str) -> dict:
         before=before,
         after=None,
         source="api",
-        username="system",
     )
     return result

@@ -304,3 +304,30 @@ async def test_provenance_persists_to_sqlite(temp_db):
     )
     assert len(rows) >= 1
     assert rows[0]["entity_type"] == "t"
+
+
+async def test_request_actor_defaults_not_hardcoded_system(temp_db):
+    """请求级审计归属：中间件解析出的操作者写进 ContextVar。
+
+    此前各路由硬编码 username="system"，审计链把所有人的操作都记成 system。
+    现在未显式传 username 时，应归属当前请求的操作者。
+    """
+    from app.provenance import _current_actor, record_provenance, set_request_actor
+
+    token = _current_actor.set("alice")
+    try:
+        entry = await record_provenance(action="t", entity_type="test", entity_id="x")
+        assert entry.username == "alice"
+    finally:
+        _current_actor.reset(token)
+
+    # 复位后回到默认
+    entry2 = await record_provenance(action="t2", entity_type="test", entity_id="y")
+    assert entry2.username == "system"
+
+    # 显式传参优先于上下文
+    set_request_actor("bob")
+    entry3 = await record_provenance(
+        action="t3", entity_type="test", entity_id="z", username="carol"
+    )
+    assert entry3.username == "carol"

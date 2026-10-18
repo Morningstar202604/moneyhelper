@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from typing import ClassVar
 
 import httpx
 import pytest
@@ -279,3 +280,57 @@ async def test_base_url_requires_http_prefix_when_set(temp_db) -> None:
     r2 = await put_settings({"settings": {"ai_base_url": ""}})
     assert not r2["errors"]
     assert r2["applied"]["ai_base_url"] == ""
+
+
+async def test_stream_narrate_splits_reasoning_from_content(monkeypatch) -> None:
+    """DeepSeek thinking 流：reasoning_content 必须以 "reasoning" 来源单列，
+
+    不能混进正文（否则最终答案里会冒出推理草稿）。此前 docstring 声称支持、实际未实现。
+    """
+    from types import SimpleNamespace
+
+    from app import llm
+
+    class _Delta(SimpleNamespace):
+        pass
+
+    class _Chunk(SimpleNamespace):
+        pass
+
+    async def _fake_stream():
+        yield _Chunk(choices=[SimpleNamespace(delta=_Delta(reasoning_content="先算一下总额…", content=None))])
+        yield _Chunk(choices=[SimpleNamespace(delta=_Delta(reasoning_content=None, content="本月支出 3000 元。"))])
+
+    class _Resp:
+        usage = None
+        _hidden_params: ClassVar[dict] = {}
+
+        def __aiter__(self):
+            return _fake_stream()
+
+    async def _fake_acompletion(**kwargs):
+        # 顺带锁定：timeout 必须是顶层参数（retry_policy.retry_timeout 是无效字段）
+        assert kwargs.get("timeout") == 30
+        assert "retry_policy" not in kwargs
+        return _Resp()
+
+    async def _cfg():
+        return {
+            "litellm_model": "deepseek/deepseek-chat",
+            "model": "deepseek-chat",
+            "provider": "deepseek",
+            "base": "https://api.deepseek.com/v1",
+            "key": "sk-test",
+        }
+
+    monkeypatch.setattr(llm.litellm, "acompletion", _fake_acompletion)
+    monkeypatch.setattr(llm, "_config", _cfg)
+
+    got = []
+    async for delta, src in llm.stream_narrate("sys", "user", "fallback"):
+        got.append((src, delta))
+
+    assert got == [
+        ("reasoning", "先算一下总额…"),
+        ("llm", "本月支出 3000 元。"),
+    ]

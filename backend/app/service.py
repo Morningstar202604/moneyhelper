@@ -762,6 +762,10 @@ async def _run_general(
     chunks: list[str] = []
     src = "template"
     async for delta, s in llm.stream_narrate(system, user, fallback):
+        if s == "reasoning":
+            # 思考过程单列事件，不混进正文（否则答案里会冒出推理草稿）
+            await emit({"type": "thinking", "data": {"content": delta}})
+            continue
         src = s
         chunks.append(delta)
         await emit({"type": "text", "delta": delta})

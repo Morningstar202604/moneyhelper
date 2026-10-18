@@ -101,7 +101,38 @@ async def api_auth(request: Request, call_next):
         # 鉴权逻辑共用 auth.verify_api_token（timing-safe 比对）
         if key and verify_api_token(request) is None:
             return JSONResponse({"error": "需要访问口令"}, status_code=401)
+        # 审计归属：把本请求解析到的操作者写进 ContextVar，后续 record_provenance
+        # 不传 username 时自动归属该用户（此前各路由硬编码 "system"，审计链全失真）。
+        actor = _resolve_actor(request, key)
+        if actor:
+            from .provenance import set_request_actor
+
+            set_request_actor(actor)
     return await call_next(request)
+
+
+def _resolve_actor(request: Request, api_token: str) -> str:
+    """尽力解析当前请求的操作者用户名（解析失败返回空串，回落到默认 system）。
+
+    无口令模式（单机自用）统一记 "local"：真实使用人就是本机用户，
+    记 "system" 会让审计链看起来像程序自动执行的。
+    """
+    if not api_token:
+        return "local"
+    shared = verify_api_token(request)
+    if shared:
+        return str(shared.get("username") or "local")
+    header = request.headers.get("authorization", "")
+    if not header.lower().startswith("bearer "):
+        return "local"
+    try:
+        from . import auth as auth_mod
+
+        payload = auth_mod._decode_jwt(header[7:].strip())
+        uid = int(payload.get("sub") or 0)
+    except Exception:  # noqa: BLE001 — 审计归属失败不影响业务
+        return "local"
+    return f"user:{uid}" if uid else "local"
 
 
 # ---------------------------------------------------------------------------

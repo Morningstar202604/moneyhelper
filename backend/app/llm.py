@@ -203,9 +203,10 @@ async def stream_narrate(
                 "stream": True,
                 "max_tokens": 2048,
                 "num_retries": 2,  # LiteLLM 内置重试（429/5xx）
-                "retry_policy": {
-                    "retry_timeout": 30,  # 单次请求超时
-                },
+                # 单次请求超时用 timeout（秒）。旧代码写 retry_policy={"retry_timeout": 30}，
+                # 而 litellm 的 RetryPolicy 实际字段是 XxxErrorRetries（次数），
+                # retry_timeout 不是合法字段会被静默忽略 —— 等价于从未设置超时。
+                "timeout": 30,
             }
             # api_base + api_key 对所有提供商统一传入（OpenAI 兼容端点都需要）
             kwargs["api_base"] = cfg.get("base") or None
@@ -217,10 +218,20 @@ async def stream_narrate(
             response = await litellm.acompletion(**kwargs)
 
             async for chunk in response:
-                delta = chunk.choices[0].delta.content if chunk.choices else None
-                if delta:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                # DeepSeek thinking 流：思考过程走 reasoning_content，
+                # 正文走 content。思考内容以「思考」来源单列，供调用方决定是否展示，
+                # 避免把它混进正文导致答案里出现推理草稿。
+                reasoning = getattr(delta, "reasoning_content", None)
+                if reasoning:
                     got_any = True
-                    yield delta, "llm"
+                    yield reasoning, "reasoning"
+                text = getattr(delta, "content", None)
+                if text:
+                    got_any = True
+                    yield text, "llm"
 
             # 读成本
             try:

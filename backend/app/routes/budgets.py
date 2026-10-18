@@ -72,7 +72,6 @@ async def put_budgets(payload: dict) -> dict:
         before=before,
         after=after,
         source="api",
-        username="system",
     )
     return {"ok": True, "month": month, "count": len(clean)}
 

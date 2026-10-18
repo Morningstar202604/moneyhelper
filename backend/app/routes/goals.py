@@ -30,7 +30,6 @@ async def create_goal(payload: dict) -> dict:
         before=None,
         after=payload or {},
         source="api",
-        username="system",
     )
     return out
 
@@ -52,7 +51,6 @@ async def update_goal(name: str, payload: dict) -> dict:
         before=before,
         after=after,
         source="api",
-        username="system",
     )
     return out
 
@@ -69,6 +67,5 @@ async def remove_goal(name: str) -> dict:
         before=before,
         after=None,
         source="api",
-        username="system",
     )
     return result

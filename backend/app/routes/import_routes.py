@@ -216,8 +216,7 @@ async def import_csv_confirm(req: CsvConfirmRequest) -> dict:
             before=None,
             after={"imported": imported, "duplicates": dup_total},
             source="api",
-            username="system",
-        )
+            )
 
     return {
         "imported": imported,

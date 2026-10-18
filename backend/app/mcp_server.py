@@ -401,7 +401,6 @@ async def _import_transactions(source: str, csv_text: str) -> str:
         before=None,
         after={"imported": imported, "source": source, "total_in_csv": len(result.transactions)},
         source="mcp",
-        username="system",
     )
 
     return json.dumps({
