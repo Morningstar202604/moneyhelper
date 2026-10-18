@@ -37,6 +37,7 @@
 | `agents/bookkeeping/tools.py` | 17 | 0 | 0 | Bookkeeping agent 专属工具：记账、账本、预算、趋势。 |
 | `agents/portfolio/tools.py` | 27 | 0 | 0 | Portfolio agent 专属工具：持仓、行情、K线、自选。 |
 | `agents/supervisor/tools.py` | 31 | 0 | 0 | Supervisor agent 专属工具：风险、目标、健康检查、记忆、通用动作。 |
+| `agui.py` | 241 | 6 | 1 | AG-UI 映射层（M2.4）：把内部 SSE 事件翻译成 AG-UI 协议事件流。 |
 | `analysis.py` | 819 | 12 | 0 | 确定性分析内核：持仓、现金流、负债、应急金、风控规则。 |
 | `approval.py` | 75 | 4 | 0 | 写操作审批：Web 对话与 MCP 共用的门槛判定与提示文案（M2.3）。 |
 | `auth.py` | 275 | 11 | 3 | 用户认证：JWT + bcrypt + 快依赖注入。 |
@@ -100,7 +101,7 @@
 | `routes/members.py` | 181 | 11 | 0 | 家庭成员管理路由：CRUD + 成员间借贷 + 成员汇总。 |
 | `routes/memory.py` | 145 | 10 | 0 | 长期记忆与经验库（reflections）：列出 / 新增 / 删除 / 清空 / 遗忘 / AI 归纳。 |
 | `routes/provenance.py` | 48 | 2 | 0 | 审计追踪路由：查询操作来龙去脉。 |
-| `routes/qa.py` | 399 | 20 | 1 | 问答域路由：SSE 流式问答（ask）+ HITL 确认（confirm）+ 历史/会话管理。 |
+| `routes/qa.py` | 481 | 27 | 1 | 问答域路由：SSE 流式问答（ask）+ HITL 确认（confirm）+ 历史/会话管理。 |
 | `routes/reports.py` | 72 | 4 | 0 | 晨报 / 调度器状态 / 定时产出收件箱。 |
 | `routes/settings.py` | 191 | 3 | 0 | 设置路由：GET/PUT /api/settings（原 main.py 设置域，M1.4 拆出）。 |
 | `routes/status.py` | 75 | 5 | 0 | 健康检查与指标：/api/health、/api/metrics、/api/bootstrap、模型目录。 |
@@ -113,4 +114,4 @@
 | `tools.py` | 1094 | 33 | 0 | Agent 工具层：把确定性分析内核暴露成 LLM 可调用的工具（function calling）。 |
 | `vault.py` | 145 | 10 | 0 | 加密密钥管理系统：DB 内敏感字段加密存储。 |
 
-合计 82 个文件、19484 行。
+合计 83 个文件、19807 行。

@@ -116,3 +116,30 @@ MCP 规范里的 Tasks 适合承载"跑很久、要轮询进度"的操作（如�
 把长任务暴露为 MCP Task 需要绕开 fastmcp 直接用 lowlevel server，
 引入的风险大于当前收益。等 fastmcp 正式支持后再做，届时只在
 `mcp_server.py` 里换装饰器，工具的业务实现不变。
+
+## AG-UI 协议接入（M2.4）
+
+小满的问答流同时支持两种事件协议：
+
+| 端点 | 事件形态 | 消费者 |
+|---|---|---|
+| `POST /api/ask` | 内部契约（`start` / `step` / `agent_step` / `text` / `final`） | 小满自己的前端 |
+| `POST /api/ask/agui` | AG-UI 标准（`RUN_STARTED` / `TEXT_MESSAGE_*` / `TOOL_CALL_*` / `RUN_FINISHED`） | 任何 AG-UI 客户端（CopilotKit 等） |
+
+两个端点共用同一套业务逻辑（同一个 runner），差别只在事件形态。映射是流式的，
+逐事件翻译不缓冲整轮，实时体验一致。
+
+```bash
+curl -N -X POST http://127.0.0.1:8788/api/ask/agui \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"这个月花了多少","thread_id":"demo"}'
+```
+
+映射规则（完整表见 `backend/app/agui.py` 的模块文档）：
+
+- `text` → `TEXT_MESSAGE_START` + `CONTENT`* + `END`（自动配对）
+- `thinking` → `REASONING_MESSAGE_*`，与正文互斥不交叉
+- `agent_step` → `TOOL_CALL_START` + `ARGS` + `END`（每次调用独立 toolCallId）
+- `step` → `STEP_STARTED` / `STEP_FINISHED`；只发 done 的会补发 start
+- `final` → `RUN_FINISHED`，业务字段（flags / actions / pending_token）保留在 `result`
+- `card` / `plan` → `CUSTOM`（AG-UI 无对应类型，原样透传不丢信息）

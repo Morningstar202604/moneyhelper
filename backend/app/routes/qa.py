@@ -140,8 +140,86 @@ async def sse_stream(first: dict | None, runner) -> _LoopSafeEventSourceResponse
 _sse_stream = sse_stream
 
 
+async def agui_stream(first: dict | None, runner) -> _LoopSafeEventSourceResponse:
+    """AG-UI 协议版 SSE：把内部事件实时翻译成 AG-UI 事件。
+
+    与 sse_stream 共用同一个 runner（业务逻辑零重复），差别只在事件形态：
+    - sse_stream   → 内部契约（start/step/text/final），现有前端消费
+    - agui_stream  → AG-UI 标准（RUN_STARTED/TEXT_MESSAGE_*/TOOL_CALL_*），
+                     任何 AG-UI 客户端（CopilotKit 等）可直接消费
+
+    翻译是流式的（逐事件 map，不缓冲整轮），所以前端的实时体验不变。
+    """
+    from .. import agui
+
+    async def event_stream():
+        queue: asyncio.Queue = asyncio.Queue()
+
+        def data(obj: dict) -> str:
+            return json.dumps(obj, ensure_ascii=False)
+
+        mapper = agui.AgUiMapper(thread_id=str((first or {}).get("thread_id") or ""))
+        for ev in mapper.start():
+            yield data(ev)
+
+        async def emit(event: dict) -> None:
+            await queue.put({"type": "event", **event})
+
+        async def run() -> None:
+            try:
+                await runner(emit)
+            except Exception as exc:  # noqa: BLE001
+                log.exception("AG-UI runner error: %s", exc)
+                await queue.put(
+                    {"type": "error", "message": "生成回答时出错，请稍后再试"}
+                )
+            finally:
+                await queue.put(None)
+
+        task = asyncio.create_task(run())
+        try:
+            while True:
+                try:
+                    item = await asyncio.wait_for(queue.get(), timeout=300)
+                except asyncio.TimeoutError:
+                    log.warning("AG-UI runner hung for 300s, force-cancelling")
+                    for ev in mapper.map({"type": "error", "message": "响应超时，请重试"}):
+                        yield data(ev)
+                    break
+                if item is None:
+                    break
+                for ev in mapper.map(item):
+                    yield data(ev)
+        finally:
+            if not task.done():
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+
+    return _LoopSafeEventSourceResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        ping=15,
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.post("/api/ask")
 async def ask(payload: dict):
+    return await _ask_impl(payload, protocol="internal")
+
+
+@router.post("/api/ask/agui")
+async def ask_agui(payload: dict):
+    """AG-UI 协议版问答端点（M2.4）。
+
+    与 /api/ask 共用同一套业务逻辑（同一个 runner），只是事件流形态不同。
+    现有前端用 /api/ask；任何 AG-UI 客户端（CopilotKit 等）用这个。
+    """
+    return await _ask_impl(payload, protocol="agui")
+
+
+async def _ask_impl(payload: dict, protocol: str = "internal"):
     question = ((payload or {}).get("question") or "").strip()
     if not question:
         return JSONResponse({"error": "question required"}, status_code=400)
@@ -228,6 +306,10 @@ async def ask(payload: dict):
             }
         )
 
+    if protocol == "agui":
+        # start 事件由 service.run_question 发出；AG-UI 映射器会把它转成 CUSTOM(question)，
+        # RUN_STARTED 由映射器自己发，所以这里同样不传首帧。
+        return await agui_stream({"thread_id": thread_id}, runner)
     # start 事件由 service.run_question 发出（事件契约归 service），此处不再重复发首帧
     return await sse_stream(None, runner)
 
