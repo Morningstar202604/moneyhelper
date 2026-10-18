@@ -2,6 +2,10 @@
 backend/.venv/
 # 文档站构建产物
 site/
+# Python 打包产物
+*.egg-info/
+build/
+dist/
 backend/__pycache__/
 **/__pycache__/
 frontend/node_modules/
