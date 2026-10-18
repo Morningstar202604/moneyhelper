@@ -73,11 +73,13 @@ nav:
   - 架构:
       - 架构总览: architecture.md
       - 架构决策记录: adr/index.md
+      - 模块清单: module-map.md
   - 路线图:
       - 路线图: ROADMAP-v3.md
       - 详细计划: PLAN-DETAILED.md
       - 差异化: DIFFERENTIATION.md
       - 总体规划（存档）: planning/08-总体规划-完整版.md
+      - Agent Harness 调研: planning/11-agent-harness-专项调研.md
   - 质量:
       - 代码审查发现: REVIEW-FINDINGS.md
 
