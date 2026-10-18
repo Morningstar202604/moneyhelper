@@ -350,7 +350,7 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
     if (!content.trim()) return;
     setBusy(true);
     try {
-      const r = await api<ImportPreview>("/api/import/csv", {
+      const r = await api<ImportPreview>("/api/import/generic", {
         method: "POST",
         body: JSON.stringify({ content }),
       });

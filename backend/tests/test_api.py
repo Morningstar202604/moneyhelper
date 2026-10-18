@@ -1514,6 +1514,27 @@ async def test_csv_import_commits_all_rows_not_preview(client) -> None:
     assert r2.json()["imported"] == 20
 
 
+async def test_generic_csv_import_path_not_shadowed(client) -> None:
+    """回归：通用 CSV 预览必须挂在 /api/import/generic，不被源感知解析遮蔽。
+
+    历史 bug：两个路由同名 /api/import/csv，源感知版本先注册导致通用解析永远不可达，
+    前端 EntryView 的通用导入因此拿到错误响应结构。
+    """
+    csv_text = "日期,项目,分类,金额\n2026-09-01,午饭,餐饮,-28\n2026-09-02,工资,收入,10000\n"
+    r = await client.post("/api/import/generic", json={"content": csv_text})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    # 通用解析的契约：columns/mapping/rows/total/skipped（EntryView 按此消费）
+    for key in ("columns", "mapping", "preview", "rows", "total", "skipped"):
+        assert key in d, f"缺少字段 {key}"
+    assert d["total"] == 2 and len(d["rows"]) == 2
+
+    # /api/import/csv 仍由源感知解析提供（契约不变：preview.transactions）
+    r2 = await client.post("/api/import/csv", json={"content": csv_text, "source": "generic"})
+    assert r2.status_code == 200, r2.text
+    assert "transactions" in r2.json()["preview"]
+
+
 async def test_regenerate_targets_matching_question(client) -> None:
     """重新生成指定问题：只替换该问题的最近一条，不误删线程最后一条。"""
     tid = "regen-target"

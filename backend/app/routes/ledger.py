@@ -238,12 +238,13 @@ async def nl_add(payload: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@router.post("/api/import/csv")
+@router.post("/api/import/generic")
 async def import_csv_parse(payload: dict) -> dict:
-    """解析 CSV → 识别列映射 + 预览（前 15 条）+ 可导入条数统计。
+    """解析通用 CSV → 识别列映射 + 预览（前 15 条）+ 可导入条数统计。
 
-    注意：routes/import_routes.py 的同名路由先注册，本实现当前被遮蔽；
-    保留注册以维持既有路由表结构（拆分原则：搬移零行为变化）。
+    历史说明：该实现原挂在 /api/import/csv，后被 routes/import_routes.py 的
+    源感知解析（微信/支付宝/银行）以同名路径先注册遮蔽，导致通用导入实际不可用。
+    M1.4 收尾时迁移到显式路径 /api/import/generic（前端 EntryView 调用）。
     """
     from .. import csvimport
 
