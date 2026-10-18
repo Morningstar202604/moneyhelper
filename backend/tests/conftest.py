@@ -18,6 +18,11 @@ _BACKEND = Path(__file__).resolve().parents[1]
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 
+# 分层门面包 xiaoman.* 在仓库根目录（与 backend/ 平级），测试从 backend/ 运行
+_REPO_ROOT = _BACKEND.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 
 @pytest.fixture
 async def temp_db(tmp_path, monkeypatch):

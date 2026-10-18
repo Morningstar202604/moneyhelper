@@ -10,6 +10,8 @@
 from __future__ import annotations
 
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from typing import Any
 
@@ -184,6 +186,23 @@ async def _sina_prev_close(symbols: list[str]) -> dict[str, float]:
 # 行情缓存：TTLCache 自动管理 TTL 过期与 LRU 淘汰，替代自建 dict + time.time() 比较
 # maxsize 256 覆盖常规持仓组合数；ttl 30s 与行情源刷新频率一致
 _live_cache = TTLCache[str, tuple[dict[str, float], str]](maxsize=256, ttl=30.0)
+# 离网模式开关（ContextVar）：CLI / 脚本 / 离线场景用它强制走快照价，
+# 而不必去改用户的持久化设置（那是给界面用的偏好，不该被一次性脚本改写）。
+_offline: ContextVar[bool] = ContextVar("quotes_offline", default=False)
+
+
+@contextmanager
+def snapshot_only():
+    """上下文管理器：期间所有行情取快照价，不发任何网络请求。
+
+    用途：CLI 默认行为、离线自检、单元测试里不想 mock 的场合。
+    """
+    token = _offline.set(True)
+    try:
+        yield
+    finally:
+        _offline.reset(token)
+
 _last_source = "snapshot"
 
 
@@ -203,6 +222,9 @@ async def live_quotes(positions: list[dict[str, Any]]) -> dict[str, float]:
     每次调用都会更新 last_source()，供来源标注使用。
     """
     global _last_source
+    if _offline.get():
+        _last_source = "snapshot"
+        return _snapshot(positions)
     mode = (await db.get_settings()).get("quote_source_mode", "auto")
     symbols = [p["symbol"] for p in positions if p["kind"] != "现金"]
     if mode == "snapshot" or not symbols:
