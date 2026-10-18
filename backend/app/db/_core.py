@@ -176,6 +176,7 @@ async def close_db() -> None:
         await c.close()
     _read_conns = []
     _pool_locks.clear()
+    _write_locks.clear()
 
 
 async def _conn() -> aiosqlite.Connection:
@@ -183,6 +184,24 @@ async def _conn() -> aiosqlite.Connection:
         await init_db()
     assert _db is not None
     return _db
+
+
+# 写事务串行锁（按事件循环各自持有，理由同 _pool_locks）。
+# 整库只有一条写连接：多语句事务（批量入账 / 导出导入）必须互相排他，
+# 否则两个协程的 BEGIN/SAVEPOINT 会互相干扰——CI 实测表现为
+# "cannot start a transaction within a transaction" 与
+# "no such savepoint: add_tx_batch"（另一个协程已经 RELEASE 了同名 savepoint）。
+_write_locks: dict[int, asyncio.Lock] = {}
+
+
+def get_write_lock() -> asyncio.Lock:
+    """取当前事件循环的写事务锁。所有多语句事务都必须持它。"""
+    loop_id = id(asyncio.get_running_loop())
+    lk = _write_locks.get(loop_id)
+    if lk is None:
+        lk = asyncio.Lock()
+        _write_locks[loop_id] = lk
+    return lk
 
 
 def _clean_due_day(v: object) -> str:

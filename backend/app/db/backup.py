@@ -13,6 +13,7 @@ from ._core import (  # noqa: F401
     _mark_user_data,
     fetch_all,
     get_settings,
+    get_write_lock,
     list_debts,
     list_positions,
     list_subscriptions,
@@ -86,6 +87,17 @@ async def import_backup(data: dict[str, Any]) -> dict[str, int]:
     """
     conn = await _conn()
     counts: dict[str, int] = {}
+    # 多语句事务（先清表再逐表写入）：与批量入账共用写锁串行，
+    # 否则并发写会在共享连接上互相破坏事务边界。
+    async with get_write_lock():
+        await _import_backup_locked(conn, data, counts)
+    return counts
+
+
+async def _import_backup_locked(
+    conn: aiosqlite.Connection, data: dict[str, Any], counts: dict[str, int]
+) -> None:
+    """import_backup 的实际写入段（调用方必须已持有写锁）。"""
     try:
         for t in (
             "positions",
@@ -202,7 +214,6 @@ async def import_backup(data: dict[str, Any]) -> dict[str, int]:
     except Exception:  # noqa: BLE001 — 恢复失败整体回滚，不留半截状态
         await conn.rollback()
         raise
-    return counts
 
 
 async def _restore_table(

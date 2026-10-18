@@ -12,6 +12,7 @@ from ._core import (
     _conn,
     _fetch_member,
     _mark_user_data,
+    get_write_lock,
 )
 from .undo import _record_snapshot, _row_to_json
 
@@ -66,33 +67,33 @@ async def add_transactions_batch(
 
     conn = await _conn()
     results: list[dict[str, Any]] = []
-    # SAVEPOINT 而非 BEGIN：整库只有一条写连接，若其他协程此刻已持有事务
-    # （例如并发「确认」入账），BEGIN 会直接抛 "cannot start a transaction
-    # within a transaction"；SAVEPOINT 可安全嵌套，语义仍是全成或全无。
-    await conn.execute("SAVEPOINT add_tx_batch")
-    try:
-        for c in cleaned:
-            cur = await conn.execute(
-                "INSERT INTO transactions(date,item,category,amount,owner_id,is_shared) VALUES(?,?,?,?,?,?)",
-                (
-                    c["date"],
-                    c["item"],
-                    c["category"],
-                    c["amount"],
-                    c["owner_id"],
-                    1 if c["is_shared"] else 0,
-                ),
-            )
-            await _record_snapshot("transaction", str(cur.lastrowid), "{}")
-            results.append({"ok": True, "id": cur.lastrowid})
-        await _mark_user_data(conn)
-        await conn.execute("RELEASE SAVEPOINT add_tx_batch")
-        await conn.commit()
-        return results
-    except Exception:
-        await conn.execute("ROLLBACK TO SAVEPOINT add_tx_batch")
-        await conn.execute("RELEASE SAVEPOINT add_tx_batch")
-        raise
+    # 整库只有一条写连接，多语句事务必须排他：否则并发「确认」入账时
+    # BEGIN 会抛 "cannot start a transaction within a transaction"，
+    # 而用 SAVEPOINT 又会因共享连接上的同名 savepoint 互相干扰
+    # （CI 实测："no such savepoint: add_tx_batch"）。用写锁串行化。
+    async with get_write_lock():
+        try:
+            for c in cleaned:
+                cur = await conn.execute(
+                    "INSERT INTO transactions(date,item,category,amount,owner_id,is_shared)"
+                    " VALUES(?,?,?,?,?,?)",
+                    (
+                        c["date"],
+                        c["item"],
+                        c["category"],
+                        c["amount"],
+                        c["owner_id"],
+                        1 if c["is_shared"] else 0,
+                    ),
+                )
+                await _record_snapshot("transaction", str(cur.lastrowid), "{}")
+                results.append({"ok": True, "id": cur.lastrowid})
+            await _mark_user_data(conn)
+            await conn.commit()
+            return results
+        except Exception:
+            await conn.rollback()
+            raise
 
 
 async def add_transaction(
