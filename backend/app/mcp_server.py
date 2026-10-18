@@ -179,6 +179,20 @@ async def get_user_memory(query: str = "", kind: str = "") -> str:
     return await xtools.tool_get_user_memory({"query": query, "kind": kind})
 
 
+@mcp.tool()
+async def get_lessons() -> str:
+    """查询经验库：之前工具调用的踩坑记录（避免重复犯同样的错误）。"""
+    return await xtools.tool_get_lessons({})
+
+
+@mcp.tool()
+async def set_setting(key: str, value: str, lang: str = "zh") -> str:
+    """修改应用偏好。key 如 color_scheme/default_tab/lang/compact_numbers 等；
+    详细可用键与取值见工具描述。AI 接入配置（ai_base_url/ai_api_key/ai_model）
+    一律拒绝，需到设置页修改。"""
+    return await xtools.tool_set_setting({"key": key, "value": value}, lang=lang)
+
+
 # ---------------------------------------------------------------------------
 # 通用工具
 # ---------------------------------------------------------------------------
@@ -507,29 +521,108 @@ def _apply_shared_schemas() -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def mount_to_app(app: Any) -> None:
-    """把 MCP Server 挂载到 FastAPI app 的 /mcp 路径（SSE transport）。"""
+def build_asgi() -> tuple[Any, Any] | None:
+    """构建 MCP 的 ASGI 子应用，返回 (streamable_app, sse_app)。
+
+    必须由调用方在创建父 app **之前**调用，并把 streamable_app.lifespan
+    接进父 app —— Streamable HTTP 的 session manager 在 lifespan 里启动
+    task group，不接会报 "Task group is not initialized"（实测）。
+    sse_app 可能为 None（旧版 fastmcp 无 create_sse_app）。
+    """
+    if not MCP_AVAILABLE:
+        return None
+
+    _apply_shared_schemas()
+
+    # 传输层：**Streamable HTTP 为默认**，SSE 保留一个版本期（M2.2）。
+    #
+    # 为什么换默认：MCP 规范 2025-03 起用 Streamable HTTP 取代 HTTP+SSE。
+    # SSE 需要两条长连接（/sse 收 + /messages/ 发），在反向代理与移动网络下
+    # 容易断流；Streamable HTTP 单端点、按需升流，是当前官方推荐形态。
+    #
+    # 兼容策略：已接入的客户端仍指向 /mcp/sse + /mcp/messages/，因此两条路径
+    # 并存挂载。SSE 的移除安排在下一个大版本，届时在 CHANGELOG 明示。
+    from fastmcp.server.http import create_streamable_http_app
+
+    # 内部路径直接写成 /mcp，配合"挂到根"的挂载方式：
+    # mount("/mcp", sub) + 内部路由 "/" 会出现 307 重定向（/mcp -> /mcp/），
+    # 而带斜杠的 POST 会被当成 GET 处理返回 405（实测）。挂根 + 内部 /mcp
+    # 是无斜杠即用的唯一组合。
+    streamable = create_streamable_http_app(server=mcp, streamable_http_path="/mcp")
+    sse = None
+    try:
+        from fastmcp.server.http import create_sse_app
+
+        sse = create_sse_app(server=mcp, message_path="/messages/", sse_path="/sse")
+    except ImportError:  # pragma: no cover — 仅旧版 fastmcp 走到
+        log.warning("mcp.sse_unavailable: 当前 fastmcp 版本不提供 create_sse_app")
+    return streamable, sse
+
+
+class _DynamicMcp:
+    """动态转发到"当前" MCP 子应用。
+
+    为什么需要它：session manager 每个实例只能 run 一次（run() 不可重入），
+    而父 app 的 lifespan 可能被多次进入（测试用 TestClient、热重载、嵌入式
+    多实例）。若挂载时把子应用写死，lifespan 里就得复用同一实例 → 第二次
+    启动直接抛 "can only be called once per instance"；若 lifespan 里重建，
+    挂载的路由又指向旧实例 → session manager 从未启动，端点 500。
+
+    解法：挂一个转发器，请求到达时读取 holder 里的当前实例。lifespan 负责
+    写入新实例，两者永远指同一个对象。
+    """
+
+    def __init__(self, holder: dict[str, Any]) -> None:
+        self._holder = holder
+
+    async def __call__(self, scope, receive, send) -> None:
+        built = self._holder.get("built")
+        target = built[0] if built else None
+        if target is None:  # pragma: no cover — lifespan 未跑或构建失败
+            from starlette.responses import JSONResponse
+
+            await JSONResponse({"error": "MCP 未就绪"}, status_code=503)(scope, receive, send)
+            return
+        await target(scope, receive, send)
+
+
+class _DynamicSse(_DynamicMcp):
+    """同上，转发到 SSE 子应用（holder 里的第 2 项）。"""
+
+    async def __call__(self, scope, receive, send) -> None:
+        built = self._holder.get("built")
+        target = built[1] if built else None
+        if target is None:  # pragma: no cover — 旧版 fastmcp 无 SSE
+            from starlette.responses import JSONResponse
+
+            await JSONResponse({"error": "MCP SSE 不可用"}, status_code=503)(scope, receive, send)
+            return
+        await target(scope, receive, send)
+
+
+def mount_to_app(app: Any, holder: dict[str, Any] | None = None) -> None:
+    """把 MCP 子应用挂到 FastAPI app（/mcp 为 Streamable HTTP，/mcp-sse 为 SSE）。
+
+    holder 是可变容器 {"built": (streamable, sse) | None}，由父 app 的 lifespan
+    负责写入。不传则内部构建一次并写死（无 lifespan 接入，Streamable HTTP
+    不可用，仅测试/特殊场景使用）。
+    """
     if not MCP_AVAILABLE:
         log.info("mcp.skipped: fastmcp unavailable, not mounting")
         return
 
-    _apply_shared_schemas()
+    if holder is None:
+        built = build_asgi()
+        if built is None:
+            return
+        holder = {"built": built}
+    streamable = _DynamicMcp(holder)
 
     import os
     import secrets
 
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import JSONResponse
-
-    # FastMCP 提供 ASGI app（SSE transport）。2.3.2 起 sse_app() 已弃用；要保留
-    # SSE 端点（已接入的 MCP 客户端仍指向 /mcp/sse）就按官方提示直接调 create_sse_app，
-    # 新旧两条路径产出的路由一致（/sse + /messages/）。旧版 fastmcp 无此函数，回退原调用。
-    try:
-        from fastmcp.server.http import create_sse_app
-
-        mcp_asgi = create_sse_app(server=mcp, message_path="/messages/", sse_path="/sse")
-    except ImportError:  # pragma: no cover — 仅旧版 fastmcp 走到
-        mcp_asgi = mcp.sse_app()
 
     # /mcp 走 app.mount 会绕过主 app 的 @app.middleware("http") 中间件链，
     # 如果不用独立鉴权包裹，任何能访问 /mcp 的人都可触发全量财务工具（sell_position/backup_now）。
@@ -547,8 +640,24 @@ def mount_to_app(app: Any) -> None:
             # 无口令模式：沿用主 app 同口径 Host 白名单
             return await call_next(request)
 
-    wrapped = _McpAuthGuard(mcp_asgi)
-    app.mount("/mcp", wrapped)
+    # 路径布局（实测出来的唯一可用组合，勿随意改动）：
+    #   /mcp                 Streamable HTTP（默认，MCP 规范推荐；无斜杠即用）
+    #   /mcp-sse/sse         SSE 端点（旧客户端兼容，保留一个版本期）
+    #   /mcp-sse/messages/   SSE 上行端点（仅 POST）
+    #
+    # 两个约束：
+    # 1) Streamable 子应用必须挂到根（内部路由已是 /mcp）。mount 到 /mcp 会
+    #    产生 307（/mcp -> /mcp/），而带斜杠的 POST 会被当成 GET 返回 405。
+    # 2) SSE 子应用内部用绝对路径 /sse、/messages/，挂到 /mcp-sse 后实际路径
+    #    就是 /mcp-sse/sse。若把内部路径也写成前缀，会变成 /mcp-sse/mcp-sse/sse。
+    # 3) 两个都挂到根会互相遮蔽（先挂的吃掉所有请求），所以 SSE 必须用独立前缀。
+    # 顺序关键：Starlette 的 Mount("/") 会匹配所有剩余请求，必须先挂更具体的
+    # 前缀（/mcp-sse），否则 SSE 请求会被根挂载的 streamable 吃掉返回 404
+    # （streamable 内部只有 /mcp 一条路由）。
+    sse_dynamic = _DynamicSse(holder)
+    app.mount("/mcp-sse", _McpAuthGuard(sse_dynamic))
+    app.mount("/", _McpAuthGuard(streamable))
+    log.info("mcp.transport: streamable-http at /mcp, sse at /mcp-sse/sse")
 
 
 async def startup() -> None:

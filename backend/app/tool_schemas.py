@@ -101,7 +101,9 @@ class GetTrendIn(_In):
 
 class GetKlineIn(_In):
     symbol: str = Field(..., description="6位证券代码，如 600519")
-    period: Literal["daily", "weekly", "monthly"] = Field("daily")
+    period: Literal["daily", "weekly", "monthly"] = Field(
+        "daily", description="K 线周期：daily / weekly / monthly，默认 daily"
+    )
     limit: int = Field(0, description="返回点数，默认 60")
 
 

@@ -108,7 +108,55 @@ async def lifespan(app_ref: FastAPI):
 # ---------------------------------------------------------------------------
 # FastAPI 实例 + 全局异常兜底 + 中间件（注册顺序见 middleware.setup）
 # ---------------------------------------------------------------------------
-app = FastAPI(title="小满 API", version="1.0.0", lifespan=lifespan)
+# MCP 子应用必须先构建，才能把它的 lifespan 接进父 app（见下方 _combined_lifespan）。
+# Streamable HTTP 的 session manager 在 lifespan 里启动 task group；不接就报
+# "Task group is not initialized"，MCP 端点会 405/500（M2.2 实测）。
+#
+# 注意：StreamableHTTPSessionManager.run() 每个实例只能调一次。若在模块导入时
+# 构建一次、却在多个 app 实例/多次 lifespan 里复用，第二次启动会抛
+# "can only be called once per instance"（TestClient 每次进入都会跑 lifespan，
+# 测试里必然踩到；生产里热重载同理）。所以按 lifespan 次数重建：
+# 在 _combined_lifespan 进入时构建，退出时丢弃。
+_mcp_enabled = os.getenv("MCP_ENABLE", "1") == "1"
+
+# MCP 子应用的"当前实例"：挂载时注册的 ASGI 路由在进程生命周期内固定，
+# 而 session manager 每个实例只能 run 一次。两者要指向同一个对象，
+# 所以用可变容器：lifespan 每次进入时把新实例写进 _mcp_state，
+# 挂载的路由通过动态转发读取当前实例（见 mcp_server.mount_to_app 的 built 参数约定）。
+_mcp_state: dict[str, object] = {"built": None}
+
+
+@asynccontextmanager
+async def _combined_lifespan(app_ref: FastAPI):
+    """小满自身 lifespan + MCP 子应用 lifespan。
+
+    子应用的 lifespan 由 Starlette 在 mount 时**不会**自动转发，必须在这里
+    显式嵌套进入，否则 MCP 的 session manager 永远不会启动。
+
+    每次进入都构建新实例：session manager 的 run() 只能调一次，
+    复用会在第二次启动时报 "can only be called once per instance"。
+    """
+    built = None
+    if _mcp_enabled:
+        try:
+            from .mcp_server import build_asgi
+
+            built = build_asgi()
+            _mcp_state["built"] = built
+        except Exception as exc:  # noqa: BLE001 — MCP 构建失败不该拖垮主服务
+            log.warning("mcp.build_failed: %s — MCP 端点不可用", exc)
+
+    streamable_lifespan = getattr(built[0], "lifespan", None) if built else None
+    if streamable_lifespan is None:
+        async with lifespan(app_ref):
+            yield
+        return
+
+    async with streamable_lifespan(app_ref), lifespan(app_ref):
+        yield
+
+
+app = FastAPI(title="小满 API", version="1.0.0", lifespan=_combined_lifespan)
 
 
 @app.exception_handler(Exception)
@@ -166,11 +214,13 @@ async def department_run(payload: dict) -> dict:
 # MCP Server：小满财务工具 → MCP 协议（Claude Code / Cursor / 任何 MCP Client 接入）
 # ---------------------------------------------------------------------------
 
-_mcp_enabled = os.getenv("MCP_ENABLE", "1") == "1"
 if _mcp_enabled:
     from .mcp_server import mount_to_app
 
-    mount_to_app(app)
+    # 挂载用的子应用与 lifespan 里的必须是同一个实例，否则 session manager
+    # 不会启动（Streamable HTTP 会 405）。这里构建一次供挂载，lifespan 里
+    # 复用同一实例并在退出时不重建 —— 见 _combined_lifespan 的实现。
+    mount_to_app(app, _mcp_state)
 
 
 # ---------------------------------------------------------------------------
