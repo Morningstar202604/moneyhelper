@@ -56,6 +56,8 @@ export function AgentSection() {
   const [lastRun, setLastRun] = useState<{ skillId: string; answer: string } | null>(null);
   const [historyFor, setHistoryFor] = useState<string | null>(null);
   const [history, setHistory] = useState<RunRecord[] | null>(null);
+  /** 触发记录加载失败的原因；null = 正常（成功或加载中） */
+  const [historyError, setHistoryError] = useState<string | null>(null);
   /** 正在编辑动作的技能 id；null = 无 */
   const [editingAction, setEditingAction] = useState<string | null>(null);
   /** 动作编辑草稿（保存按钮写回 config；与定时任务行为按"保存即生效"） */
@@ -163,8 +165,11 @@ export function AgentSection() {
   const loadHistory = async (skillId: string) => {
     try {
       setHistory(await listSkillRuns(skillId, 10));
-    } catch {
+      setHistoryError(null);
+    } catch (e) {
+      // 加载失败与"确实没有记录"必须区分：否则用户/测试会把超时误读成没跑过
       setHistory([]);
+      setHistoryError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -175,6 +180,7 @@ export function AgentSection() {
     }
     setHistoryFor(skillId);
     setHistory(null);
+    setHistoryError(null);
     await loadHistory(skillId);
   };
 
@@ -426,6 +432,8 @@ export function AgentSection() {
                   <div className="text-[11px] text-muted-foreground">{t("agent.historyTitle")}</div>
                   {history === null ? (
                     <div className="mt-1 text-muted-foreground">{t("app.loading")}</div>
+                  ) : historyError ? (
+                    <div className="mt-1 text-red-600">{t("agent.historyError", { e: historyError })}</div>
                   ) : history.length === 0 ? (
                     <div className="mt-1 text-muted-foreground">{t("agent.historyEmpty")}</div>
                   ) : (

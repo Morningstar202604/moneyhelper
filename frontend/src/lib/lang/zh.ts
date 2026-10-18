@@ -233,6 +233,7 @@ export const zh: Record<string, string> = {
   "agent.historyHideLabel": "收起记录",
   "agent.historyTitle": "触发记录（含定时；归档于独立线程，不进会话列表）",
   "agent.historyEmpty": "还没有触发记录——点「立即触发」或等到点自动执行",
+  "agent.historyError": "触发记录加载失败：{e}",
   "agent.lastRun": "最近一次触发结果",
   "agent.thinking": "思考过程",
   "agent.panelTitle": "Agent 运行",

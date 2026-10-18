@@ -234,6 +234,7 @@ export const en: Record<string, string> = {
   "agent.historyHideLabel": "Hide history",
   "agent.historyTitle": "Run history (incl. scheduled; archived to a separate thread)",
   "agent.historyEmpty": "No runs yet — trigger now or wait for the schedule",
+  "agent.historyError": "Failed to load run history: {e}",
   "agent.lastRun": "Latest run result",
   "agent.thinking": "Reasoning",
   "agent.panelTitle": "Agent Run",

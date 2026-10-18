@@ -26,6 +26,10 @@ def snap_quotes(monkeypatch):
 
     monkeypatch.setattr(quotes_mod, "live_quotes", _snap)
     monkeypatch.setattr(quotes_mod, "quote_now", _quote)
+    # tools.py 用 `from .quotes import quote_now` 直接绑定了函数对象，
+    # 只 patch quotes 模块属性不会影响它，必须同时替换 tools 里的引用，
+    # 否则测试会真的走网络（隔离环境下必挂）。
+    monkeypatch.setattr(tools, "quote_now", _quote)
     return _snap
 
 

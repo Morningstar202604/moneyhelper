@@ -17,11 +17,13 @@ const __dirname = dirname(__filename);
 export default defineConfig({
   testDir: "./e2e",
   globalSetup: "./e2e/global-setup.ts",
-  timeout: 30_000,
-  expect: { timeout: 7_000 },
+  // 2 核 / 7G 开发机上 Vite 冷启动 + chromium 首帧经常超过 7s：
+  // expect 放宽到 12s、整例 45s，并允许本地重试一次，避免把资源抖动误报成功能回归。
+  timeout: 45_000,
+  expect: { timeout: 12_000 },
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: 0,
+  retries: 1,
   workers: 1,
   reporter: process.env.CI ? "github" : [["list"]],
   use: {
@@ -44,7 +46,11 @@ export default defineConfig({
       stdout: "pipe",
       stderr: "pipe",
       env: {
-        XIAOMAN_DB_PATH: "backend/data/e2e.db",
+        // 必须绝对路径：e2e-backend.sh 会先 cd 到 backend/，相对路径会解析成 backend/backend/data/e2e.db
+        XIAOMAN_DB_PATH: resolve(__dirname, "../backend/data/e2e.db"),
+        // 关限流：整轮 e2e 从同一 IP 在 1 分钟内发出 200+ 请求，会撞上默认 200/分钟的上限，
+        // 表现为每轮随机某个用例失败（视用例执行顺序而定），极易误判为功能回归。
+        XIAOMAN_DISABLE_RATE_LIMIT: "1",
       },
     },
     {
