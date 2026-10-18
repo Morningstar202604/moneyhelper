@@ -154,6 +154,8 @@ docs/                部署 / 配置 / 工作流 / 架构 / 规划文档（见�
 | [配置参考](docs/CONFIG.md) | 环境变量 + 设置项 + AI 端点速查（[英](docs/CONFIG.en.md)） |
 | [对话工作流](docs/WORKFLOW.md) | 全部一句话玩法（[英](docs/WORKFLOW.en.md)） |
 | [架构说明](docs/architecture.md) | 系统架构 Mermaid 图 + 部门模式 + 数据可靠性 |
+| [命令行](docs/cli.md) | `xiaoman add / ls / report / balance / ask`，离线优先，本地与远程同一套命令 |
+| [模块清单](docs/module-map.md) | 每个后端模块的体量、结构与职责 |
 | [开发指南](docs/DEVELOPMENT.md) | 代码地图 + 加工具/加设置教程 + 发布流程（[英](docs/DEVELOPMENT.en.md)） |
 | [路线图](docs/ROADMAP-v3.md) | v3 方向 → [详细计划](docs/PLAN-DETAILED.md) |
 | [规划归档](docs/planning/) | 审查报告 / 差异化分析 / 调研等十份文档 |
@@ -162,7 +164,7 @@ docs/                部署 / 配置 / 工作流 / 架构 / 规划文档（见�
 ## 测试
 
 ```bash
-# 后端：486 个测试（内核 / 行情降级 / Agent 循环 / LangGraph / API / 备份往返 / MCP …）
+# 后端：545 个测试（内核 / 行情降级 / Agent 循环 / LangGraph / API / 备份往返 / MCP …）
 cd backend && .venv/bin/python -m pytest tests -q
 cd backend && .venv/bin/python -m ruff check app tests
 
@@ -171,7 +173,8 @@ cd frontend && npm run build
 cd frontend && npm run test:e2e
 ```
 
-CI 覆盖后端 ruff + pytest、前端 tsc + build。
+CI 覆盖后端 ruff（app + xiaoman 包）+ pytest、前端 tsc + vitest + build，
+另有一个仓库卫生 job：禁止 >1MB 文件、`mkdocs build --strict` 必须通过。
 
 ## 数据与隐私
 

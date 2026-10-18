@@ -13,5 +13,5 @@ cd frontend && npm install && npm run build   # 产物由后端同域托管
 打开 http://127.0.0.1:8000 —— 空账本起步，先记第一笔：「午饭 28 元」。
 ## 3. 测试基线
 ```bash
-.venv/bin/python -m pytest tests/ -q -n 4   # 525+ 全绿
+.venv/bin/python -m pytest tests/ -q -n 4   # 545 个用例全绿
 ```

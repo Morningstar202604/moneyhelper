@@ -148,6 +148,8 @@ docs/                Deploy / config / workflow / architecture / planning
 | [Configuration](docs/CONFIG.en.md) | Env vars + settings + AI endpoint cheat-sheet ([中文](docs/CONFIG.md)) |
 | [Workflows](docs/WORKFLOW.en.md) | Every conversation pattern ([中文](docs/WORKFLOW.md)) |
 | [Architecture](docs/architecture.md) | Mermaid diagrams + department mode + data reliability |
+| [CLI](docs/cli.md) | `xiaoman add / ls / report / balance / ask` — offline-first, same commands in local or remote mode |
+| [Module map](docs/module-map.md) | Every backend module: size, structure, responsibility |
 | [Development guide](docs/DEVELOPMENT.en.md) | Code map + add-tool/setting tutorials + release flow ([中文](docs/DEVELOPMENT.md)) |
 | [Roadmap](docs/ROADMAP-v3.md) | v3 direction → [detailed plan](docs/PLAN-DETAILED.md) |
 | [Planning archive](docs/planning/) | Reviews / differentiation / research docs |
@@ -156,7 +158,7 @@ docs/                Deploy / config / workflow / architecture / planning
 ## Tests
 
 ```bash
-# Backend: 486 tests (engine / quote fallback / agent loop / LangGraph / API / backup / MCP ...)
+# Backend: 545 tests (engine / quote fallback / agent loop / LangGraph / API / backup / MCP ...)
 cd backend && .venv/bin/python -m pytest tests -q
 cd backend && .venv/bin/python -m ruff check app tests
 
@@ -165,7 +167,8 @@ cd frontend && npm run build
 cd frontend && npm run test:e2e
 ```
 
-CI covers backend ruff + pytest and frontend tsc + build.
+CI covers backend ruff (app + xiaoman package) + pytest, frontend tsc + vitest + build,
+plus a hygiene job: no files over 1MB, and `mkdocs build --strict` must pass.
 
 ## Data & privacy
 
