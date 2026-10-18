@@ -66,7 +66,10 @@ async def add_transactions_batch(
 
     conn = await _conn()
     results: list[dict[str, Any]] = []
-    await conn.execute("BEGIN")
+    # SAVEPOINT 而非 BEGIN：整库只有一条写连接，若其他协程此刻已持有事务
+    # （例如并发「确认」入账），BEGIN 会直接抛 "cannot start a transaction
+    # within a transaction"；SAVEPOINT 可安全嵌套，语义仍是全成或全无。
+    await conn.execute("SAVEPOINT add_tx_batch")
     try:
         for c in cleaned:
             cur = await conn.execute(
@@ -83,10 +86,12 @@ async def add_transactions_batch(
             await _record_snapshot("transaction", str(cur.lastrowid), "{}")
             results.append({"ok": True, "id": cur.lastrowid})
         await _mark_user_data(conn)
+        await conn.execute("RELEASE SAVEPOINT add_tx_batch")
         await conn.commit()
         return results
     except Exception:
-        await conn.rollback()
+        await conn.execute("ROLLBACK TO SAVEPOINT add_tx_batch")
+        await conn.execute("RELEASE SAVEPOINT add_tx_batch")
         raise
 
 

@@ -64,3 +64,51 @@ def test_litellm_chat_uses_key_field():
     src = inspect.getsource(llm.litellm_chat)
     assert 'cfg.get("api_key")' not in src, "配置键名必须是 key（与 _config 返回结构一致）"
     assert 'cfg.get("key")' in src
+
+
+async def test_batch_inside_outer_transaction_does_not_break(temp_db):
+    """并发写同一连接时，批量入账不得因外层已有事务而失败。
+
+    回归：旧实现用 ``BEGIN``，当另一个协程已持有写事务（并发「确认」入账）时
+    会抛 sqlite3.OperationalError: cannot start a transaction within a transaction，
+    整批入账失败。改用 SAVEPOINT 后必须能安全嵌套。
+    """
+
+    from app import db
+
+    conn = await db._conn()
+    await conn.execute("BEGIN")
+    await conn.execute(
+        "INSERT INTO transactions(date,item,category,amount) VALUES('2026-02-01','外层','其他',-1)"
+    )
+
+    out = await db.add_transactions_batch(
+        [{"date": "2026-02-02", "item": "内层", "category": "其他", "amount": -2.0}]
+    )
+    assert out and out[0]["ok"] is True
+    await conn.commit()
+
+    rows = await db.fetch_all("SELECT item FROM transactions WHERE item IN ('外层','内层')")
+    assert {r["item"] for r in rows} == {"外层", "内层"}
+
+
+async def test_batch_concurrent_calls_both_commit(temp_db):
+    """两个批量入账并发执行：都成功，且都完整落库（互不吞掉）。"""
+    import asyncio
+
+    from app import db
+
+    async def one(tag: str):
+        return await db.add_transactions_batch(
+            [
+                {"date": "2026-03-01", "item": f"{tag}-1", "category": "其他", "amount": -1.0},
+                {"date": "2026-03-02", "item": f"{tag}-2", "category": "其他", "amount": -2.0},
+            ]
+        )
+
+    res = await asyncio.gather(one("A"), one("B"))
+    assert all(r["ok"] for batch in res for r in batch)
+    rows = await db.fetch_all(
+        "SELECT item FROM transactions WHERE item LIKE 'A-%' OR item LIKE 'B-%'"
+    )
+    assert len(rows) == 4
