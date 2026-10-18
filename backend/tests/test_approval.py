@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import pytest
 from app import approval
 
 
@@ -29,9 +30,12 @@ async def test_threshold_falls_back_on_bad_config(temp_db, monkeypatch):
     async def _boom(*a, **kw):
         raise RuntimeError("config broken")
 
-    monkeypatch.setattr(agent_config, "get_config", _boom)
-    assert await approval.threshold() == approval.DEFAULT_THRESHOLD
-    monkeypatch.undo()
+    # 只撤销这一项补丁：monkeypatch.undo() 会把 temp_db 对 DB_PATH 的补丁
+    # 一起撤掉，后续访问会指向不存在的真实库（CI 上实测
+    # "unable to open database file"）。
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(agent_config, "get_config", _boom)
+        assert await approval.threshold() == approval.DEFAULT_THRESHOLD
 
     cfg = await agent_config.get_config()
     cfg.setdefault("defaults", {})["approval_threshold"] = "not-a-number"
