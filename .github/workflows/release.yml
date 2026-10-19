@@ -1,0 +1,92 @@
+name: Release
+
+# tag 推送后自动创建 GitHub Release。
+# 前置：由 scripts/release.sh 在本地推导版本号、写 CHANGELOG、提交并打 tag，
+# 人工确认后推送 tag（见 docs/RELEASE.md）。CI 只负责"把 tag 变成 Release"。
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 需要完整历史来生成 release notes 的对比区间
+          fetch-depth: 0
+
+      - name: 读取版本号（单一真源）
+        id: ver
+        run: |
+          VERSION=$(grep -m1 '^__version__' backend/app/version.py | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # tag 必须与 version.py 一致，否则说明有人手改过 tag
+          if [ "v$VERSION" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} 与 version.py ($VERSION) 不一致"
+            exit 1
+          fi
+
+      - name: 从 CHANGELOG 提取本版说明
+        id: notes
+        run: |
+          python3 - "${{ steps.ver.outputs.version }}" <<'PY' > /tmp/notes.md
+          import re
+          import sys
+
+          version = sys.argv[1]
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          # 取 "## [x.y.z]" 到下一个 "## [" 之间
+          m = re.search(
+              rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|\Z)",
+              text,
+              re.S | re.M,
+          )
+          print(m.group(1).strip() if m else "见 CHANGELOG.md")
+          PY
+          cat /tmp/notes.md
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ steps.ver.outputs.version }}"
+          body_path: /tmp/notes.md
+          draft: false
+          prerelease: ${{ contains(steps.ver.outputs.version, '-') }}
+          generate_release_notes: false
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 镜像同步：tag 也要同步到其他两个 GitHub 镜像与国内平台，
+  # 否则镜像站的 Release 页面与主仓不一致。
+  mirror-tags:
+    runs-on: ubuntu-latest
+    needs: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 同步 tag 到镜像
+        env:
+          GH_X33834: ${{ secrets.GH_TOKEN_X33834 }}
+          GH_MORNINGSTAR: ${{ secrets.GH_TOKEN_MORNINGSTAR }}
+        run: |
+          set -euo pipefail
+          push_tag() {
+            local repo="$1" token="$2"
+            if [ -z "$token" ]; then
+              echo "跳过 $repo（未配置 token）"
+              return 0
+            fi
+            git push "https://x-access-token:${token}@github.com/${repo}.git" \
+              "${GITHUB_REF_NAME}" 2>&1 | tail -2 || echo "同步 $repo 失败（不阻断主流程）"
+          }
+          push_tag "X33834/xiaoman" "$GH_X33834"
+          push_tag "Morningstar202604/xiaoman" "$GH_MORNINGSTAR"

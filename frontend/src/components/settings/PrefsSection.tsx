@@ -120,6 +120,10 @@ export function PrefsSection({
           ]}
         />
       </div>
+      {/* 版本号：来自后端单一真源（构建时注入），方便用户报问题时带上版本 */}
+      <div className="mt-3 border-t border-border pt-2 text-[11px] text-muted-foreground">
+        {t("settings.version")} {__APP_VERSION__}
+      </div>
     </Section>
   );
 }

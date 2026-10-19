@@ -82,6 +82,7 @@ nav:
       - Agent Harness 调研: planning/11-agent-harness-专项调研.md
   - 质量:
       - 代码审查发现: REVIEW-FINDINGS.md
+      - 发版流程: RELEASE.md
 
 # 严格构建：nav 里写错文件名会直接失败，避免文档站悄悄缺页
 strict: true

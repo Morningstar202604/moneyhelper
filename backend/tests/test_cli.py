@@ -128,4 +128,7 @@ def test_facade_importable_from_any_cwd(tmp_path, monkeypatch):
         timeout=120,
     )
     assert out.returncode == 0, out.stderr[-800:]
-    assert out.stdout.strip() == "2.1.0"
+    # 版本号来自单一真源（app/version.py），测试不硬编码具体版本
+    from app.version import __version__
+
+    assert out.stdout.strip() == __version__

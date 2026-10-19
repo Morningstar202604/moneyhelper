@@ -853,4 +853,5 @@ export const zh: Record<string, string> = {
   "dept.history": "历史呈批件",
   "dept.empty": "还没有呈批件——输入一句话派工试试",
   "dept.metrics": "指标",
+  "settings.version": "版本",
 };

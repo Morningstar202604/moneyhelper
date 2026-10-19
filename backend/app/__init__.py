@@ -20,4 +20,4 @@ _warnings.filterwarnings("ignore", message=r"The default value of `allowed_objec
 _warnings.filterwarnings("ignore", message=r".*has been moved to `langchain\.agents`")
 _warnings.filterwarnings("ignore", message=r"Support for class-based `config` is deprecated")
 
-__version__ = "1.0.0"
+from .version import __version__ as __version__  # noqa: E402  单一真源（app/version.py）

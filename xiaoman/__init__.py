@@ -23,9 +23,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-__version__ = "2.1.0"
-
-
 def _ensure_app_importable() -> None:
     """让 `app.*`（既有实现）在任意工作目录下都能导入。
 
@@ -53,5 +50,20 @@ def _ensure_app_importable() -> None:
 
 
 _ensure_app_importable()
+
+
+def _load_version() -> str:
+    """版本号来自后端单一真源 app/version.py（避免多份版本各自漂移）。"""
+    _ensure_app_importable()
+    try:
+        from app.version import __version__ as v
+
+        return v
+    except Exception:  # noqa: BLE001 — 导入失败时降级，保证包仍可用
+        return "0.0.0"
+
+
+__version__ = _load_version()
+
 
 __all__ = ["__version__"]

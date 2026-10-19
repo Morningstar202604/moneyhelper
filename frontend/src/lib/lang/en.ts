@@ -853,4 +853,5 @@ export const en: Record<string, string> = {
   "dept.history": "Past submissions",
   "dept.empty": "No submissions yet — dispatch a question to start",
   "dept.metrics": "Metrics",
+  "settings.version": "Version",
 };

@@ -2,12 +2,37 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath, URL } from "node:url";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+/**
+ * 版本号来自后端单一真源 backend/app/version.py。
+ *
+ * 为什么不在前端再存一份：版本号此前三处漂移（1.0.0 / 1.4.0 / 2.1.0），
+ * 用户问"这是什么版本"会得到不同答案。现在构建时从 Python 源文件读，
+ * 前端只有这一个来源；package.json 的 version 由发版脚本同步。
+ */
+const HERE = fileURLToPath(new URL(".", import.meta.url));
+
+function readAppVersion(): string {
+  try {
+    const src = readFileSync(resolve(HERE, "../backend/app/version.py"), "utf-8");
+    const m = src.match(/^__version__\s*=\s*["']([^"']+)["']/m);
+    return m?.[1] ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
 
 // 开发期：vite 跑 5198，/api 反代到后端 8788（避免跨域）。
 // 注意：用 8788/5198 专用端口，避开其他 AI 工具可能抢占的 8787/5199。
 // 生产期：vite build 出 dist，由 FastAPI 直接托管（单端口，无跨域）。
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // 注入 __APP_VERSION__，前端无需再存一份版本号
+  define: {
+    __APP_VERSION__: JSON.stringify(readAppVersion()),
+  },
   // 生产构建剔除调试类 console（保留 console.error/warn，便于线上排查）
   esbuild: {
     pure: ["console.log", "console.debug", "console.info"],

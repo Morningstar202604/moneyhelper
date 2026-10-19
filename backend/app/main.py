@@ -40,6 +40,7 @@ from .routes import (
     settings_router,
     system_router,
 )
+from .version import __version__
 
 log = _get_logger(__name__)
 
@@ -156,7 +157,7 @@ async def _combined_lifespan(app_ref: FastAPI):
         yield
 
 
-app = FastAPI(title="小满 API", version="1.0.0", lifespan=_combined_lifespan)
+app = FastAPI(title="小满 API", version=__version__, lifespan=_combined_lifespan)
 
 
 @app.exception_handler(Exception)
