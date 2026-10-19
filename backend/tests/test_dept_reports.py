@@ -224,3 +224,30 @@ async def test_api_approve_missing_report(client: AsyncClient) -> None:
         "/api/department/reports/nope/decide", json={"decision": "approve"}
     )
     assert r.status_code == 404
+
+
+async def test_stream_report_carries_status_and_id(client: AsyncClient) -> None:
+    """回归：SSE 推给前端的呈批件必须带 status='pending' 与 report_id。
+
+    前端靠这两个字段决定是否显示审批按钮。此前只拼了 report_id 没带 status，
+    结果是"待批的呈批件看不到批准按钮"——e2e 实测发现。
+    """
+    import json as _json
+
+    events: list[dict] = []
+    async with client.stream(
+        "POST", "/api/department/stream", json={"question": "盘一下上季度"}
+    ) as r:
+        assert r.status_code == 200
+        async for line in r.aiter_lines():
+            if line.startswith("data:"):
+                ev = _json.loads(line[5:].strip())
+                events.append(ev)
+                if ev.get("type") == "dept_report":
+                    break
+
+    report_ev = next(e for e in events if e.get("type") == "dept_report")
+    report = report_ev["report"]
+    assert report.get("report_id"), "必须带 report_id 才能审批"
+    assert report.get("status") == "pending", "必须带 status，否则前端不显示审批按钮"
+    assert report.get("verdict")

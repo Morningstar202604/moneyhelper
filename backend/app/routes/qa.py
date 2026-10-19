@@ -347,7 +347,9 @@ async def department_stream(payload: dict):
         # 落库后才能跨请求审批（老板离开页面再回来仍可批）
         try:
             report_id = await db.dept_report_save(question, report)
-            report = {**report, "report_id": report_id}
+            # 必须带上 status：前端据此决定是否显示审批按钮（pending 才有）。
+            # 新落库的记录状态一定是 pending，与 db 层默认值一致。
+            report = {**report, "report_id": report_id, "status": "pending"}
         except Exception:  # noqa: BLE001 — 落库失败不阻断交付，但如实标注
             log.exception("dept_report save failed")
             report = {**report, "report_id": ""}
@@ -432,7 +434,8 @@ async def dept_report_decide(report_id: str, payload: dict) -> Any:
         new_report = await department.run_department_mode(followup_q)
         new_id = await db.dept_report_save(followup_q, new_report)
         out["followup_report_id"] = new_id
-        out["followup_report"] = new_report
+        # 同样补 status：前端切到追问产生的新件时要能继续审批
+        out["followup_report"] = {**new_report, "report_id": new_id, "status": "pending"}
     return out
 
 

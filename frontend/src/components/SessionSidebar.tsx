@@ -1,7 +1,7 @@
 /** 桌面侧边栏：品牌 + 导航 + 会话列表 + 设置入口（符合人的使用逻辑：先有导航，再有历史会话）。 */
 
 import { useState } from "react";
-import { Plus, Search, Settings, Sunrise, Trash2, Pencil, MessageCircle, PanelLeftClose, Inbox } from "lucide-react";
+import { Plus, Search, Settings, Sunrise, Trash2, Pencil, MessageCircle, PanelLeftClose, Inbox, Building2 } from "lucide-react";
 import { BrandLogo, BRAND } from "@/lib/brand";
 import { useSessions } from "@/lib/store";
 import { useI18n } from "@/lib/i18n";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useScheduledOutputs } from "@/lib/inbox";
 import { MorningReportDialog } from "@/components/MorningReportDialog";
 import { ScheduledOutputsPanel } from "@/components/ScheduledOutputsPanel";
+import { DepartmentPanel } from "@/components/DepartmentPanel";
 import type { SessionItem } from "@/lib/types";
 
 /** 问AI 页的会话侧栏：品牌 + 会话历史（主导航已上移 TopBar） */
@@ -39,6 +40,7 @@ export function SessionSidebar({
   const [q, setQ] = useState("");
   const [reportOpen, setReportOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [deptOpen, setDeptOpen] = useState(false);
 
   // 本地过滤：会话量小，无需后端接口
   const kw = q.trim().toLowerCase();
@@ -197,6 +199,14 @@ export function SessionSidebar({
             <button
               type="button"
               className="text-muted-foreground hover:text-primary p-2 -m-1"
+              aria-label={t("dept.title")}
+              onClick={() => setDeptOpen(true)}
+            >
+              <Building2 className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-primary p-2 -m-1"
               aria-label={t("report.generate")}
               onClick={() => setReportOpen(true)}
             >
@@ -287,6 +297,8 @@ export function SessionSidebar({
       <MorningReportDialog open={reportOpen} onOpenChange={setReportOpen} />
       {/* 定时产出收件箱：晨报 + 技能触发的统一时间线（未读徽标随打开清零） */}
       <ScheduledOutputsPanel open={inboxOpen} onClose={() => setInboxOpen(false)} />
+      {/* 财务部门实况看板（M3.6）：派工 → 四工位实时状态 → 秘书呈批 → 审批 */}
+      <DepartmentPanel open={deptOpen} onClose={() => setDeptOpen(false)} />
     </div>
   );
 }

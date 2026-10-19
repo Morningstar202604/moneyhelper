@@ -172,3 +172,28 @@ test.describe("应用启动 & 冒烟", () => {
     }
   });
 });
+
+test.describe("财务部门看板", () => {
+  test("派工 → 四工位运行 → 秘书出呈批件 → 可审批", async ({ page }) => {
+    await page.goto("/");
+    // 侧栏部门入口
+    await page.getByRole("button", { name: "财务部门" }).click();
+    await expect(page.getByText("一句话派工，四部门并行取数")).toBeVisible();
+
+    // 派一个"全面盘点"类问题（后端会派全部四部门）
+    await page.getByLabel("比如：盘一下上季度").fill("盘一下上季度");
+    await page.getByRole("button", { name: /派工/ }).click();
+
+    // 四工位出现（会计/风控/投资/记账），并最终都交件
+    for (const name of ["会计部", "风控部", "投资部", "记账部"]) {
+      await expect(page.getByText(name).first()).toBeVisible({ timeout: 60_000 });
+    }
+    // 秘书台出结论
+    await expect(page.getByText("结论").first()).toBeVisible({ timeout: 60_000 });
+    // 待批 → 批准
+    await expect(page.getByText("待批").first()).toBeVisible({ timeout: 30_000 });
+    // 精确匹配：历史列表里会有"已批准"文本，模糊匹配会命中多处
+    await page.getByRole("button", { name: "批准", exact: true }).click();
+    await expect(page.getByText("已处理").first()).toBeVisible({ timeout: 30_000 });
+  });
+});
