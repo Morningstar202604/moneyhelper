@@ -442,3 +442,54 @@ async def test_graph_hitl_resume_survives_memory_clear(temp_db, monkeypatch):
     assert after == 1250.0
     # token 已消费（一次性）
     assert await agent_graph._load_pending(token) is None
+
+
+async def test_pending_token_expires_after_ttl(temp_db):
+    """过期 token 不得从磁盘恢复（防止陈旧确认被误执行）。
+
+    pending 表此前只增不删：用户反复触发写操作但不确认时无限增长，
+    且过期 token 仍能被 resume。现在 _save_pending 顺手清理、
+    _load_pending 按 TTL 过滤。
+    """
+    from app import agent_graph
+
+    token = "expired-token-probe"
+    await agent_graph._save_pending(token, "run-abc")
+    # 未过期：能读到
+    assert await agent_graph._load_pending(token) == "run-abc"
+
+    # 把记录改成 31 分钟前，模拟过期
+    def _age() -> None:
+        c = agent_graph._pending_sql()
+        c.execute(
+            "UPDATE pending SET created_at=? WHERE token=?",
+            ("2020-01-01T00:00:00", token),
+        )
+        c.commit()
+
+    await agent_graph.asyncio.to_thread(_age)
+    assert await agent_graph._load_pending(token) is None
+
+
+async def test_save_pending_prunes_expired_rows(temp_db):
+    """写入新 token 时应顺带清理过期行，避免表无限增长。"""
+    from app import agent_graph
+
+    def _insert_old() -> None:
+        c = agent_graph._pending_sql()
+        c.execute(
+            "INSERT OR REPLACE INTO pending(token,thread_id,created_at) VALUES(?,?,?)",
+            ("old-token", "run-old", "2020-01-01T00:00:00"),
+        )
+        c.commit()
+
+    await agent_graph.asyncio.to_thread(_insert_old)
+    await agent_graph._save_pending("new-token", "run-new")
+
+    def _count_old() -> int:
+        row = agent_graph._pending_sql().execute(
+            "SELECT COUNT(*) FROM pending WHERE token='old-token'"
+        ).fetchone()
+        return int(row[0])
+
+    assert await agent_graph.asyncio.to_thread(_count_old) == 0

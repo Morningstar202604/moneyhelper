@@ -28,6 +28,7 @@ import json
 import sqlite3
 import time
 import uuid
+import weakref
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from datetime import datetime, timedelta
@@ -74,16 +75,20 @@ _CONCURRENT_HITS_MAX = 512
 _HITL_THREADS: dict[str, dict[str, Any]] = {}
 
 # AsyncSqliteSaver 是异步初始化、且连接绑定「创建它的那个 event loop」（aiosqlite）。
-# 用 loop-id 作 key 按需缓存：生产端单 worker 单 loop 复用同一连接（写入即可持久落盘）；
+# 按事件循环缓存：生产端单 worker 单 loop 复用同一连接（写入即可持久落盘）；
 # 测试里每个 loop 各持独立连接、串行访问同一文件，互不串扰，也避免跨 loop 报错。
-_savers: dict[int, AsyncSqliteSaver] = {}
-_exec_graphs: dict[int, Any] = {}
+#
+# 用 WeakKeyDictionary 而不是 id(loop) 作键：id() 在对象被回收后可能被复用，
+# 新 loop 拿到旧 key 就会命中已关闭的连接（症状是随机 "Event loop is closed"）。
+# 弱引用键在 loop 被 GC 时自动失效，不需要手动清理。
+_savers: weakref.WeakKeyDictionary[Any, AsyncSqliteSaver] = weakref.WeakKeyDictionary()
+_exec_graphs: weakref.WeakKeyDictionary[Any, Any] = weakref.WeakKeyDictionary()
 
 
 async def _acquire_saver() -> AsyncSqliteSaver:
     """按当前 event loop 惰性构建磁盘 AsyncSqliteSaver（WAL + setup）。"""
     loop = asyncio.get_running_loop()
-    key = id(loop)
+    key = loop
     if key not in _savers:
         _CHECKPOINT_DB.parent.mkdir(parents=True, exist_ok=True)
         conn = await aiosqlite.connect(str(_CHECKPOINT_DB))
@@ -98,7 +103,7 @@ async def _acquire_saver() -> AsyncSqliteSaver:
 async def _acquire_exec_graph() -> Any:
     """按当前 event loop 惰性编译「带磁盘 checkpoint 的执行图」（供 run_graph / resume 使用）。"""
     loop = asyncio.get_running_loop()
-    key = id(loop)
+    key = loop
     if key not in _exec_graphs:
         saver = await _acquire_saver()
         _exec_graphs[key] = _build_graph().compile(checkpointer=saver)
@@ -146,6 +151,12 @@ def _pending_sql() -> sqlite3.Connection:
 async def _save_pending(token: str, thread_id: str) -> None:
     def _w() -> None:
         c = _pending_sql()
+        # 顺手清理过期条目：pending 表此前只增不删，用户反复触发写操作但不确认时
+        # 会无限增长（重启后还能被 resume 的也只是最近 30 分钟内的）。
+        c.execute(
+            "DELETE FROM pending WHERE created_at < ?",
+            (_pending_cutoff(),),
+        )
         c.execute(
             "INSERT OR REPLACE INTO pending(token, thread_id, created_at) VALUES(?,?,?)",
             (token, thread_id, time.strftime("%Y-%m-%dT%H:%M:%S")),
@@ -155,11 +166,23 @@ async def _save_pending(token: str, thread_id: str) -> None:
     await asyncio.to_thread(_w)
 
 
+def _pending_cutoff() -> str:
+    """早于此刻的 pending 记录视为过期（与审批 TTL 一致，避免陈旧 token 被恢复）。"""
+    from datetime import timedelta
+
+    return (datetime.now() - timedelta(minutes=_PENDING_APPROVAL_TTL_MINUTES)).strftime(
+        "%Y-%m-%dT%H:%M:%S"
+    )
+
+
 async def _load_pending(token: str) -> str | None:
     def _r() -> str | None:
         row = (
             _pending_sql()
-            .execute("SELECT thread_id FROM pending WHERE token=?", (token,))
+            .execute(
+                "SELECT thread_id FROM pending WHERE token=? AND created_at >= ?",
+                (token, _pending_cutoff()),
+            )
             .fetchone()
         )
         return row[0] if row else None

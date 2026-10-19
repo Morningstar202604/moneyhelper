@@ -5,7 +5,7 @@
 >
 > 更新规则：每完成一个里程碑就改这一页，并在末尾追加一行变更记录。
 
-最后更新：2026-10-18 · 基线 `b2930d7`（后端 569 测试 / 前端 86 单测 + 15 e2e）
+最后更新：2026-10-18 · 基线 `420e9d0`（后端 583 测试 / 前端 86 单测 + 15 e2e）
 
 ## 总览
 
@@ -13,7 +13,7 @@
 |---|---:|---|
 | M0 稳固+补课 | 100% | 完成 |
 | M1 模块化+文档骨架 | 100% | 完成 |
-| M2 协议补课 | 90% | M2.4 完成；M2.5 部分 |
+| M2 协议补课 | 100% | 完成 |
 | M3 财务部门模式 | 25% | 只有规则版派工 |
 | M4 多端 | 33% | CLI 可用，桌面/发版未做 |
 | M5 可视化+适老 | 20% | 图表缺 5 项，适老/语音未做 |
@@ -57,7 +57,7 @@
 | M2.3 HITL 迁 Elicitation | 完成 | `app/approval.py`；MCP 写工具 fail-closed 审批 |
 | M2.3 晨报迁 Tasks | **阻塞** | mcp SDK 只有 experimental；fastmcp 2.12 未透传。见下 |
 | M2.4 AG-UI 映射层 | 完成 | `app/agui.py` + `POST /api/ask/agui`；流式翻译，双协议共存 |
-| M2.5 官方 saver 替换 | 部分 | `AsyncSqliteSaver` 已用；但 `_savers`/`_HITL_THREADS` 仍按 `id(loop)` 缓存，`_PENDING_DB` 是手写 sqlite3 |
+| M2.5 官方 saver 替换 | 完成 | `AsyncSqliteSaver` + `WeakKeyDictionary` 按 loop 缓存；pending 表加 TTL 清理 |
 
 M2.3 Tasks 阻塞细节：`mcp` 1.30 把 Tasks 放在 `mcp.server.experimental`
 （`TaskSupport` / `ServerTaskContext`），标 experimental；`fastmcp` 2.12 源码里
@@ -108,10 +108,9 @@ fastmcp 支持后只换装饰器，业务实现不动。
 
 ## 下一步顺序
 
-1. M2.5 收尾（loop-id 缓存改弱引用 + pending 落库对齐官方 saver）
-3. M3.1 → M3.6（核心差异化，工作量最大）
-4. M4.3 发版自动化（比 M4.2 桌面端性价比高）
-5. M5.2 补齐 5 个图表
+1. M3.1 → M3.6（核心差异化，工作量最大）
+2. M4.3 发版自动化（比 M4.2 桌面端性价比高）
+3. M5.2 补齐 5 个图表
 
 ## 变更记录
 
@@ -119,3 +118,4 @@ fastmcp 支持后只换装饰器，业务实现不动。
 |---|---|
 | 2026-10-18 | 建立本页；M0/M1 完成，M2 达 80% |
 | 2026-10-18 | M2.4 AG-UI 映射层完成，M2 达 90% |
+| 2026-10-18 | M2.5 完成，M2 收官；pending 表补 TTL 清理 |
