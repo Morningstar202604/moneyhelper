@@ -2,6 +2,17 @@
 
 > 目标读者：第一次接触小满仓库的开发者/实习生。读完本指南，你应该能：**跑起来 → 看懂架构 → 改代码（加工具/加设置/加路由）→ 写测试 → 发版本**。
 
+## 提交前检查
+
+```bash
+./scripts/lint.sh                      # ruff（app/tests + xiaoman 两处，与 CI 一致）
+cd backend && .venv/bin/python -m pytest tests -q
+cd frontend && npx tsc --noEmit && npx vitest run
+```
+
+`scripts/lint.sh` 存在的意义：CI 查两处（`backend/app`+`tests` 与根目录 `xiaoman/`），
+本地只跑一处会漏。历史上漏过一次，CI 才报出来。
+
 ## 0. 一次跑通（10 分钟）
 
 ```bash

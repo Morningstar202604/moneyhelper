@@ -23,6 +23,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+
 def _ensure_app_importable() -> None:
     """让 `app.*`（既有实现）在任意工作目录下都能导入。
 
