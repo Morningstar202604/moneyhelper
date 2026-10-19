@@ -248,8 +248,20 @@ _DEPT_RUNNERS: dict[str, str] = {
 }
 
 
-async def _execute_order(order: WorkOrder, emit: Emit | None) -> WorkOrder:
-    """执行一张工单，状态变更实时 emit（供实况看板）。"""
+async def _execute_order(
+    order: WorkOrder, emit: Emit | None, use_agent: bool = True
+) -> WorkOrder:
+    """执行一张工单。
+
+    use_agent=True（默认）走 M3.3 部门 agent：模型自主选择工具、受工具白名单
+    与 token 预算约束；模型不可用或循环失败时自动退回确定性执行。
+    use_agent=False 强制走确定性执行（离线/调试场景）。
+    """
+    if use_agent:
+        from . import dept_agent
+
+        return await dept_agent.run_dept_agent(order, emit)
+
     order.status = "running"
     if emit:
         await emit(
@@ -358,21 +370,36 @@ async def _secretary(orders: list[WorkOrder], question: str) -> dict[str, Any]:
 
 
 async def run_department_mode(
-    question: str, emit: Emit | None = None, lang: str = "zh"
+    question: str,
+    emit: Emit | None = None,
+    lang: str = "zh",
+    use_llm_dispatch: bool = True,
+    use_agent: bool = True,
 ) -> dict[str, Any]:
-    """部门模式入口：拆单 → 并行执行 → 秘书汇总呈批。"""
-    orders = decompose(question)
+    """部门模式入口：拆单 → 并行执行 → 秘书汇总呈批。
+
+    派工优先走 LLM（M3.2）：模型不可用或输出非法时回落到规则派工，
+    返回值里的 `dispatch` 字段标明实际用了哪条路径（便于排查"为什么少了个部门"）。
+    """
+    if use_llm_dispatch:
+        from . import dept_dispatch
+
+        orders, dispatch_src = await dept_dispatch.dispatch(question, lang)
+    else:
+        orders, dispatch_src = decompose(question), "rules"
     if emit:
         await emit(
             {
                 "type": "dept_start",
                 "question": question,
+                "dispatch": dispatch_src,
                 "orders": [order_to_dict(o) for o in orders],
             }
         )
     # 并行派发；return_exceptions 确保等全部部门结束，不留后台任务拖垮事件循环
     results = await asyncio.gather(
-        *(_execute_order(o, emit) for o in orders), return_exceptions=True
+        *(_execute_order(o, emit, use_agent=use_agent) for o in orders),
+        return_exceptions=True,
     )
     done: list[WorkOrder] = []
     for o, r in zip(orders, results, strict=False):
@@ -380,6 +407,7 @@ async def run_department_mode(
             o.status, o.error = "failed", str(r)[:200]
         done.append(o)
     report = await _secretary(done, question)
+    report["dispatch"] = dispatch_src
     if emit:
         await emit(
             {
