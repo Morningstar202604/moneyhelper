@@ -143,3 +143,30 @@ curl -N -X POST http://127.0.0.1:8788/api/ask/agui \
 - `step` → `STEP_STARTED` / `STEP_FINISHED`；只发 done 的会补发 start
 - `final` → `RUN_FINISHED`，业务字段（flags / actions / pending_token）保留在 `result`
 - `card` / `plan` → `CUSTOM`（AG-UI 无对应类型，原样透传不丢信息）
+
+## 部门呈批（M3.5）
+
+部门模式跑完会产出一份呈批件，并**落库**（老板离开页面再回来仍能批）。
+
+| 端点 | 用途 |
+|---|---|
+| `POST /api/department/run` | 跑一轮，返回呈批件与事件（自动落库） |
+| `POST /api/department/stream` | 同上，边跑边推 SSE（实况看板） |
+| `GET /api/department/reports` | 列出呈批件（`?status=pending` 只看待批） |
+| `GET /api/department/reports/{id}` | 查看单份呈批件 |
+| `POST /api/department/reports/{id}/decide` | 审批 |
+
+审批动作三种：
+
+| decision | 语义 | 要求 |
+|---|---|---|
+| `approve` | 批准，结论被采纳 | 无 |
+| `reject` | 驳回 | **必须附理由**（写进审计与记录） |
+| `inquire` | 追问 | **必须附追问内容**，会重跑一轮并产生**新**呈批件 |
+
+`inquire` 不覆盖原记录：原呈批件标记为 `inquired` 保留为历史，新呈批件是
+`pending`。审批链完整可查。
+
+状态机：`pending → approved / rejected / inquired`。同一份呈批件只能被审批一次
+（条件 UPDATE 保证），重复提交返回 409。每次决策都写 provenance
+（`dept_report_approve` / `_reject` / `_inquire`），老板的决策与数字产出在同一条审计链上。

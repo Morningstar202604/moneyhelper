@@ -207,6 +207,12 @@ async def department_run(payload: dict) -> dict:
         events.append(e)
 
     report = await run_department_mode(q, emit)
+    # 与 SSE 路径一致：落库后才能跨请求审批（M3.5）
+    try:
+        report_id = await db.dept_report_save(q, report)
+        report = {**report, "report_id": report_id}
+    except Exception:  # noqa: BLE001 — 落库失败不阻断交付
+        log.exception("dept_report save failed")
     return {"report": report, "events": events}
 
 

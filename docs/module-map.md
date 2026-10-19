@@ -49,13 +49,14 @@
 | `calculations/returns.py` | 242 | 7 | 0 | 收益率计算模块：XIRR（内部收益率）、TWR（时间加权收益率）、简单收益率。 |
 | `context.py` | 86 | 4 | 0 | 上下文工程 —— 用 tiktoken（OpenAI 官方）精确管理上下文窗口。 |
 | `csvimport.py` | 175 | 8 | 0 | 账单 CSV 解析与列映射：解析常见平台导出格式（微信/支付宝/银行 CSV、Excel 另存的 UTF-8 CSV）。 |
-| `db/__init__.py` | 276 | 0 | 0 | db 门面：保持 `from . import db` / `db.X` 旧用法 100% 兼容（M1 拆分，见 docs/PLAN-DETAILED.md M |
+| `db/__init__.py` | 300 | 0 | 0 | db 门面：保持 `from . import db` / `db.X` 旧用法 100% 兼容（M1 拆分，见 docs/PLAN-DETAILED.md M |
 | `db/_core.py` | 490 | 30 | 0 | 组合库 + 运行历史持久化（aiosqlite，单连接串行，不阻塞事件循环）。 |
-| `db/_schema.py` | 341 | 0 | 0 | 数据库 schema 与种子数据（从 _core.py 拆出）。 |
+| `db/_schema.py` | 359 | 0 | 0 | 数据库 schema 与种子数据（从 _core.py 拆出）。 |
 | `db/audit.py` | 116 | 7 | 0 | 审计与附件域：审计日志 + 附件元数据。 |
 | `db/backup.py` | 237 | 5 | 0 | 数据可移植域：全量导出/导入/月度趋势。 |
 | `db/budgets.py` | 130 | 5 | 0 | 预算域：月度预算设置与用量统计。 |
 | `db/debts.py` | 96 | 4 | 0 | 负债与订阅域。 |
+| `db/dept_reports.py` | 136 | 7 | 0 | 部门呈批件存储（M3.5）：呈批件的落库与审批状态流转。 |
 | `db/family.py` | 296 | 13 | 0 | 家庭域：成员/成员间借贷/家庭汇总。 |
 | `db/goals.py` | 103 | 4 | 0 | 财务目标域 CRUD。 |
 | `db/history.py` | 410 | 23 | 0 | 历史域：问答 runs/会话 sessions/会话摘要/待确认动作。 |
@@ -76,7 +77,7 @@
 | `import_parsers/wechat.py` | 182 | 5 | 1 | 微信支付账单 CSV 解析器。 |
 | `llm.py` | 602 | 19 | 3 | LiteLLM 统一模型接入——替掉自研 openai SDK 直连 + 手写路由 + 手动重试。 |
 | `logging_utils.py` | 118 | 6 | 1 | 统一日志：RotatingFileHandler 落 backend/logs/xiaoman.log，控制台输出。 |
-| `main.py` | 272 | 8 | 0 | FastAPI 入口（薄装配层，M1.4 拆分后）：中间件注册 + 路由装配 + lifespan + 静态托管。 |
+| `main.py` | 278 | 8 | 0 | FastAPI 入口（薄装配层，M1.4 拆分后）：中间件注册 + 路由装配 + lifespan + 静态托管。 |
 | `mcp_client.py` | 161 | 8 | 0 | MCP 客户端：基于官方 `mcp` SDK（StreamableHTTP 传输），不自研协议实现。 |
 | `mcp_server.py` | 760 | 53 | 4 | MCP Server：把小满所有工具暴露为标准 MCP 协议。 |
 | `mem.py` | 149 | 8 | 0 | 长记忆层 —— 接 mem0（2026 年 local-first 首选）。 |
@@ -104,7 +105,7 @@
 | `routes/members.py` | 181 | 11 | 0 | 家庭成员管理路由：CRUD + 成员间借贷 + 成员汇总。 |
 | `routes/memory.py` | 145 | 10 | 0 | 长期记忆与经验库（reflections）：列出 / 新增 / 删除 / 清空 / 遗忘 / AI 归纳。 |
 | `routes/provenance.py` | 48 | 2 | 0 | 审计追踪路由：查询操作来龙去脉。 |
-| `routes/qa.py` | 516 | 29 | 1 | 问答域路由：SSE 流式问答（ask）+ HITL 确认（confirm）+ 历史/会话管理。 |
+| `routes/qa.py` | 603 | 32 | 1 | 问答域路由：SSE 流式问答（ask）+ HITL 确认（confirm）+ 历史/会话管理。 |
 | `routes/reports.py` | 72 | 4 | 0 | 晨报 / 调度器状态 / 定时产出收件箱。 |
 | `routes/settings.py` | 191 | 3 | 0 | 设置路由：GET/PUT /api/settings（原 main.py 设置域，M1.4 拆出）。 |
 | `routes/status.py` | 75 | 5 | 0 | 健康检查与指标：/api/health、/api/metrics、/api/bootstrap、模型目录。 |
@@ -117,4 +118,4 @@
 | `tools.py` | 1094 | 33 | 0 | Agent 工具层：把确定性分析内核暴露成 LLM 可调用的工具（function calling）。 |
 | `vault.py` | 145 | 10 | 0 | 加密密钥管理系统：DB 内敏感字段加密存储。 |
 
-合计 86 个文件、20635 行。
+合计 87 个文件、20906 行。

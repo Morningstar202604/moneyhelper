@@ -60,6 +60,24 @@ from .debts import (
     delete_debt,
     delete_subscription,
 )
+from .dept_reports import (
+    DECISIONS as DEPT_DECISIONS,
+)
+from .dept_reports import (
+    decide as dept_report_decide,
+)
+from .dept_reports import (
+    get_report as dept_report_get,
+)
+from .dept_reports import (
+    list_reports as dept_report_list,
+)
+from .dept_reports import (
+    pending_count as dept_report_pending_count,
+)
+from .dept_reports import (
+    save_report as dept_report_save,
+)
 from .family import (
     all_members_summary,
     family_summary,
@@ -150,6 +168,7 @@ from .users import (
 __all__ = [
     "DB_PATH",
     "DEFAULT_SETTINGS",
+    "DEPT_DECISIONS",
     "_ACTIVE_KEY",
     "_active_member_id",
     "_clamp_limit",
@@ -202,6 +221,11 @@ __all__ = [
     "delete_subscription",
     "delete_transaction",
     "delete_watchlist",
+    "dept_report_decide",
+    "dept_report_get",
+    "dept_report_list",
+    "dept_report_pending_count",
+    "dept_report_save",
     "execute",
     "export_data",
     "family_summary",

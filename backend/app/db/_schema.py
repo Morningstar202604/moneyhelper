@@ -225,6 +225,24 @@ CREATE TABLE IF NOT EXISTS pending_actions (
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL
 );
+-- 部门模式呈批件（M3.5）：秘书产出的呈批件 + 老板审批状态。
+-- 独立成表而不是塞进 runs：呈批件有订单明细、对账冲突与审批链，
+-- 与问答历史是不同生命周期（待批/已批/驳回/追问）。
+CREATE TABLE IF NOT EXISTS dept_reports (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_id    TEXT NOT NULL UNIQUE,      -- 对外暴露的 ID
+    question     TEXT NOT NULL,
+    dispatch     TEXT NOT NULL DEFAULT '',  -- llm / rules
+    verdict      TEXT NOT NULL DEFAULT '',
+    report       TEXT NOT NULL,             -- 呈批件正文（Markdown）
+    orders_json  TEXT NOT NULL DEFAULT '[]',
+    conflicts_json TEXT NOT NULL DEFAULT '[]',
+    status       TEXT NOT NULL DEFAULT 'pending',  -- pending/approved/rejected/inquired
+    decision_note TEXT NOT NULL DEFAULT '',        -- 驳回理由 / 追问内容
+    decided_at   TEXT,
+    created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_dept_reports_status ON dept_reports(status);
 CREATE TABLE IF NOT EXISTS conversation_summary (
     thread_id  TEXT PRIMARY KEY,
     summary    TEXT NOT NULL,
