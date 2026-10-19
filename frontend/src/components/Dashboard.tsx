@@ -25,6 +25,10 @@ import { IndicesStrip } from "@/components/IndicesStrip";
 import { NetWorthCard } from "@/components/dashboard/NetWorthCard";
 import { HealthScoreCard } from "@/components/dashboard/HealthScoreCard";
 import { ReturnsCard } from "@/components/dashboard/ReturnsCard";
+import { CashflowWaterfallCard } from "@/components/dashboard/CashflowWaterfallCard";
+import { ExpenseTreemapCard } from "@/components/dashboard/ExpenseTreemapCard";
+import { SubscriptionTimelineCard } from "@/components/dashboard/SubscriptionTimelineCard";
+import { HealthRadarCard } from "@/components/dashboard/HealthRadarCard";
 import { GoalProgressCard } from "@/components/dashboard/GoalProgressCard";
 import type { DashboardData, TrendMonth, BudgetUsage } from "@/lib/types";
 
@@ -709,6 +713,18 @@ export function Dashboard({
       <div className="grid gap-3 sm:grid-cols-2">
         <HealthScoreCard />
         <ReturnsCard months={6} />
+      </div>
+
+      {/* 现金流与支出结构：瀑布看"钱从哪来到哪去"，树图看"哪类支出最大" */}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <CashflowWaterfallCard />
+        <ExpenseTreemapCard />
+      </div>
+
+      {/* 健康五维 + 订阅扣款时间线 */}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <HealthRadarCard />
+        <SubscriptionTimelineCard />
       </div>
 
       {/* 首页评估：预算/订阅/债务/目标/现金流 → 结构化行动项 */}

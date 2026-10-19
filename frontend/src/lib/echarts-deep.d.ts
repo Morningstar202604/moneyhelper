@@ -6,3 +6,8 @@ declare module "echarts/lib/chart/pie";
 declare module "echarts/lib/component/grid";
 declare module "echarts/lib/component/legend";
 declare module "echarts/lib/component/tooltip";
+declare module "echarts/lib/chart/radar";
+declare module "echarts/lib/chart/treemap";
+declare module "echarts/lib/chart/graph";
+declare module "echarts/lib/component/radar";
+declare module "echarts/lib/component/markLine";

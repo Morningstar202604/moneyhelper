@@ -26,9 +26,14 @@ function loadEcharts(): Promise<EChartsModule> {
         import("echarts/lib/chart/bar"),
         import("echarts/lib/chart/line"),
         import("echarts/lib/chart/pie"),
+        import("echarts/lib/chart/radar"),
+        import("echarts/lib/chart/treemap"),
+        import("echarts/lib/chart/graph"),
         import("echarts/lib/component/grid"),
         import("echarts/lib/component/legend"),
         import("echarts/lib/component/tooltip"),
+        import("echarts/lib/component/radar"),
+        import("echarts/lib/component/markLine"),
       ]);
       core.use([CanvasRenderer]);
       echartsModule = core;

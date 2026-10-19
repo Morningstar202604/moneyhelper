@@ -68,7 +68,7 @@ export function HealthScoreCard() {
   const gradeColor = GRADE_COLORS[data.grade] ?? GRADE_COLORS.C;
 
   return (
-    <Card className="p-[var(--card-pad)]">
+    <Card className="@container p-[var(--card-pad)]">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 text-sm font-medium">
           <HeartPulse className="w-4 h-4 text-primary" />
@@ -79,7 +79,9 @@ export function HealthScoreCard() {
         </Badge>
       </div>
 
-      <div className="flex items-center gap-4">
+      {/* 窄容器（侧面板 400px）下横向排布会把中文标签挤成逐字竖排，
+          用容器查询在 <340px 时改为纵向堆叠：分数环在上、维度列表在下。 */}
+      <div className="flex flex-col items-center gap-3 @[340px]:flex-row @[340px]:items-center @[340px]:gap-4">
         <ScoreRing
           score={data.score}
           size={88}
@@ -87,7 +89,7 @@ export function HealthScoreCard() {
           sublabel={tr("health.scoreLabel")}
         />
 
-        <div className="flex-1 space-y-2">
+        <div className="w-full min-w-0 space-y-2 @[340px]:flex-1">
           {dims.map((d) => {
             const pct = d.max > 0 ? Math.round((d.score / d.max) * 100) : 0;
             return (
