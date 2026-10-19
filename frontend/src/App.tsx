@@ -15,8 +15,12 @@ import { LoginView } from "@/components/LoginView";
 import { useToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
+import { useIsDesktop } from "@/lib/use-media-query";
 import { TopBar } from "@/components/TopBar";
 import { DataModal } from "@/components/DataModal";
+import { MobileDrawer } from "@/components/MobileDrawer";
+import { ScheduledOutputsPanel } from "@/components/ScheduledOutputsPanel";
+import { DepartmentPanel } from "@/components/DepartmentPanel";
 
 const ChatView = lazy(() => import("@/components/ChatView").then((m) => ({ default: m.ChatView })));
 const SettingsView = lazy(() => import("@/components/SettingsView").then((m) => ({ default: m.SettingsView })));
@@ -37,6 +41,13 @@ export default function App() {
   const [pendingDelete, setPendingDelete] = useState<{ id: number; threadId: string } | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
+  // 侧栏面板状态集中在此：桌面侧栏与移动抽屉都要能打开它们
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [deptOpen, setDeptOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // 桌面侧栏按视口条件渲染（而非 CSS 隐藏）：避免同一入口在移动端出现两份
+  // 可访问 DOM（屏幕阅读器与自动化工具都会读到）
+  const isDesktop = useIsDesktop();
   const [locateRunId, setLocateRunId] = useState<number | null>(null);
 
   const [userCount, setUserCount] = useState<number | null>(null);
@@ -185,10 +196,11 @@ export default function App() {
         <OfflineBanner />
         <ErrorBoundary>
           <div className="flex h-full">
-            {/* 左侧会话栏：窄、常驻、可折叠 */}
+            {/* 左侧会话栏：窄、常驻、可折叠（仅桌面渲染，移动端用抽屉） */}
+            {isDesktop && (
             <aside
               className={cn(
-                "hidden md:flex shrink-0 flex-col border-r border-border bg-card/40 transition-[width] duration-200",
+                "flex shrink-0 flex-col border-r border-border bg-card/40 transition-[width] duration-200",
                 sidebarOpen ? "w-60" : "w-12",
               )}
             >
@@ -202,6 +214,8 @@ export default function App() {
                   onRename={renameSession}
                   onOpenSettings={() => setSettingsOpen(true)}
                   onCollapse={() => setSidebarOpen(false)}
+                  onOpenDept={() => setDeptOpen(true)}
+                  onOpenInbox={() => setInboxOpen(true)}
                 />
               ) : (
                 <div className="flex h-full w-12 flex-col items-center pt-2">
@@ -216,6 +230,7 @@ export default function App() {
                 </div>
               )}
             </aside>
+            )}
 
             {/* 中间对话区：占满，绝对主角；数据面板展开时（lg+）让位而不被遮挡 */}
             <div
@@ -224,10 +239,13 @@ export default function App() {
                 dataModal.open && "lg:mr-[440px]",
               )}
             >
-              <TopBar onOpenSettings={() => setSettingsOpen(true)} />
+              <TopBar
+                onOpenSettings={() => setSettingsOpen(true)}
+                onOpenNav={() => setMobileNavOpen(true)}
+              />
 
               <main className="flex-1 min-h-0">
-                <div className="mx-auto w-full max-w-3xl h-full flex flex-col pb-20 md:pb-0 view-enter">
+                <div className="mx-auto w-full max-w-3xl h-full flex flex-col view-enter">
                   <Suspense
                     fallback={
                       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -256,6 +274,46 @@ export default function App() {
               </main>
             </div>
           </div>
+
+          {/* 移动端导航抽屉：桌面侧栏在 <md 隐藏，此处提供等价入口（会话列表/新建/部门/收件箱） */}
+          {!isDesktop && (
+          <MobileDrawer open={mobileNavOpen} onClose={() => setMobileNavOpen(false)}>
+            <SessionSidebar
+              activeThread={activeThread}
+              onHome={() => {
+                setMobileNavOpen(false);
+                setDataModal({ open: true, kind: "overview" });
+              }}
+              onSelect={(tid) => {
+                setMobileNavOpen(false);
+                openChat(tid);
+              }}
+              onNew={() => {
+                setMobileNavOpen(false);
+                void newSession();
+              }}
+              onDelete={(id, threadId) => setPendingDelete({ id, threadId })}
+              onRename={renameSession}
+              onOpenSettings={() => {
+                setMobileNavOpen(false);
+                setSettingsOpen(true);
+              }}
+              onCollapse={() => setMobileNavOpen(false)}
+              onOpenDept={() => {
+                setMobileNavOpen(false);
+                setDeptOpen(true);
+              }}
+              onOpenInbox={() => {
+                setMobileNavOpen(false);
+                setInboxOpen(true);
+              }}
+            />
+          </MobileDrawer>
+          )}
+
+          {/* 侧栏面板：桌面与移动端共用同一份状态（避免两端各挂一份导致重复请求） */}
+          <ScheduledOutputsPanel open={inboxOpen} onClose={() => setInboxOpen(false)} />
+          <DepartmentPanel open={deptOpen} onClose={() => setDeptOpen(false)} />
 
           {/* 数据工具侧面板：按需从右侧滑出，不遮挡对话（自管理开合动画） */}
           <DataModal

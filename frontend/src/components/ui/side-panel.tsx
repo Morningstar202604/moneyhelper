@@ -52,6 +52,11 @@ export function SidePanel({
             exit={{ x: "100%" }}
             transition={{ type: "spring", stiffness: 420, damping: 42 }}
             className="pointer-events-auto absolute right-0 top-0 flex h-full w-full flex-col border-l border-border bg-card shadow-lift md:w-[400px] lg:w-[440px]"
+            // 移动端全屏时避开刘海与手势条（md 以上是侧栏，不需要）
+            style={{
+              paddingTop: "env(safe-area-inset-top)",
+              paddingBottom: "env(safe-area-inset-bottom)",
+            }}
           >
             <div className="flex items-center justify-between gap-2 border-b border-border px-3.5 py-2.5">
               <h2 className="flex min-w-0 shrink-0 items-center gap-1.5 text-sm font-semibold">
@@ -63,7 +68,7 @@ export function SidePanel({
                 type="button"
                 onClick={onClose}
                 aria-label={t("app.close")}
-                className="shrink-0 rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="shrink-0 rounded-md p-2.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:p-2"
               >
                 <X className="w-4 h-4" />
               </button>

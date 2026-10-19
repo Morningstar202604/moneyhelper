@@ -123,8 +123,27 @@
   #root {
     height: 100%;
   }
+  /* 移动端视口：dvh 跟随浏览器地址栏收放，避免 100vh 在 iOS Safari 下
+     把底部输入区顶出屏幕（100vh 用的是"最大视口"，地址栏收起前的高度）。
+     @supports 回退保证老浏览器仍用 100%。 */
+  @supports (height: 100dvh) {
+    html,
+    body,
+    #root {
+      height: 100dvh;
+    }
+  }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+  }
+  /* iOS Safari：focus 时若输入框字号 < 16px 会自动放大页面且不缩回。
+     移动端统一提到 16px（视觉上仍可用 text-sm 的行高控制密度）。 */
+  @media (max-width: 767px) {
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
   }
   /* 系统级「减弱动效」：替代已砍的手动动效开关 */
   @media (prefers-reduced-motion: reduce) {

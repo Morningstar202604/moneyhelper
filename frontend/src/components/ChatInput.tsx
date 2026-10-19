@@ -91,7 +91,11 @@ export const ChatInput = memo(({
   }, [input, inputRef]);
 
   return (
-    <div className="border-t border-border bg-card/80 backdrop-blur px-3 py-3">
+    <div
+      className="border-t border-border bg-card/80 backdrop-blur px-3 py-3"
+      // 底部安全区：iPhone 手势条会盖住输入框下沿；用 padding 让出空间
+      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+    >
       {/* 输入框上方不再常驻快捷指令：版面留给对话主界面；输入 "/" 才呼出 Slash 指令面板 */}
       {slashOpen && (
         <div className="mb-2 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
@@ -192,7 +196,9 @@ export const ChatInput = memo(({
                 return;
               }
             }
-            if (e.key === "Enter" && !e.shiftKey) {
+            // 输入法组合期（中文拼音未上屏）按 Enter 不该发送：
+            // 移动端软键盘与桌面 IME 都会走这里，误发会造成半截句子入账。
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               onSend();
             }

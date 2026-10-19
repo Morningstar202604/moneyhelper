@@ -8,8 +8,6 @@ import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useScheduledOutputs } from "@/lib/inbox";
 import { MorningReportDialog } from "@/components/MorningReportDialog";
-import { ScheduledOutputsPanel } from "@/components/ScheduledOutputsPanel";
-import { DepartmentPanel } from "@/components/DepartmentPanel";
 import type { SessionItem } from "@/lib/types";
 
 /** 问AI 页的会话侧栏：品牌 + 会话历史（主导航已上移 TopBar） */
@@ -22,6 +20,8 @@ export function SessionSidebar({
   onRename,
   onOpenSettings,
   onCollapse,
+  onOpenDept,
+  onOpenInbox,
 }: {
   activeThread: string | null;
   onHome: () => void;
@@ -31,6 +31,8 @@ export function SessionSidebar({
   onRename: (id: number, title: string) => void;
   onOpenSettings: () => void;
   onCollapse: () => void;
+  onOpenDept: () => void;
+  onOpenInbox: () => void;
 }) {
   const { t } = useI18n();
   const { sessions } = useSessions();
@@ -39,8 +41,6 @@ export function SessionSidebar({
   const [editTitle, setEditTitle] = useState("");
   const [q, setQ] = useState("");
   const [reportOpen, setReportOpen] = useState(false);
-  const [inboxOpen, setInboxOpen] = useState(false);
-  const [deptOpen, setDeptOpen] = useState(false);
 
   // 本地过滤：会话量小，无需后端接口
   const kw = q.trim().toLowerCase();
@@ -121,7 +121,33 @@ export function SessionSidebar({
               </span>
             )}
           </span>
-          <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+          {/* 触屏无 hover：移动端常显操作按钮，桌面端仍 hover 显示 */}
+          <span className="flex md:hidden items-center gap-0.5 shrink-0">
+            <button
+              type="button"
+              aria-label={t("sidebar.rename")}
+              className="p-1.5 text-muted-foreground hover:text-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditing(s.id);
+                setEditTitle(s.title);
+              }}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label={t("sidebar.deleteSession")}
+              className="p-1.5 text-muted-foreground hover:text-red-600"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(s.id, s.thread_id);
+              }}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </span>
+          <span className="hidden md:group-hover:flex items-center gap-0.5 shrink-0">
             <button
               type="button"
               aria-label={t("sidebar.rename")}
@@ -187,7 +213,7 @@ export function SessionSidebar({
               type="button"
               className="relative text-muted-foreground hover:text-primary p-2 -m-1"
               aria-label={t("inbox.title")}
-              onClick={() => setInboxOpen(true)}
+              onClick={onOpenInbox}
             >
               <Inbox className="w-4 h-4" />
               {unread > 0 && (
@@ -200,7 +226,7 @@ export function SessionSidebar({
               type="button"
               className="text-muted-foreground hover:text-primary p-2 -m-1"
               aria-label={t("dept.title")}
-              onClick={() => setDeptOpen(true)}
+              onClick={onOpenDept}
             >
               <Building2 className="w-4 h-4" />
             </button>
@@ -295,10 +321,7 @@ export function SessionSidebar({
 
       {/* 今日晨报：手动触发一次（AI 生成 / 规则降级） */}
       <MorningReportDialog open={reportOpen} onOpenChange={setReportOpen} />
-      {/* 定时产出收件箱：晨报 + 技能触发的统一时间线（未读徽标随打开清零） */}
-      <ScheduledOutputsPanel open={inboxOpen} onClose={() => setInboxOpen(false)} />
-      {/* 财务部门实况看板（M3.6）：派工 → 四工位实时状态 → 秘书呈批 → 审批 */}
-      <DepartmentPanel open={deptOpen} onClose={() => setDeptOpen(false)} />
+
     </div>
   );
 }

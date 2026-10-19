@@ -308,14 +308,14 @@ export function DepartmentPanel({
                   />
                 )}
                 <div className="flex gap-1.5">
-                  <Button size="sm" className="h-7 px-2 text-[11px]" onClick={() => void decide("approve")}>
+                  <Button size="sm" className="h-9 px-3 text-xs md:h-7 md:px-2 md:text-[11px]" onClick={() => void decide("approve")}>
                     <Check className="w-3 h-3 mr-1" />
                     {t("dept.approve")}
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 px-2 text-[11px]"
+                    className="h-9 px-3 text-xs md:h-7 md:px-2 md:text-[11px]"
                     onClick={() => void decide("reject")}
                   >
                     <X className="w-3 h-3 mr-1" />
@@ -324,7 +324,7 @@ export function DepartmentPanel({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 px-2 text-[11px]"
+                    className="h-9 px-3 text-xs md:h-7 md:px-2 md:text-[11px]"
                     onClick={() => void decide("inquire")}
                   >
                     {t("dept.inquire")}
