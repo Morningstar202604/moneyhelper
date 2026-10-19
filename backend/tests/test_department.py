@@ -52,8 +52,28 @@ async def test_parallel_and_secretary(temp_db):
 
 
 async def test_secretary_conflict_detection(temp_db):
-    """同口径数字冲突 → 标红（占位规则：多个不同“总市值”输出）。"""
-    o1 = WorkOrder(dept="invest", task="t", status="done", output="总市值 100 元")
-    o2 = WorkOrder(dept="accounting", task="t", status="done", output="总市值 200 元")
+    """同口径数字冲突 → 标红。
+
+    M3.1 起对账改用结构化 metrics（文本抠数字无法判断"哪个数对应哪个口径"）：
+    两个部门报同一个 key 但数值不同即冲突。
+    """
+    o1 = WorkOrder(
+        dept="invest", task="t", status="done", metrics={"total_market_value": 100.0}
+    )
+    o2 = WorkOrder(
+        dept="accounting", task="t", status="done", metrics={"total_market_value": 200.0}
+    )
     report = await department._secretary([o1, o2], "q")
     assert report["conflicts"], "口径冲突必须被秘书标出"
+    assert report["conflicts"][0]["metric"] == "total_market_value"
+    assert "需核对" in report["report"]
+    assert "不一致" in report["verdict"]
+
+
+async def test_secretary_no_conflict_when_metrics_agree(temp_db):
+    """同口径数字一致 → 不标冲突，结论行直接给"可以决策"。"""
+    o1 = WorkOrder(dept="accounting", task="t", status="done", metrics={"expense": 100.0})
+    o2 = WorkOrder(dept="bookkeeping", task="t", status="done", metrics={"expense": 100.0})
+    report = await department._secretary([o1, o2], "q")
+    assert report["conflicts"] == []
+    assert "直接决策" in report["verdict"]

@@ -33,7 +33,7 @@
 | `__init__.py` | 23 | 0 | 0 | 小满 · 个人理财多智能体后端。 |
 | `agent.py` | 461 | 6 | 1 | Agent 编排层：LLM function calling 多轮工具循环（真正的垂直 agent）。 |
 | `agent_config.py` | 221 | 11 | 0 | Agent 配置系统：角色 / skills / 工具开关。 |
-| `agent_graph.py` | 1262 | 29 | 1 | LangGraph 多智能体编排图 —— 主执行路径（service.run_question 的图化替代）。 |
+| `agent_graph.py` | 1285 | 30 | 1 | LangGraph 多智能体编排图 —— 主执行路径（service.run_question 的图化替代）。 |
 | `agents/bookkeeping/tools.py` | 17 | 0 | 0 | Bookkeeping agent 专属工具：记账、账本、预算、趋势。 |
 | `agents/portfolio/tools.py` | 27 | 0 | 0 | Portfolio agent 专属工具：持仓、行情、K线、自选。 |
 | `agents/supervisor/tools.py` | 31 | 0 | 0 | Supervisor agent 专属工具：风险、目标、健康检查、记忆、通用动作。 |
@@ -64,7 +64,8 @@
 | `db/portfolio.py` | 241 | 8 | 0 | 持仓域：持仓 CRUD/合并 + 自选股。 |
 | `db/undo.py` | 227 | 6 | 0 | 撤销域：快照记录/恢复/应用（供 main 的 undo 端点与各写入口使用）。 |
 | `db/users.py` | 78 | 6 | 0 | 用户体系：注册/查询/密码校验/登录时间。 |
-| `department.py` | 196 | 11 | 1 | M3 财务部门模式（第一刀）：工单分解 → 四部门并行 → 秘书汇总呈批。 |
+| `department.py` | 391 | 12 | 0 | M3 财务部门模式：一句话 → 工单分解 → 四部门并行 → 秘书交叉对账 → 呈批件。 |
+| `dept_models.py` | 133 | 5 | 3 | 财务部门模式的工单模型（M3.1）。 |
 | `evaluate.py` | 331 | 13 | 1 | 规则驱动的"首页评估层"：聚合预算/订阅/债务/目标/现金流信号，生成结构化行动项。 |
 | `import_parsers/__init__.py` | 58 | 2 | 0 | 交易数据导入解析器包：按不同来源（通用 CSV / 微信 / 支付宝）提供统一解析接口。 |
 | `import_parsers/alipay.py` | 202 | 5 | 1 | 支付宝账单 CSV 解析器。 |
@@ -101,7 +102,7 @@
 | `routes/members.py` | 181 | 11 | 0 | 家庭成员管理路由：CRUD + 成员间借贷 + 成员汇总。 |
 | `routes/memory.py` | 145 | 10 | 0 | 长期记忆与经验库（reflections）：列出 / 新增 / 删除 / 清空 / 遗忘 / AI 归纳。 |
 | `routes/provenance.py` | 48 | 2 | 0 | 审计追踪路由：查询操作来龙去脉。 |
-| `routes/qa.py` | 481 | 27 | 1 | 问答域路由：SSE 流式问答（ask）+ HITL 确认（confirm）+ 历史/会话管理。 |
+| `routes/qa.py` | 516 | 29 | 1 | 问答域路由：SSE 流式问答（ask）+ HITL 确认（confirm）+ 历史/会话管理。 |
 | `routes/reports.py` | 72 | 4 | 0 | 晨报 / 调度器状态 / 定时产出收件箱。 |
 | `routes/settings.py` | 191 | 3 | 0 | 设置路由：GET/PUT /api/settings（原 main.py 设置域，M1.4 拆出）。 |
 | `routes/status.py` | 75 | 5 | 0 | 健康检查与指标：/api/health、/api/metrics、/api/bootstrap、模型目录。 |
@@ -114,4 +115,4 @@
 | `tools.py` | 1094 | 33 | 0 | Agent 工具层：把确定性分析内核暴露成 LLM 可调用的工具（function calling）。 |
 | `vault.py` | 145 | 10 | 0 | 加密密钥管理系统：DB 内敏感字段加密存储。 |
 
-合计 83 个文件、19807 行。
+合计 84 个文件、20193 行。

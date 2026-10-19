@@ -315,6 +315,41 @@ async def _ask_impl(payload: dict, protocol: str = "internal"):
 
 
 # ---------------------------------------------------------------------------
+# 财务部门模式：SSE 实况看板（M3.6 后端）
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/department/stream")
+async def department_stream(payload: dict):
+    """部门模式实况事件流：工单状态变更实时推送（供前端工位图）。
+
+    与 /api/department/run 的区别：
+    - run    返回一次性 JSON（含完整呈批件与全部事件）
+    - stream 边执行边推送事件，前端能看到"哪个部门正在跑"
+
+    事件序列：
+      dept_start  → 派工完成，带工单清单
+      dept        → 某工单状态变更（running/done/failed），带 metrics
+      dept_final  → 秘书汇总完成，带结论与冲突
+    """
+    from .. import department
+
+    question = str((payload or {}).get("question") or "").strip()
+    if not question:
+        return JSONResponse({"error": "question 必填"}, status_code=400)
+    if len(question) > 2000:
+        return JSONResponse({"error": "问题过长（最多 2000 字）"}, status_code=400)
+    lang = str((payload or {}).get("lang") or "zh").strip() or "zh"
+
+    async def runner(emit) -> None:
+        report = await department.run_department_mode(question, emit, lang=lang)
+        # 最终呈批件单独发一条，前端不必从 dept_final 事件里拼
+        await emit({"type": "dept_report", "report": report})
+
+    return await sse_stream(None, runner)
+
+
+# ---------------------------------------------------------------------------
 # 待确认写操作（HITL）：token 一次性消费，过期/已消费/已取消 → 409
 # ---------------------------------------------------------------------------
 
