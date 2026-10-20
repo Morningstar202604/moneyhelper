@@ -10,5 +10,5 @@
 | 现在做到哪了 | [实施进度](PROGRESS.md)（唯一进度真源） |
 | 项目往哪走 | [ROADMAP-v3](ROADMAP-v3.md) → [详细计划](PLAN-DETAILED.md) |
 | 它凭什么不一样 | [DIFFERENTIATION](DIFFERENTIATION.md) |
-| 竞品/生态/时间线调研 | [planning/](planning/) 04-07 |
+| 竞品/生态/时间线调研 | [planning/02](planning/02-发现记录.md) ~ [planning/09](planning/09-差异化头脑风暴.md) |
 | 已知问题与审查记录 | [REVIEW-FINDINGS](REVIEW-FINDINGS.md) / [planning/02](planning/02-发现记录.md) |
