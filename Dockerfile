@@ -39,7 +39,10 @@ RUN useradd --create-home --uid 1000 --user-group xia \
     && chmod -R a+rX /app
 
 WORKDIR /app/backend
-# 数据目录持久化（SQLite 单文件 + 备份），容器重启不丢数据
+# 数据目录持久化（SQLite + 备份 + LangGraph checkpoint），容器重启不丢数据。
+# 显式声明 XIAOMAN_DATA_DIR，与代码里的 data_dir() 默认值保持同一语义；
+# 之前代码默认写 app/data、卷挂 backend/data，导致重建即丢账本。
+ENV XIAOMAN_DATA_DIR=/app/backend/data
 VOLUME /app/backend/data
 EXPOSE 8787
 

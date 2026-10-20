@@ -2,6 +2,31 @@
 
 项目版本号与发布历史。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本语义遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [2.4.2] - 2026-10-20（Docker 数据持久化修复 + 实测验证）
+
+### 修复（P0）
+
+- **容器重建丢账本**：代码默认把库写在 `backend/app/data`，而 Dockerfile 的 VOLUME 与
+  compose 挂的是 `backend/data`。实测确认：容器内写入的数据落在卷外，`docker rm` 即丢。
+  现在库 / 备份 / LangGraph checkpoint 统一由 `XIAOMAN_DATA_DIR` 决定（默认 `backend/data`），
+  镜像内置 `/app/backend/data`，与数据卷一致。
+- **旧数据自动迁移**：升级后首次启动若新位置无库、旧位置有库，自动搬移（连带 `-wal` / `-shm`，
+  避免 WAL 中已提交事务丢失）。显式设置 `XIAOMAN_DB_PATH` 时不猜。
+- **备份与 checkpoint 同目录**：`BACKUP_DIR` 与 `agent_checkpoints.db` 一并跟随数据目录，
+  不再散落在代码目录里。
+
+### 验证（本轮实际执行）
+
+- Docker 实机构建 + 运行：健康检查 `healthy`、首页 200、`/mcp` 200、以 uid 1000 非 root 运行。
+- 容器写入数据 → `docker rm` → 重建 → 数据仍在（此前会丢）。
+- 部门工单白名单补端到端测试：模型实际收到的工具面被收窄到工单声明的那一个。
+
+### 文档
+
+- `docs/planning/` 九份规划文档统一加「归档说明」：标明记录的是当时决策过程，
+  当前状态以 PROGRESS 与代码为准（文中 mem0/规则引擎/react_agent 等已移除）。
+- PROGRESS 里程碑校准：M2 95%、M3 100%（白名单已生效）、M4 60%（Docker 已验证）。
+
 ## [2.4.1] - 2026-10-20（关键端点测试补全 + 性能与超时）
 
 ### 新增

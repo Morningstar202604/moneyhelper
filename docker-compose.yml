@@ -18,6 +18,8 @@ services:
       - "8787:8787"
     environment:
       TZ: Asia/Shanghai
+      # 数据目录（库/备份/checkpoint）统一到卷内；Dockerfile 里也有默认值
+      XIAOMAN_DATA_DIR: /app/backend/data
       # 用 map + ${VAR:-default} 而不是列表：空串会让 os.getenv 返回空字符串，
       # 被当成"已设置"从而覆盖应用默认值（历史上导致数据库路径退化）。
       API_TOKEN: ${API_TOKEN:-}

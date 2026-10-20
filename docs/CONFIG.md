@@ -14,7 +14,8 @@
 | `API_TOKEN` | 空 | 访问口令。空 = 不鉴权（仅限本机/内网）；设置后 `/api/*` 需 Bearer/`?token=`，前端弹口令框 |
 | `ALLOWED_HOSTS` | 空 | 未设口令时额外放行的 Host（逗号分隔）。默认只放行本机 |
 | `MCP_ENABLE` | `1` | 是否挂载 MCP Server。`/mcp` 提供 Streamable HTTP，`/mcp-sse/sse` 兼容旧客户端；鉴权与来源校验与主应用一致 |
-| `XIAOMAN_DB_PATH` | 空 | 数据库路径。空值会被忽略并回落到 `backend/app/data/wealth.db`；相对路径按启动目录解析 |
+| `XIAOMAN_DATA_DIR` | `backend/data` | 运行期数据目录（数据库 / 备份 / LangGraph checkpoint）。Docker 镜像内置为 `/app/backend/data`，与数据卷一致 |
+| `XIAOMAN_DB_PATH` | 空 | 数据库文件路径，优先级高于 `XIAOMAN_DATA_DIR`；空值忽略 |
 | `XIAOMAN_DISABLE_RATE_LIMIT` | 空 | `1` 关闭限流（默认 200 次/分钟/IP）；仅测试与本地调试使用 |
 | `XIAOMAN_SLOW_MS` | `5000` | 慢操作告警阈值（毫秒），超过即写 WARNING 日志 |
 | `JWT_SECRET` | 随机生成 | 多用户登录令牌签名密钥。**不设置时每次启动随机生成，重启后所有登录失效**；生产务必显式配置 |

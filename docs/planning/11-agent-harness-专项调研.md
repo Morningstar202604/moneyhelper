@@ -1,5 +1,9 @@
 # Agent Harness 专项调研（M0.8）
 
+> **归档说明**：本文档记录 2026-10 当时的规划与调研过程，**不代表当前实现**。
+> 当前状态以 [PROGRESS.md](../PROGRESS.md) 与代码为准；文中提到的 mem0、自研规则引擎、
+> `react_agent`、OpenTelemetry 等已在 2.3.0 移除，多租户在 2.4.0 引入。
+
 > 调研对象：ZCode（Z.ai 官方 ADE）、DeepSeek Harness（dsh）
 > 目的：把"别人怎么把 Agent 跑稳"拆成六个可比维度，得出小满可落地的清单
 > 结论先行：**小满不缺 Agent 能力，缺的是执行环境的确定性**。四份 harness 的共性

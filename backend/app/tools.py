@@ -16,12 +16,12 @@ import re
 import secrets
 from collections.abc import Awaitable, Callable
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 import httpx
 
 from . import analysis, backup, db, nlparse, scheduler, tool_schemas
+from .db._core import data_dir
 from .logging_utils import get_logger
 from .provenance import record_provenance
 from .quotes import invalidate_quotes_cache, quote_now
@@ -31,9 +31,9 @@ _action_log = get_logger("tools.action")
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
 
-# 备份包放 data 卷内（backend/data/backups）：本地与 Docker 数据卷（xiaoman-data）统一持久化，
-# 容器重建/升级不丢备份；路径本身不落库。
-BACKUP_DIR = Path(__file__).resolve().parent.parent / "data" / "backups"
+# 备份包与数据库同目录（默认 backend/data，Docker 卷 xiaoman-data），
+# 容器重建不丢；路径本身不落库。
+BACKUP_DIR = data_dir() / "backups"
 
 # tool_set_setting 可写的键白名单：防止模型/动作带任意 key 往 settings 表写脏键。
 # 值与枚举校验仍在各分支内完成；列表以外的 key 一律拒绝。

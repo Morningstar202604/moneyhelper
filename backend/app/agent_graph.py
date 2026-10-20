@@ -32,7 +32,6 @@ import weakref
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any, TypedDict
 
 import aiosqlite
@@ -63,9 +62,7 @@ _emit_ctx: ContextVar[Emit | None] = ContextVar("wo_emit", default=None)
 
 # LangGraph 线程状态**磁盘持久化**：checkpoint 落 backend/data/agent_checkpoints.db，
 # 与主库 wealth.db 隔离（checkpoint 存图运行态，不是账本数据）。WAL 模式支持多连接。
-_CHECKPOINT_DB = (
-    Path(__file__).resolve().parent.parent / "data" / "agent_checkpoints.db"
-)
+_CHECKPOINT_DB = db.data_dir() / "agent_checkpoints.db"
 
 # HITL confirm 并发锁与 token 注册表最大容量：两个数据结构共用同一上限，
 # 防止用户反复触发 buy/sell 永不 confirm 导致无限膨胀。

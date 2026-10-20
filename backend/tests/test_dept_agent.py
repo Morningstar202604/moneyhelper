@@ -270,3 +270,35 @@ async def test_department_mode_can_force_deterministic(temp_db):
     )
     assert report["verdict"]
     assert any("视角" in o["metrics"] or o["metrics"] for o in report["orders"])
+
+
+async def test_order_tools_allowed_narrows_execution(temp_db, monkeypatch):
+    """工单级白名单必须在执行阶段生效，而不只是派工阶段。
+
+    回归：执行层此前只用部门静态白名单，派工给的 tools_allowed 被忽略，
+    「这个部门只给两个工具」的约束等于没写。
+    """
+    from app import agent
+
+    async def _available() -> bool:
+        return True
+
+    seen: dict[str, set[str]] = {}
+
+    async def _fake(question, emit, **kw):
+        seen["tools"] = {t["function"]["name"] for t in kw["tools_list"]}
+        return {"answer": '产出\n{"metrics":{"expense":1}}'}
+
+    monkeypatch.setattr(dept_agent.llm, "llm_available", _available)
+    monkeypatch.setattr(agent, "run_agent", _fake)
+
+    order = WorkOrder(
+        dept="risk",
+        task="只看风险",
+        tools_allowed=["tool_get_risk_flags"],  # 部门有三个，工单只要一个
+    )
+    await dept_agent.run_dept_agent(order)
+
+    assert seen["tools"] == {"get_risk_flags"}, (
+        "工单声明的工具面未被收窄，模型仍能看到部门全部工具"
+    )
