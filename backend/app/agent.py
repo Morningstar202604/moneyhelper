@@ -23,6 +23,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import pathlib
 import time
@@ -147,6 +148,7 @@ async def _stream_final_answer(
     messages: list[dict[str, Any]],
     tool_schemas: list[dict[str, Any]],
     emit: Emit,
+    timeout: float = 120.0,
 ) -> str:
     """流式生成最终回答。返回完整文本；失败时退回非流式兜底。"""
     full_parts: list[str] = []
@@ -158,7 +160,7 @@ async def _stream_final_answer(
             tool_choice="auto",
             temperature=0.2,
             stream=True,
-            timeout=120.0,
+            timeout=timeout,
         )
         async for chunk in stream:
             delta = chunk.choices[0].delta.content if chunk.choices else None
@@ -472,9 +474,14 @@ async def run_agent(
             "如果信息不足，就说明缺少什么。",
         },
     ]
+    # 收尾预算刻意收紧（20s）：此时用户已经等了几十秒，再挂 2 分钟不如
+    # 立刻给确定性模板。轮次用尽通常意味着模型在数据里绕圈，多等也无益。
     try:
-        final = await _stream_final_answer(client, cfg, wrap_up, None, emit)
-    except Exception:  # noqa: BLE001 — 收尾失败走调用方降级
+        final = await asyncio.wait_for(
+            _stream_final_answer(client, cfg, wrap_up, None, emit, timeout=20.0),
+            timeout=25.0,
+        )
+    except (Exception, asyncio.TimeoutError):  # noqa: BLE001 — 收尾失败走调用方降级
         final = ""
     if final:
         return {

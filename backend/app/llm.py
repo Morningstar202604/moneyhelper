@@ -14,6 +14,7 @@ llm_available / invalidate 接口形态，调用方（agent_graph/service/agent�
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -450,9 +451,15 @@ _client_singleton_cfg_key: str | None = None
 
 
 def _get_client(cfg: dict[str, Any], timeout: float = 60.0) -> _CompatClient:
-    """获取/重建兼容 client（配置变更时重建）。"""
+    """获取/重建兼容 client（配置变更时重建）。
+
+    指纹必须包含 api_key：用户在设置页换了密钥但模型名与端点没变时，
+    旧逻辑会复用带旧 key 的客户端，表现为"改了 key 仍 401，重启才好"。
+    只取 key 的哈希前 8 位参与指纹，避免把明文密钥留在内存字符串里到处传。
+    """
     global _client_singleton, _client_singleton_cfg_key
-    key = f"{cfg['litellm_model']}:{cfg.get('base', '')}"
+    key_hash = hashlib.sha256(str(cfg.get("key") or "").encode()).hexdigest()[:8]
+    key = f"{cfg['litellm_model']}:{cfg.get('base', '')}:{key_hash}:{timeout}"
     if _client_singleton is None or _client_singleton_cfg_key != key:
         _client_singleton = _sdk(cfg, timeout)
         _client_singleton_cfg_key = key

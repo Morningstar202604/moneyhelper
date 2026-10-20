@@ -26,6 +26,7 @@ call_mcp_tool 时新开会话 → call_tool。会话由 SDK 的 async context �
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -38,6 +39,14 @@ from mcp.client.streamable_http import streamable_http_client
 from .logging_utils import get_logger
 
 _log = get_logger("mcp")
+
+# 工具发现结果缓存：refresh 会对每个 server 做一次 initialize + tools/list
+# 往返。agent 每次问答都会调 refresh，不缓存就是每轮多一次网络握手。
+# 30s 与行情缓存同量级：外部工具清单变动不频繁，用户手动改配置后最多等半分钟。
+_DISCOVER_TTL_S = 30.0
+# 缓存键包含配置路径 + 服务器列表指纹：换配置/换测试临时文件时自动失效，
+# 不能只用 TTL（测试里连续切换 mcp.json 会读到上一个用例的结果）。
+_discover_cache: tuple[float, str, list[dict[str, Any]]] | None = None
 
 MCP_CFG = Path(__file__).resolve().parent.parent / "data" / "mcp.json"
 TIMEOUT = 15.0
@@ -114,10 +123,22 @@ async def _discover(server: dict[str, Any]) -> list[Any]:
     return tools
 
 
-async def refresh() -> list[dict[str, Any]]:
-    """刷新并返回所有 MCP 服务器提供的工具 schema（供 agent 装配）。"""
+async def refresh(force: bool = False) -> list[dict[str, Any]]:
+    """返回所有 MCP 服务器提供的工具 schema（供 agent 装配）。
+
+    结果带 30s TTL 缓存：发现过程包含逐台服务器的握手与 list_tools 往返，
+    每轮问答都重做会显著拉长首 token 时间。force=True 可强制刷新。
+    """
+    global _discover_cache
+    now = time.monotonic()
+    config = _load_config()
+    key = f"{MCP_CFG}|{json.dumps(config, sort_keys=True, ensure_ascii=False)}"
+    if not force and _discover_cache is not None:
+        ts, cached_key, cached = _discover_cache
+        if cached_key == key and now - ts < _DISCOVER_TTL_S:
+            return cached
     out: list[dict[str, Any]] = []
-    for server in _load_config():
+    for server in config:
         try:
             for t in await _discover(server):
                 schema = _make_schema(t)
@@ -125,6 +146,7 @@ async def refresh() -> list[dict[str, Any]]:
                     out.append(schema)
         except Exception as exc:  # noqa: BLE001 — 单台失败不影响其它
             _log.warning("mcp discover %s failed: %s", server.get("name"), exc)
+    _discover_cache = (now, key, out)
     return out
 
 

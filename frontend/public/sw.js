@@ -4,10 +4,10 @@
  * - HTML 导航：网络优先 + 离线兜底页
  * - 仅缓存同源资源；新 SW 安装后清理旧缓存。 */
 
-const CACHE = "xiaoman-pwa-d353465a4816"; // 缓存版本号，升级 PWA 时修改即可触发旧缓存清理
+const CACHE = "xiaoman-pwa-6278df9dd103"; // 缓存版本号，升级 PWA 时修改即可触发旧缓存清理
 
 // 预缓存清单；图标不强行预缓存（已存在则缓存，也无妨跳过）。
-const PRECACHE = ["/", "/index.html", "/manifest.json", "/manifest.webmanifest"];
+const PRECACHE = ["/", "/index.html", "/manifest.webmanifest"];
 
 // 离线兜底页：内联于 SW，不依赖外部文件
 const OFFLINE_HTML = `<!DOCTYPE html>
