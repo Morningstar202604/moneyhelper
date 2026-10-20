@@ -269,6 +269,19 @@ _COMPOSITE_TABLES = {
 _UNIQUE_COLS = {"sessions": "thread_id"}
 
 
+async def _needs_multitenant() -> bool:
+    """是否需要多租户迁移：任一租户表缺 user_id，或复合主键表还没重建。"""
+    assert _db is not None
+    for table in (*_TENANT_TABLES, *_COMPOSITE_TABLES):
+        cur = await _db.execute(f"PRAGMA table_info({table})")
+        info = await cur.fetchall()
+        if not info:
+            continue  # 表不存在，无需处理
+        if "user_id" not in {r["name"] for r in info}:
+            return True
+    return False
+
+
 async def _migrate_multitenant() -> None:
     """多租户迁移：加 user_id 维度，并把历史数据归到默认租户 0。
 
@@ -277,6 +290,20 @@ async def _migrate_multitenant() -> None:
     A 的「茅台」会覆盖 B 的「茅台」。改成 (user_id, symbol) 复合主键才能共存。
     """
     assert _db is not None
+
+    # 0) 先判断是否真需要迁移；要动结构就先备份整库。
+    # 重建表是不可逆操作（DROP + RENAME），中途失败没有回滚点，
+    # 因此这里在动任何结构之前复制一份 <db>.pre-mt-<时间戳>，
+    # 最坏情况用户仍能找到升级前的完整数据。
+    needs = await _needs_multitenant()
+    if needs:
+        try:
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            backup_path = Path(str(DB_PATH) + f".pre-mt-{stamp}")
+            shutil.copy2(DB_PATH, backup_path)
+            get_logger("db").info("db.migrate_backup=%s", backup_path)
+        except Exception as exc:  # noqa: BLE001 — 备份失败不阻断迁移，但要留痕
+            get_logger("db").warning("db.migrate_backup_failed: %s", exc)
 
     # 1) 普通表：直接加列（SQLite 支持 ADD COLUMN 带默认值）
     for table in _TENANT_TABLES:

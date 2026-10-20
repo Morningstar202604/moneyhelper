@@ -196,4 +196,33 @@ test.describe("财务部门看板", () => {
     await page.getByRole("button", { name: "批准", exact: true }).click();
     await expect(page.getByText("已处理").first()).toBeVisible({ timeout: 30_000 });
   });
+
+  test("家庭账本：添加成员 → 汇总出现 → 记录借贷 → 结清", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "设置" }).first().click();
+    await page.getByRole("button", { name: "家庭账本" }).first().click();
+
+    // 两个成员才可能出现借贷区
+    for (const name of ["测试甲", "测试乙"]) {
+      await page.getByPlaceholder("例如：小明").fill(name);
+      await page.getByRole("button", { name: "添加" }).first().click();
+      await expect(page.getByText(name).first()).toBeVisible({ timeout: 10_000 });
+    }
+
+    // 家庭汇总块出现（有成员后才渲染）
+    await expect(page.getByText("家庭收入").first()).toBeVisible();
+    await expect(page.getByText("成员间借贷").first()).toBeVisible();
+
+    // 记录一笔借贷
+    const selects = page.locator("select");
+    const n = await selects.count();
+    // 最后两个 select 是「借出方 / 借入方」
+    await selects.nth(n - 2).selectOption({ index: 1 });
+    await selects.nth(n - 1).selectOption({ index: 2 });
+    await page.locator('input[type="number"]').last().fill("123");
+    await page.getByRole("button", { name: "记录借贷" }).click();
+    await expect(page.getByText("已结清").or(page.getByText("结清")).first()).toBeVisible({
+      timeout: 10_000,
+    });
+  });
 });

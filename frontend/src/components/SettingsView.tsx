@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import {
-  Bot, Brain, BrainCog, GitCompareArrows, KeyRound, Newspaper, PiggyBank, ScrollText, ShieldCheck, SlidersHorizontal, Wallet,
+  Bot, Brain, BrainCog, GitCompareArrows, KeyRound, Users, Newspaper, PiggyBank, ScrollText, ShieldCheck, SlidersHorizontal, Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDashboard } from "@/lib/store";
@@ -20,6 +20,7 @@ import { TokenSection } from "@/components/settings/TokenSection";
 import { LogsSection } from "@/components/settings/LogsSection";
 import { AuditSection } from "@/components/settings/AuditSection";
 import { ProvenanceSection } from "@/components/settings/ProvenanceSection";
+import { FamilySection } from "@/components/settings/FamilySection";
 import { Button } from "@/components/ui/button";
 import { AgentSection } from "@/components/settings/AgentSection";
 
@@ -36,10 +37,11 @@ const SECTIONS: { id: SectionId; labelKey: string; icon: typeof Wallet }[] = [
   { id: "logs", labelKey: "settings.navLogs", icon: ScrollText },
   { id: "audit", labelKey: "settings.navAudit", icon: ShieldCheck },
   { id: "provenance", labelKey: "settings.navProvenance", icon: GitCompareArrows },
+  { id: "family", labelKey: "settings.navFamily", icon: Users },
 ];
 
 const SECTION_GROUPS: { key: string; ids: SectionId[] }[] = [
-  { key: "settings.groupGeneral", ids: ["prefs", "rules", "budget"] },
+  { key: "settings.groupGeneral", ids: ["prefs", "rules", "budget", "family"] },
   { key: "settings.groupAi", ids: ["ai", "agent", "report", "memory"] },
   { key: "settings.groupData", ids: ["data", "token", "logs", "audit", "provenance"] },
 ];
@@ -186,6 +188,8 @@ export function SettingsView() {
         {active === "audit" && <AuditSection />}
 
         {active === "provenance" && <ProvenanceSection />}
+
+        {active === "family" && <FamilySection />}
 
         {dirty && (
           <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-between gap-3 border-t border-border bg-background/95 px-3 py-2 backdrop-blur">

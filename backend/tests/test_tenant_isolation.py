@@ -96,3 +96,55 @@ async def test_default_tenant_sees_nothing_from_others(two_users) -> None:
     """默认租户（未登录）看不到任何登录用户的数据。"""
     assert await db.list_positions() == []
     assert await db.list_transactions() == []
+
+
+async def test_migration_creates_pre_migration_backup(tmp_path, monkeypatch) -> None:
+    """多租户迁移在动结构前必须留一份整库备份。
+
+    重建表是 DROP + RENAME，没有回滚点；备份是用户唯一的逃生舱。
+    """
+    import sqlite3
+
+    db_file = tmp_path / "legacy.db"
+    conn = sqlite3.connect(db_file)
+    conn.executescript(
+        """
+        CREATE TABLE positions (
+            symbol TEXT PRIMARY KEY, name TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT '股票', industry TEXT NOT NULL DEFAULT '其他',
+            shares REAL NOT NULL, cost REAL NOT NULL, last REAL NOT NULL,
+            buy_date TEXT, fee REAL NOT NULL DEFAULT 0
+        );
+        INSERT INTO positions(symbol,name,shares,cost,last) VALUES('600519','茅台',100,1680,1521);
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(db._core, "DB_PATH", db_file)
+    await db.close_db()
+    await db.init_db()
+    try:
+        backups = list(tmp_path.glob("legacy.db.pre-mt-*"))
+        assert backups, "迁移前没有生成备份"
+        c = sqlite3.connect(backups[0])
+        assert c.execute("SELECT COUNT(*) FROM positions").fetchone()[0] == 1
+        # 备份是迁移前状态：还没有 user_id
+        cols = {r[1] for r in c.execute("PRAGMA table_info(positions)")}
+        assert "user_id" not in cols
+        c.close()
+    finally:
+        await db.close_db()
+
+
+async def test_migration_not_repeated_on_second_start(tmp_path, monkeypatch) -> None:
+    """已迁移的库再次启动不应该再产生备份（说明没有重复迁移）。"""
+    monkeypatch.setattr(db._core, "DB_PATH", tmp_path / "fresh.db")
+    await db.close_db()
+    await db.init_db()
+    await db.close_db()
+    first = list(tmp_path.glob("fresh.db.pre-mt-*"))
+    await db.init_db()
+    await db.close_db()
+    second = list(tmp_path.glob("fresh.db.pre-mt-*"))
+    assert len(first) == len(second), "第二次启动又做了迁移"

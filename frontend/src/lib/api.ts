@@ -491,3 +491,90 @@ export const listUndoables = (limit = 8) =>
   api<{ items: UndoableItem[] }>(`/api/undoables?limit=${limit}`).then((r) => r.items);
 export const undoById = (recordId: number) =>
   api<{ ok: boolean; consumed_at?: string }>(`/api/undo/${recordId}`, { method: "POST" });
+
+// ---------------------------------------------------------------------------
+// 家庭 / 成员 / 借贷（后端早已完整，此前前端零入口）
+// ---------------------------------------------------------------------------
+
+export interface FamilyMember {
+  id: number;
+  username: string;
+  display_name: string;
+  role: "owner" | "admin" | "member" | "viewer";
+  avatar_color: string;
+  created_at: string;
+}
+
+export interface MemberLoan {
+  id: number;
+  from_member_id: number;
+  to_member_id: number;
+  amount: number;
+  currency: string;
+  note: string;
+  settled: number;
+  created_at: string;
+  settled_at?: string | null;
+  from_name?: string;
+  to_name?: string;
+}
+
+export interface MemberSummary {
+  member_id: number;
+  income: number;
+  expense: number;
+  transaction_count: number;
+  display_name: string;
+  role: string;
+  avatar_color: string;
+}
+
+export interface FamilySummary {
+  household_income: number;
+  household_expense: number;
+  household_net: number;
+  members: {
+    id: number;
+    display_name: string;
+    role: string;
+    avatar_color: string;
+    income: number;
+    expense: number;
+    balance: number;
+    pct: number;
+    transaction_count: number;
+  }[];
+  outstanding_loans?: MemberLoan[];
+  top_categories?: { category: string; amount: number }[];
+}
+
+export const listMembers = () =>
+  api<{ members: FamilyMember[] }>("/api/members").then((r) => r.members);
+export const addMember = (body: { display_name: string; role?: string; username?: string }) =>
+  api<{ ok: boolean; member: FamilyMember }>("/api/members", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+export const updateMember = (id: number, body: Record<string, string>) =>
+  api<{ ok: boolean }>(`/api/members/${id}`, { method: "PUT", body: JSON.stringify(body) });
+export const deleteMember = (id: number) =>
+  api<{ ok: boolean; deleted: number }>(`/api/members/${id}`, { method: "DELETE" });
+export const listMemberLoans = () =>
+  api<{ loans: MemberLoan[] }>("/api/members/loans").then((r) => r.loans);
+export const createMemberLoan = (body: {
+  from_member_id: number;
+  to_member_id: number;
+  amount: number;
+  note?: string;
+}) =>
+  api<{ ok: boolean; id: number }>("/api/members/loans", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+export const settleMemberLoan = (id: number) =>
+  api<{ ok: boolean }>(`/api/members/loans/${id}/settle`, { method: "POST" });
+export const deleteMemberLoan = (id: number) =>
+  api<{ ok: boolean }>(`/api/members/loans/${id}`, { method: "DELETE" });
+export const memberSummaries = () =>
+  api<{ members: MemberSummary[] }>("/api/members/summary").then((r) => r.members);
+export const familySummary = () => api<FamilySummary>("/api/family/summary");
