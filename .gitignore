@@ -50,3 +50,6 @@ frontend/dev.log
 doc-fetch-resources/
 *.mp4
 *.gif
+
+# 本地构建/验证产物（EXE、wheel、临时库）
+out/

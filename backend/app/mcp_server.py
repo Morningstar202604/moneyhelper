@@ -330,6 +330,42 @@ async def backup_now(lang: str = "zh") -> str:
 # ---------------------------------------------------------------------------
 
 
+@mcp.resource("xiaoman://scheduled-outputs")
+async def scheduled_outputs_resource() -> str:
+    """最近的定时产出（晨报 + 技能触发），供 MCP 客户端主动拉取。
+
+    为什么用 resource 而不是 Tasks：MCP 的 Tasks（长任务推送）在 mcp 1.30 仍属
+    experimental，fastmcp 2.x 未透传，落地要绕开框架直接用 lowlevel server。
+    而"客户端能拿到定时产出"这个真实需求，用 resource 拉取即可满足——
+    客户端按自己的节奏刷新，服务端由既有 APScheduler 负责生成。
+    """
+    rows = await db.list_scheduled_runs(10)
+
+    items = [
+        {
+            "thread_id": r.get("thread_id"),
+            "question": r.get("question"),
+            "answer": r.get("answer"),
+            "level": r.get("level"),
+            "created_at": r.get("created_at"),
+        }
+        for r in rows
+    ]
+    return json.dumps(
+        {"count": len(items), "items": items},
+        ensure_ascii=False,
+        indent=1,
+    )
+
+
+@mcp.resource("xiaoman://scheduler-status")
+async def scheduler_status_resource() -> str:
+    """定时任务状态（晨报开关、下次运行时间、上次错误）。"""
+    from . import scheduler
+
+    return json.dumps(scheduler.status(), ensure_ascii=False, indent=1)
+
+
 @mcp.resource("xiaoman://system-prompt")
 def system_prompt_resource() -> str:
     """小满系统提示词：描述工具集和 Agent 行为规则。"""

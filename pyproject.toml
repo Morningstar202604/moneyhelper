@@ -18,7 +18,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xiaoman"
-version = "2.6.1"
+version = "2.7.0"
 description = "小满 —— 能自主干活的 AI 财务部门（本地优先、数字可复核、全 MCP 开放）"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -47,26 +47,20 @@ dependencies = [
   "pydantic>=2.14,<2.15",
   "pyjwt>=2.9,<3",
   "passlib[bcrypt]>=1.7,<2",
+  "python-multipart>=0.0.9,<1",
 ]
 
 [project.optional-dependencies]
 # —— 通用层：直接接业界成熟开源，不重复造轮子 ——
 full = [
-  "mem0ai>=0.1,<1",
-  "chromadb>=0.5,<1",
   "langgraph>=1.0,<2",
   "langgraph-checkpoint-sqlite>=3,<4",
-  "langchain-litellm>=0.2,<0.3",
-  "langchain-core>=0.3.15,<0.4",
   "mcp>=1.30,<2",
   "fastmcp>=2.0,<3",
   "rank-bm25>=0.2,<1",
   "cachetools>=5.0,<6",
   "duckduckgo_search>=6.0,<7",
   "sse-starlette>=1.6,<2",
-  "opentelemetry-api>=1.27,<2",
-  "opentelemetry-sdk>=1.27,<2",
-  "opentelemetry-exporter-otlp-proto-http>=1.27,<2",
 ]
 dev = [
   "pytest>=8.0,<9",
@@ -86,14 +80,28 @@ Homepage = "https://github.com/badhope/xiaoman"
 Documentation = "https://github.com/badhope/xiaoman/tree/main/docs"
 
 [tool.setuptools]
-# 只纳入 xiaoman.* 门面包；backend/app 仍以源码方式随仓库分发，
-# 通过 install -e 或 sys.path 使用（打包 EXE 见 backend/xiaoman.spec）。
+# 两套包目录：实现包 app.* 在 backend/ 下，门面包 xiaoman.* 在仓库根。
+# 门面只是 re-export，缺了 app 装完就跑不起来（实测 ModuleNotFoundError: app）。
+package-dir = { "" = "backend", "xiaoman" = "xiaoman" }
 packages = [
+  "app",
+  "app.agents",
+  "app.agents.bookkeeping",
+  "app.agents.portfolio",
+  "app.agents.supervisor",
+  "app.calculations",
+  "app.db",
+  "app.import_parsers",
+  "app.routes",
   "xiaoman",
   "xiaoman.core",
   "xiaoman.server",
   "xiaoman.cli",
+  "xiaoman.mcp",
 ]
+
+[tool.setuptools.package-data]
+app = ["agents/**/*.md", "agents/**/*.json"]
 
 [tool.ruff]
 line-length = 100

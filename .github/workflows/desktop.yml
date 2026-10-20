@@ -1,0 +1,105 @@
+name: Desktop Build
+
+# 多平台桌面产物构建。
+#
+# 为什么单独一个工作流：桌面包必须在各自的操作系统上打（PyInstaller 不能交叉编译），
+# 且构建耗时较长（每个平台 5–10 分钟），不适合塞进每次 push 的 CI。
+#
+# 触发：
+#   - 推送 v* tag 时自动构建并上传到 Release
+#   - 也可手动触发，只产出 artifact 供下载
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows x64
+            artifact: xiaoman-windows-x64
+            binary: xiaoman.exe
+          - os: macos-latest
+            name: macOS arm64
+            artifact: xiaoman-macos-arm64
+            binary: xiaoman
+          - os: ubuntu-latest
+            name: Linux x64
+            artifact: xiaoman-linux-x64
+            binary: xiaoman
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: 构建前端
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: 安装后端依赖（含 PyInstaller）
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: 打包单文件
+        working-directory: backend
+        run: pyinstaller xiaoman.spec --noconfirm --distpath dist --workpath build
+
+      - name: 冒烟测试（产物能启动并响应健康检查）
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd backend/dist
+          ./${{ matrix.binary }} > run.log 2>&1 &
+          PID=$!
+          ok=0
+          for i in $(seq 1 40); do
+            if curl -fsS --max-time 3 http://127.0.0.1:8788/api/health >/dev/null 2>&1; then ok=1; break; fi
+            sleep 2
+          done
+          kill $PID 2>/dev/null || true
+          if [ "$ok" != "1" ]; then
+            echo "::error::打包产物未能启动"
+            tail -40 run.log
+            exit 1
+          fi
+          echo "产物启动正常"
+
+      - name: 上传 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: backend/dist/${{ matrix.binary }}
+          if-no-files-found: error
+
+      - name: 附加到 Release（tag 触发时）
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: backend/dist/${{ matrix.binary }}
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

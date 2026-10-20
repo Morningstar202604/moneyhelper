@@ -2,6 +2,47 @@
 
 项目版本号与发布历史。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本语义遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [2.7.0] - 2026-10-21（可安装性修复 + 多平台产物 + MCP 定时产出）
+
+### 修复（可安装性，实测驱动）
+
+- **`pip install` 出来的包根本跑不起来**：wheel 只含 5 个门面文件（15KB），
+  真正的实现在 `backend/app` 下没有被打包；装完 `import xiaoman.server`
+  直接 `ModuleNotFoundError: app`。现配置 `package-dir` 同时安装 `app.*`，
+  wheel 变为 320KB / 102 个文件；实测从 `C:/Windows` 目录导入成功、
+  `xiaoman.server.app` 是真实 FastAPI 实例、CLI `--help` 正常。
+- **`pyproject.toml` 依赖漂移**：仍引用已删除的 mem0 / chromadb / opentelemetry /
+  langchain-litellm，且 `xiaoman.mcp` 未纳入包列表。已与 requirements 对齐。
+
+### 新增
+
+- **多平台桌面构建工作流** `.github/workflows/desktop.yml`：Windows / macOS / Linux
+  三平台矩阵，各自打 PyInstaller 单文件，带"产物能启动并响应健康检查"的冒烟测试，
+  tag 触发时自动附加到 Release。
+- **MCP 定时产出资源**（Tasks 的可行替代）：
+  - `xiaoman://scheduled-outputs` —— 最近 10 条晨报/技能产出
+  - `xiaoman://scheduler-status` —— 调度状态
+  为什么不用 Tasks：mcp 1.30 的 Tasks 仍是 experimental，fastmcp 2.x 未透传；
+  而"客户端能拿到定时产出"用 resource 拉取即可满足，服务端仍由 APScheduler 生成。
+
+
+### 修复（并行稳定性，根因）
+
+- **审计写入破坏事务边界**：`provenance._persist_entry` 原先复用全局唯一写连接并
+  `commit`，会把别的协程未完成的多语句事务一并提交。改为在同一连接上用
+  `SAVEPOINT` 局部隔离——既不提交外层事务，也不因独立连接在 Windows 上与主连接
+  互等而死锁（两种更简单的做法都实测失败过）。
+- **进程级活跃成员状态跨用例泄漏**：`_active_member_id` 是模块级全局字典，
+  某用例设置后未清理，会让后续用例把流水挂到"别的库里的成员 id"上，
+  触发 `FOREIGN KEY constraint failed`。`temp_db` 与 `test_evaluate` 的
+  fixture 现在逐用例清零。修复后连续 8 轮并行回归 723 项全绿（此前约每 5–8 轮
+  偶发一次）。
+
+### 验证
+
+- 文档站静态校验：`mkdocs.yml` 的 16 个导航条目全部存在，全仓库文档相对链接 0 坏链
+  （本机无法访问 pypi，装不了 mkdocs，故用静态校验替代 `mkdocs build --strict`）。
+
 ## [2.6.1] - 2026-10-21（流式断流不再伪装成功）
 
 ### 修复

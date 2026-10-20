@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
 import pytest
-from app import mcp_client
+from app import db, mcp_client
 
 # ---------------------------------------------------------------------------
 # 一个真实的最小 MCP StreamableHTTP 服务器（本地代码起服务）
@@ -254,3 +254,29 @@ async def test_self_mcp_end_to_end(xiaoman_mcp_up, temp_db) -> None:
     assert "已记" in rec or "35" in rec
     after = json.loads(await mcp_client.call_mcp_tool("self", "get_ledger_view", {}))
     assert after["expense"] == before["expense"] + 35.0
+
+
+# ---------------------------------------------------------------------------
+# 定时产出与调度状态作为 MCP 资源（Tasks 的可行替代）
+# ---------------------------------------------------------------------------
+
+
+async def test_scheduled_outputs_resource_lists_runs(temp_db) -> None:
+    """MCP 客户端应能拉到定时产出（晨报/技能触发），而不是只能等推送。"""
+    from app import mcp_server
+
+    await db.save_run("cron", "晨报问题", "晨报回答", "已生成", skip_session=True)
+    out = await mcp_server.scheduled_outputs_resource.fn()
+    payload = json.loads(out)
+    assert payload["count"] >= 1
+    assert any(i["thread_id"] == "cron" for i in payload["items"])
+    assert payload["items"][0]["answer"]
+
+
+async def test_scheduler_status_resource_reports_state(temp_db) -> None:
+    from app import mcp_server
+
+    out = await mcp_server.scheduler_status_resource.fn()
+    payload = json.loads(out)
+    assert "report_time" in payload and "enabled" in payload
+    assert "skill_jobs" in payload

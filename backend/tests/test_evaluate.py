@@ -29,6 +29,7 @@ async def _temp_db(tmp_path, monkeypatch):
     # 先关掉上一个测试遗留的连接，再按临时路径重开：
     # 否则 init_db 会复用那条连接，把数据写进别的测试（或真实）的库。
     await db.close_db()
+    db._active_member_id.clear()  # 进程级全局状态，必须逐用例清理
     await db.init_db()
     await db.reset_to_seed()
     yield

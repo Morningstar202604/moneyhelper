@@ -37,6 +37,10 @@ async def temp_db(tmp_path, monkeypatch):
     # 连接缓存陷阱：db._db 为模块级单连接，若上一个测试遗留了真实库连接，
     # init_db 会直接复用导致本测试写进真实库——先强制关闭再按临时路径重开
     await db.close_db()
+    # 活跃成员是**进程级全局状态**（_active_member_id）。上一个用例设置后未清理，
+    # 会让本用例新写的流水挂到"别的库里的成员 id"上，触发外键失败
+    # （并行跑时表现为随机 IntegrityError）。每个用例开始前清零。
+    db._active_member_id.clear()
     await db.init_db()
     await db.reset_to_seed()
     yield
