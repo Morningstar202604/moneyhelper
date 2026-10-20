@@ -274,6 +274,7 @@ export const en: Record<string, string> = {
   "chat.switchModel": "Switch model",
   "chat.switchModelHint": "Quick-switch model (syncs to settings)",
   "chat.error": "Error",
+  "chat.streamInterrupted": "Answer may be incomplete (connection lost)",
   "chat.analyzing": "Analyzing…",
   "dash.noRisk": "No notable risks — your finances look steady overall.",
   "dash.riskCount": "{n} items need attention",

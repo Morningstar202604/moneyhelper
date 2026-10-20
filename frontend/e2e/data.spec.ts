@@ -27,3 +27,27 @@ test.describe("数据浮层", () => {
     await expect(page.getByText(/贵州茅台/).first()).toBeVisible({ timeout: 15_000 });
   });
 });
+
+test("流式回答被中途掐断时，UI 明确提示不完整而不是假装成功", async ({ page }) => {
+  await page.goto("/");
+  // 拦截 /api/ask：先发两帧文本，然后直接关闭（不发 done）
+  await page.route("**/api/ask", async (route) => {
+    const events = [
+      'data: {"type":"start","question":"测试"}',
+      'data: {"type":"token","data":{"content":"这是一段被截断的"}}',
+    ].join("\n\n");
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+      body: events + "\n\n",
+    });
+  });
+
+  await page.getByRole("textbox").first().fill("测试断流");
+  await page.keyboard.press("Enter");
+
+  // 应该看到已收到的那段文字
+  await expect(page.getByText("这是一段被截断的").first()).toBeVisible({ timeout: 15_000 });
+  // 并且必须出现"不完整"提示（而不是静默当作完成）
+  await expect(page.getByText(/不完整|连接中断/).first()).toBeVisible({ timeout: 15_000 });
+});

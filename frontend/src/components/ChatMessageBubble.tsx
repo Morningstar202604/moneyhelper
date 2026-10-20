@@ -299,7 +299,7 @@ function BubbleInner({
       <div className="max-w-full w-full">
         {/* 账本的行：左侧一条竖线标来源，正文直接落在页面上，不再套白卡 */}
         <div className="group border-l-2 border-border pl-3.5 sm:pl-4">
-          {m.error ? (
+          {m.error && !m.text ? (
             <div className="text-sm text-red-600 dark:text-red-400">{tr("chat.error")}: {m.error}</div>
           ) : (
             <>
@@ -378,6 +378,12 @@ function BubbleInner({
                   </span>
                 )}
               </div>
+              {/* 已有正文但流被中断：保留内容，另起一行说明不完整 */}
+              {m.error && m.text ? (
+                <div className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+                  {tr("chat.streamInterrupted")}: {m.error}
+                </div>
+              ) : null}
               {/* 结构化数据卡：对话内嵌小卡，点"展开"唤起 DataModal */}
               {m.cards && m.cards.length > 0 && (
                 <div className="mt-2.5 space-y-2">

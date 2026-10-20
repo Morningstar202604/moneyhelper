@@ -274,6 +274,7 @@ export const zh: Record<string, string> = {
   "chat.switchModel": "切换模型",
   "chat.switchModelHint": "快速切换模型（同步到设置）",
   "chat.error": "出错了",
+  "chat.streamInterrupted": "回答可能不完整（连接中断）",
   "chat.analyzing": "正在分析…",
   "dash.noRisk": "未发现明显风险项，当前财务状况整体稳健。",
   "dash.riskCount": "发现 {n} 项需关注",

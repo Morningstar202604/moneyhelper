@@ -142,6 +142,10 @@ export async function apiStream(
   retried = false,
 ): Promise<void> {
   let got = false;
+  // 是否收到服务端的终帧。只有收到 done 才算这条流成功走完；
+  // 仅有"收到过内容"不足以判定成功——断连时也会 got=true，
+  // 旧逻辑会直接 return，把半截回答当成完整结果展示给用户。
+  let completed = false;
   let retryCount = 0;
 
   try {
@@ -157,17 +161,24 @@ export async function apiStream(
       try {
         await _fetchOnce(path, body, signal, retried, (obj) => {
           got = true;
+          if (obj && obj.type === "done") completed = true;
           onLine(obj);
         });
-        return; // 完整接收 → 成功退出
+        if (completed) return; // 收到终帧才算完整接收
+        // 连接正常关闭但没收到 done：视为断流，交给重试逻辑。
+        // 已经收到内容时不重放（会重复半段），但必须让调用方知道未完成。
+        if (got) throw new Error("流式连接提前结束（未收到完成标记）");
+        return;
       } catch (err) {
         if (signal?.aborted) break;
         if (err instanceof ReauthError) {
           return apiStream(path, body, onLine, signal, true);
         }
         if (err instanceof FatalError) throw err;
+        // 已经收到部分内容：不重放（会重复半段），但必须把"未完成"如实抛出，
+        // 否则 UI 会把半截回答当成完整结果（旧逻辑在这里静默 return）。
         if (got) {
-          return;
+          throw err instanceof Error ? err : new Error("流式连接中断");
         }
         retryCount++;
         if (retryCount > MAX_RETRIES) {
