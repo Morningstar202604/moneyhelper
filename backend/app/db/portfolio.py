@@ -8,6 +8,7 @@ from ._core import (
     _conn,
     _mark_user_data,
 )
+from .tenant import current_user_id
 from .undo import _record_snapshot, _row_to_json
 
 # --------------------------------------------------------------------------
@@ -38,18 +39,21 @@ async def add_position(p: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("现价不能为负")
     if clean["fee"] < 0 or clean["fee"] != clean["fee"]:
         raise ValueError("费用不能为负")
+    uid = current_user_id()
     # 撤销快照：记录 upsert 前的状态（已存在 → 旧行 JSON，新增 → '{}'）
     existing = await (
-        await conn.execute("SELECT * FROM positions WHERE symbol=?", (clean["symbol"],))
+        await conn.execute(
+            "SELECT * FROM positions WHERE user_id=? AND symbol=?", (uid, clean["symbol"])
+        )
     ).fetchone()
     await _record_snapshot("position", clean["symbol"], _row_to_json(existing))
     await conn.execute(
-        "INSERT INTO positions(symbol,name,kind,industry,shares,cost,last,buy_date,fee)"
-        " VALUES(:symbol,:name,:kind,:industry,:shares,:cost,:last,:buy_date,:fee)"
-        " ON CONFLICT(symbol) DO UPDATE SET name=excluded.name, kind=excluded.kind,"
+        "INSERT INTO positions(user_id,symbol,name,kind,industry,shares,cost,last,buy_date,fee)"
+        " VALUES(:user_id,:symbol,:name,:kind,:industry,:shares,:cost,:last,:buy_date,:fee)"
+        " ON CONFLICT(user_id,symbol) DO UPDATE SET name=excluded.name, kind=excluded.kind,"
         " industry=excluded.industry, shares=excluded.shares, cost=excluded.cost,"
         " last=excluded.last, buy_date=excluded.buy_date, fee=excluded.fee",
-        clean,
+        {**clean, "user_id": uid},
     )
     await _mark_user_data(conn)
     await conn.commit()
@@ -58,14 +62,19 @@ async def add_position(p: dict[str, Any]) -> dict[str, Any]:
 
 async def delete_position(symbol: str) -> dict[str, Any]:
     conn = await _conn()
+    uid = current_user_id()
     # 撤销快照：记录删除前的全量旧行，撤回时 INSERT OR REPLACE 恢复
     old = await (
-        await conn.execute("SELECT * FROM positions WHERE symbol=?", (symbol,))
+        await conn.execute(
+            "SELECT * FROM positions WHERE user_id=? AND symbol=?", (uid, symbol)
+        )
     ).fetchone()
     if old is None:
         return {"ok": False, "deleted": 0}
     await _record_snapshot("position", symbol, _row_to_json(old))
-    cur = await conn.execute("DELETE FROM positions WHERE symbol=?", (symbol,))
+    cur = await conn.execute(
+        "DELETE FROM positions WHERE user_id=? AND symbol=?", (uid, symbol)
+    )
     await _mark_user_data(conn)
     await conn.commit()
     return {"ok": True, "deleted": cur.rowcount}
@@ -74,9 +83,11 @@ async def delete_position(symbol: str) -> dict[str, Any]:
 async def update_position(p: dict[str, Any], symbol: str) -> dict[str, Any]:
     """编辑指定 symbol 的持仓。fields 里缺的键保持原值；校验与 add_position 一致。"""
     conn = await _conn()
+    uid = current_user_id()
     cur = await conn.execute(
-        "SELECT name,kind,industry,shares,cost,last,buy_date,fee FROM positions WHERE symbol=?",
-        (symbol,),
+        "SELECT name,kind,industry,shares,cost,last,buy_date,fee FROM positions"
+        " WHERE user_id=? AND symbol=?",
+        (uid, symbol),
     )
     row = await cur.fetchone()
     if row is None:
@@ -118,8 +129,8 @@ async def update_position(p: dict[str, Any], symbol: str) -> dict[str, Any]:
     await conn.execute(
         "UPDATE positions SET name=:name, kind=:kind, industry=:industry,"
         " shares=:shares, cost=:cost, last=:last, buy_date=:buy_date, fee=:fee"
-        " WHERE symbol=:symbol",
-        {**clean, "symbol": symbol},
+        " WHERE user_id=:user_id AND symbol=:symbol",
+        {**clean, "symbol": symbol, "user_id": uid},
     )
     await _mark_user_data(conn)
     await conn.commit()
@@ -135,8 +146,8 @@ async def merge_positions_by_name(name: str) -> dict[str, Any]:
     conn = await _conn()
     # 合并快照需要全量字段，以备撤回时按 symbol 完整恢复每一行
     cur = await conn.execute(
-        "SELECT * FROM positions WHERE name=? ORDER BY symbol",
-        (nm,),
+        "SELECT * FROM positions WHERE user_id=? AND name=? ORDER BY symbol",
+        (current_user_id(), nm),
     )
     old_rows = [dict(r) for r in await cur.fetchall()]
     if len(old_rows) <= 1:
@@ -181,11 +192,22 @@ async def merge_positions_by_name(name: str) -> dict[str, Any]:
     merged_fee = round(sum(r["fee"] for r in rows), 6)
 
     await conn.execute(
-        "UPDATE positions SET shares=?, cost=?, last=?, fee=? WHERE symbol=?",
-        (total_shares, merged_cost, merged_last, merged_fee, keep["symbol"]),
+        "UPDATE positions SET shares=?, cost=?, last=?, fee=?"
+        " WHERE user_id=? AND symbol=?",
+        (
+            total_shares,
+            merged_cost,
+            merged_last,
+            merged_fee,
+            current_user_id(),
+            keep["symbol"],
+        ),
     )
     for r in rows[1:]:
-        await conn.execute("DELETE FROM positions WHERE symbol=?", (r["symbol"],))
+        await conn.execute(
+            "DELETE FROM positions WHERE user_id=? AND symbol=?",
+            (current_user_id(), r["symbol"]),
+        )
     await _mark_user_data(conn)
     await conn.commit()
     return {"ok": True, "merged": len(rows) - 1, "symbol": keep["symbol"]}
@@ -197,9 +219,11 @@ async def merge_positions_by_name(name: str) -> dict[str, Any]:
 
 
 async def list_watchlist() -> list[dict[str, Any]]:
+    """当前租户的自选列表。"""
     conn = await _conn()
     cur = await conn.execute(
-        "SELECT symbol,name,kind,created_at FROM watchlist ORDER BY created_at"
+        "SELECT symbol,name,kind,created_at FROM watchlist WHERE user_id=? ORDER BY created_at",
+        (current_user_id(),),
     )
     rows = await cur.fetchall()
     return [
@@ -217,9 +241,10 @@ async def add_watchlist(
 
     conn = await _conn()
     await conn.execute(
-        "INSERT INTO watchlist(symbol,name,kind,created_at) VALUES(?,?,?,?)"
-        " ON CONFLICT(symbol) DO UPDATE SET name=excluded.name, kind=excluded.kind",
+        "INSERT INTO watchlist(user_id,symbol,name,kind,created_at) VALUES(?,?,?,?,?)"
+        " ON CONFLICT(user_id,symbol) DO UPDATE SET name=excluded.name, kind=excluded.kind",
         (
+            current_user_id(),
             sym,
             str(name).strip()[:40] or sym,
             str(kind).strip()[:10] or "股票",
@@ -234,7 +259,8 @@ async def add_watchlist(
 async def delete_watchlist(symbol: str) -> dict[str, Any]:
     conn = await _conn()
     cur = await conn.execute(
-        "DELETE FROM watchlist WHERE symbol=?", (symbol.strip().upper(),)
+        "DELETE FROM watchlist WHERE user_id=? AND symbol=?",
+        (current_user_id(), symbol.strip().upper()),
     )
     await _mark_user_data(conn)
     await conn.commit()

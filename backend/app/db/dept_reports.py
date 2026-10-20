@@ -29,6 +29,7 @@ from datetime import datetime
 from typing import Any
 
 from ._core import _conn, fetch_all, fetch_one, uuid_hex
+from .tenant import current_user_id
 
 # 允许的审批动作
 DECISIONS = ("approve", "reject", "inquire")
@@ -65,10 +66,11 @@ async def save_report(
     conn = await _conn()
     await conn.execute(
         "INSERT INTO dept_reports("
-        " report_id, question, dispatch, verdict, report, orders_json,"
+        " user_id, report_id, question, dispatch, verdict, report, orders_json,"
         " conflicts_json, status, created_at)"
-        " VALUES(?,?,?,?,?,?,?,?,?)",
+        " VALUES(?,?,?,?,?,?,?,?,?,?)",
         (
+            current_user_id(),
             report_id,
             question,
             dispatch or str(report.get("dispatch") or ""),
@@ -85,7 +87,10 @@ async def save_report(
 
 
 async def get_report(report_id: str) -> dict[str, Any] | None:
-    row = await fetch_one("SELECT * FROM dept_reports WHERE report_id=?", (report_id,))
+    row = await fetch_one(
+        "SELECT * FROM dept_reports WHERE user_id=? AND report_id=?",
+        (current_user_id(), report_id),
+    )
     return _row_to_report(row) if row else None
 
 
@@ -96,12 +101,14 @@ async def list_reports(
     limit = max(1, min(int(limit), 200))
     if status:
         rows = await fetch_all(
-            "SELECT * FROM dept_reports WHERE status=? ORDER BY id DESC LIMIT ?",
-            (status, limit),
+            "SELECT * FROM dept_reports WHERE user_id=? AND status=?"
+            " ORDER BY id DESC LIMIT ?",
+            (current_user_id(), status, limit),
         )
     else:
         rows = await fetch_all(
-            "SELECT * FROM dept_reports ORDER BY id DESC LIMIT ?", (limit,)
+            "SELECT * FROM dept_reports WHERE user_id=? ORDER BY id DESC LIMIT ?",
+            (current_user_id(), limit),
         )
     return [_row_to_report(r) for r in rows]
 
@@ -120,8 +127,8 @@ async def decide(
     conn = await _conn()
     cur = await conn.execute(
         "UPDATE dept_reports SET status=?, decision_note=?, decided_at=?"
-        " WHERE report_id=? AND status='pending'",
-        (new_status, note[:1000], _now_iso(), report_id),
+        " WHERE user_id=? AND report_id=? AND status='pending'",
+        (new_status, note[:1000], _now_iso(), current_user_id(), report_id),
     )
     await conn.commit()
     if cur.rowcount != 1:
@@ -131,6 +138,7 @@ async def decide(
 
 async def pending_count() -> int:
     row = await fetch_one(
-        "SELECT COUNT(*) AS n FROM dept_reports WHERE status='pending'"
+        "SELECT COUNT(*) AS n FROM dept_reports WHERE user_id=? AND status='pending'",
+        (current_user_id(),),
     )
     return int(row["n"]) if row else 0

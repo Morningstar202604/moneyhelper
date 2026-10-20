@@ -159,7 +159,7 @@ docs/                Deploy / config / workflow / architecture / planning
 ## Tests
 
 ```bash
-# Backend: 685 tests (engine / quote fallback / agent loop / LangGraph / API / backup / MCP ...)
+# Backend: 696 tests (engine / quote fallback / agent loop / LangGraph / API / backup / MCP ...)
 cd backend && .venv/bin/python -m pytest tests -q
 cd backend && .venv/bin/python -m ruff check app tests
 

@@ -14,6 +14,7 @@ from ._core import (
     _mark_user_data,
     get_write_lock,
 )
+from .tenant import current_user_id
 from .undo import _record_snapshot, _row_to_json
 
 
@@ -65,6 +66,9 @@ async def add_transactions_batch(
         if c["is_shared"] is None:
             c["is_shared"] = 1
 
+    from .tenant import current_user_id
+
+    uid = current_user_id()
     conn = await _conn()
     results: list[dict[str, Any]] = []
     # 整库只有一条写连接，多语句事务必须排他：否则并发「确认」入账时
@@ -75,9 +79,10 @@ async def add_transactions_batch(
         try:
             for c in cleaned:
                 cur = await conn.execute(
-                    "INSERT INTO transactions(date,item,category,amount,owner_id,is_shared)"
-                    " VALUES(?,?,?,?,?,?)",
+                    "INSERT INTO transactions(user_id,date,item,category,amount,owner_id,is_shared)"
+                    " VALUES(?,?,?,?,?,?,?)",
                     (
+                        uid,
                         c["date"],
                         c["item"],
                         c["category"],
@@ -139,10 +144,14 @@ async def add_transaction(
     if resolved_shared is None:
         resolved_shared = 1  # 默认值：无 owner 时保持向后兼容
 
+    from .tenant import current_user_id
+
     conn = await _conn()
     cur = await conn.execute(
-        "INSERT INTO transactions(date,item,category,amount,owner_id,is_shared) VALUES(?,?,?,?,?,?)",
+        "INSERT INTO transactions(user_id,date,item,category,amount,owner_id,is_shared)"
+        " VALUES(?,?,?,?,?,?,?)",
         (
+            current_user_id(),
             d,
             str(item).strip()[:80] or "未命名",
             str(category).strip()[:20] or "其他",
@@ -162,12 +171,17 @@ async def delete_transaction(tx_id: int) -> dict[str, Any]:
     conn = await _conn()
     # 撤销快照：记录删除前的全量旧行，撤回时 INSERT OR REPLACE 恢复
     old = await (
-        await conn.execute("SELECT * FROM transactions WHERE id=?", (int(tx_id),))
+        await conn.execute(
+            "SELECT * FROM transactions WHERE user_id=? AND id=?",
+            (current_user_id(), int(tx_id)),
+        )
     ).fetchone()
     if old is None:
         return {"ok": False, "deleted": 0}
     await _record_snapshot("transaction", str(tx_id), _row_to_json(old))
-    cur = await conn.execute("DELETE FROM transactions WHERE id=?", (int(tx_id),))
+    cur = await conn.execute(
+        "DELETE FROM transactions WHERE user_id=? AND id=?", (current_user_id(), int(tx_id))
+    )
     await _mark_user_data(conn)
     await conn.commit()
     return {"ok": True, "deleted": cur.rowcount}
@@ -187,7 +201,8 @@ async def update_transaction(
 
     conn = await _conn()
     cur = await conn.execute(
-        "SELECT date,item,category,amount,owner_id,is_shared FROM transactions WHERE id=?",
+        "SELECT date,item,category,amount,owner_id,is_shared FROM transactions"
+        " WHERE user_id=? AND id=?",
         (int(tx_id),),
     )
     row = await cur.fetchone()
@@ -238,7 +253,8 @@ async def update_transaction(
         raise ValueError("金额不能为 0 或 NaN")
 
     await conn.execute(
-        "UPDATE transactions SET date=?,item=?,category=?,amount=?,owner_id=?,is_shared=? WHERE id=?",
+        "UPDATE transactions SET date=?,item=?,category=?,amount=?,owner_id=?,is_shared=?"
+        " WHERE user_id=? AND id=?",
         (d, it, cat, amt, own, shr, int(tx_id)),
     )
     await _mark_user_data(conn)
@@ -262,14 +278,15 @@ async def merge_transactions(
     if cat:
         cur = await conn.execute(
             "SELECT date,item,category,amount FROM transactions"
-            " WHERE date >= ? AND date < ? AND category=? ORDER BY date,item",
-            (f"{month}-01", f"{month}-32", cat),
+            " WHERE user_id=? AND date >= ? AND date < ? AND category=?"
+            " ORDER BY date,item",
+            (current_user_id(), f"{month}-01", f"{month}-32", cat),
         )
     else:
         cur = await conn.execute(
             "SELECT date,item,category,amount FROM transactions"
-            " WHERE date >= ? AND date < ? ORDER BY date,item,category",
-            (f"{month}-01", f"{month}-32"),
+            " WHERE user_id=? AND date >= ? AND date < ? ORDER BY date,item,category",
+            (current_user_id(), f"{month}-01", f"{month}-32"),
         )
     rows = [
         {"date": r[0], "item": r[1], "category": r[2], "amount": r[3]}
@@ -291,25 +308,28 @@ async def merge_transactions(
         d, it, cat_ = key
         # 找该组最早那条，更新金额为合计
         cur2 = await conn.execute(
-            "SELECT id FROM transactions WHERE date=? AND item=? AND category=? LIMIT 1",
+            "SELECT id FROM transactions WHERE user_id=? AND date=? AND item=?"
+            " AND category=? LIMIT 1",
             (d, it, cat_),
         )
         first_id = (await cur2.fetchone())[0]
         if total == 0 or total != total:
             # 合计为 0 或 NaN → 整组删掉
             await conn.execute(
-                "DELETE FROM transactions WHERE date=? AND item=? AND category=?",
+                "DELETE FROM transactions WHERE user_id=? AND date=? AND item=?"
+                " AND category=?",
                 (d, it, cat_),
             )
             merged += 1
             continue
         await conn.execute(
-            "UPDATE transactions SET amount=? WHERE id=?",
+            "UPDATE transactions SET amount=? WHERE user_id=? AND id=?",
             (total, first_id),
         )
         # 删该组除最早外的其余记录
         cur3 = await conn.execute(
-            "DELETE FROM transactions WHERE date=? AND item=? AND category=? AND id<>?",
+            "DELETE FROM transactions WHERE user_id=? AND date=? AND item=?"
+            " AND category=? AND id<>?",
             (d, it, cat_, first_id),
         )
         merged += cur3.rowcount

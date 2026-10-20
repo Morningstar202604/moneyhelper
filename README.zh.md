@@ -202,7 +202,7 @@ docs/                部署 / 配置 / 工作流 / 架构 / 规划文档（见�
 ## 测试
 
 ```bash
-# 后端：685 个测试（内核 / 行情降级 / Agent 循环 / LangGraph / API / 备份往返 / MCP …）
+# 后端：696 个测试（内核 / 行情降级 / Agent 循环 / LangGraph / API / 备份往返 / MCP …）
 cd backend && .venv/bin/python -m pytest tests -q
 cd backend && .venv/bin/python -m ruff check app tests
 

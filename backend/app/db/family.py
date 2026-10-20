@@ -11,6 +11,7 @@ from ._core import (
     fetch_all,
     fetch_one,
 )
+from .tenant import current_user_id
 
 # --------------------------------------------------------------------------
 # 家庭成员 CRUD
@@ -37,7 +38,10 @@ async def member_create(
     conn = await _conn()
     while True:
         row = await (
-            await conn.execute("SELECT id FROM members WHERE username=?", (uname,))
+            await conn.execute(
+                "SELECT id FROM members WHERE user_id=? AND username=?",
+                (current_user_id(), uname),
+            )
         ).fetchone()
         if row is None:
             break
@@ -48,9 +52,16 @@ async def member_create(
         cnt = await member_count()
         avatar_color = _AVATAR_COLORS[cnt % len(_AVATAR_COLORS)]
     cur = await conn.execute(
-        "INSERT INTO members(username, display_name, role, avatar_color, created_at) "
-        "VALUES(?,?,?,?,?)",
-        (uname, display_name.strip()[:40] or "未命名", role, avatar_color, now),
+        "INSERT INTO members(user_id, username, display_name, role, avatar_color, created_at) "
+        "VALUES(?,?,?,?,?,?)",
+        (
+            current_user_id(),
+            uname,
+            display_name.strip()[:40] or "未命名",
+            role,
+            avatar_color,
+            now,
+        ),
     )
     await conn.commit()
     return cur.lastrowid
@@ -58,13 +69,17 @@ async def member_create(
 
 async def member_count() -> int:
     """家庭成员总数"""
-    row = await fetch_one("SELECT COUNT(*) as cnt FROM members")
+    row = await fetch_one(
+        "SELECT COUNT(*) as cnt FROM members WHERE user_id=?", (current_user_id(),)
+    )
     return int(row["cnt"]) if row else 0
 
 
 async def list_members() -> list[dict[str, Any]]:
     """列出所有家庭成员"""
-    return await fetch_all("SELECT * FROM members ORDER BY id")
+    return await fetch_all(
+        "SELECT * FROM members WHERE user_id=? ORDER BY id", (current_user_id(),)
+    )
 
 
 async def member_update(member_id: int, **kwargs: Any) -> dict[str, Any]:
@@ -83,10 +98,11 @@ async def member_update(member_id: int, **kwargs: Any) -> dict[str, Any]:
         # 无有效修改字段，直接返回当前信息
         m = await _fetch_member(member_id)
         return m or {}
+    vals.append(current_user_id())
     vals.append(member_id)
     conn = await _conn()
     await conn.execute(
-        f"UPDATE members SET {','.join(sets)} WHERE id=?",
+        f"UPDATE members SET {','.join(sets)} WHERE user_id=? AND id=?",
         tuple(vals),
     )
     await conn.commit()
@@ -100,18 +116,22 @@ async def member_delete(member_id: int) -> dict[str, Any]:
     反序会触发外键约束，导致"有借贷记录的成员永远删不掉"。
     整体在事务里，任一步失败回滚，不留半截状态。
     """
+    uid = current_user_id()
     conn = await _conn()
     try:
         await conn.execute("BEGIN")
         # 软切断：该成员的流水不再归属任何人（保持流水不计丢）
         await conn.execute(
-            "UPDATE transactions SET owner_id=NULL WHERE owner_id=?", (member_id,)
+            "UPDATE transactions SET owner_id=NULL WHERE user_id=? AND owner_id=?",
+            (uid, member_id),
         )
         await conn.execute(
-            "DELETE FROM member_loans WHERE from_member_id=? OR to_member_id=?",
-            (member_id, member_id),
+            "DELETE FROM member_loans WHERE user_id=? AND (from_member_id=? OR to_member_id=?)",
+            (uid, member_id, member_id),
         )
-        cur = await conn.execute("DELETE FROM members WHERE id=?", (member_id,))
+        cur = await conn.execute(
+            "DELETE FROM members WHERE user_id=? AND id=?", (uid, member_id)
+        )
         await conn.commit()
     except Exception:
         await conn.rollback()
@@ -140,9 +160,18 @@ async def loan_create(
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     conn = await _conn()
     cur = await conn.execute(
-        "INSERT INTO member_loans(from_member_id, to_member_id, amount, currency, note, settled, created_at) "
-        "VALUES(?,?,?,?,?,?,?)",
-        (from_member_id, to_member_id, amt, currency, note.strip()[:200], 0, now),
+        "INSERT INTO member_loans(user_id, from_member_id, to_member_id, amount, currency, note, settled, created_at) "
+        "VALUES(?,?,?,?,?,?,?,?)",
+        (
+            current_user_id(),
+            from_member_id,
+            to_member_id,
+            amt,
+            currency,
+            note.strip()[:200],
+            0,
+            now,
+        ),
     )
     await conn.commit()
     return cur.lastrowid
@@ -150,11 +179,11 @@ async def loan_create(
 
 async def list_loans(settled: bool | None = None) -> list[dict[str, Any]]:
     """列出借贷；settled=None 全部 / True 已结 / False 未结"""
-    sql = "SELECT * FROM member_loans"
-    params: tuple = ()
+    sql = "SELECT * FROM member_loans WHERE user_id=?"
+    params: tuple = (current_user_id(),)
     if settled is not None:
-        sql += " WHERE settled=?"
-        params = (1 if settled else 0,)
+        sql += " AND settled=?"
+        params = (current_user_id(), 1 if settled else 0,)
     sql += " ORDER BY created_at DESC"
     return await fetch_all(sql, params)
 
@@ -164,8 +193,8 @@ async def loan_settle(loan_id: int) -> dict[str, Any]:
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     conn = await _conn()
     cur = await conn.execute(
-        "UPDATE member_loans SET settled=1, settled_at=? WHERE id=?",
-        (now, loan_id),
+        "UPDATE member_loans SET settled=1, settled_at=? WHERE user_id=? AND id=?",
+        (now, current_user_id(), loan_id),
     )
     await conn.commit()
     return {"ok": True, "updated": cur.rowcount}
@@ -174,7 +203,9 @@ async def loan_settle(loan_id: int) -> dict[str, Any]:
 async def loan_delete(loan_id: int) -> dict[str, Any]:
     """删除一笔借贷"""
     conn = await _conn()
-    cur = await conn.execute("DELETE FROM member_loans WHERE id=?", (loan_id,))
+    cur = await conn.execute(
+        "DELETE FROM member_loans WHERE user_id=? AND id=?", (current_user_id(), loan_id)
+    )
     await conn.commit()
     return {"ok": True, "deleted": cur.rowcount}
 
@@ -188,17 +219,17 @@ async def member_summary(member_id: int) -> dict[str, Any]:
     """查询单个成员的收支汇总"""
     income = await fetch_one(
         "SELECT COALESCE(SUM(amount), 0) as val FROM transactions "
-        "WHERE owner_id=? AND amount > 0 AND is_shared=1",
-        (member_id,),
+        "WHERE user_id=? AND owner_id=? AND amount > 0 AND is_shared=1",
+        (current_user_id(), member_id),
     )
     expense = await fetch_one(
         "SELECT COALESCE(SUM(ABS(amount)), 0) as val FROM transactions "
-        "WHERE owner_id=? AND amount < 0 AND is_shared=1",
-        (member_id,),
+        "WHERE user_id=? AND owner_id=? AND amount < 0 AND is_shared=1",
+        (current_user_id(), member_id),
     )
     count_row = await fetch_one(
-        "SELECT COUNT(*) as val FROM transactions WHERE owner_id=?",
-        (member_id,),
+        "SELECT COUNT(*) as val FROM transactions WHERE user_id=? AND owner_id=?",
+        (current_user_id(), member_id),
     )
     return {
         "member_id": member_id,
@@ -248,11 +279,13 @@ async def family_summary() -> dict[str, Any]:
     # 全局统计：所有 shared=1 的流水 + owner_id=NULL 的流水（向后兼容单用户）
     income_row = await fetch_one(
         "SELECT COALESCE(SUM(amount), 0) as val FROM transactions "
-        "WHERE amount > 0 AND (is_shared=1 OR owner_id IS NULL)"
+        "WHERE user_id=? AND amount > 0 AND (is_shared=1 OR owner_id IS NULL)",
+        (current_user_id(),),
     )
     expense_row = await fetch_one(
         "SELECT COALESCE(SUM(ABS(amount)), 0) as val FROM transactions "
-        "WHERE amount < 0 AND (is_shared=1 OR owner_id IS NULL)"
+        "WHERE user_id=? AND amount < 0 AND (is_shared=1 OR owner_id IS NULL)",
+        (current_user_id(),),
     )
     total_income = float(income_row["val"]) if income_row else 0.0
     total_expense = float(expense_row["val"]) if expense_row else 0.0
@@ -286,9 +319,9 @@ async def family_summary() -> dict[str, Any]:
     month_prefix = now.strftime("%Y-%m")
     cat_rows = await fetch_all(
         "SELECT category, COALESCE(SUM(ABS(amount)), 0) as total "
-        "FROM transactions WHERE amount < 0 AND date >= ? AND date < ? "
+        "FROM transactions WHERE user_id=? AND amount < 0 AND date >= ? AND date < ? "
         "GROUP BY category ORDER BY total DESC LIMIT 5",
-        (f"{month_prefix}-01", f"{month_prefix}-32"),
+        (current_user_id(), f"{month_prefix}-01", f"{month_prefix}-32"),
     )
     top_categories = [
         {"category": r["category"], "amount": round(float(r["total"]), 2)}

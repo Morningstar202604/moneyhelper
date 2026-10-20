@@ -762,6 +762,7 @@ def health_check(
         # 空库不给「整体健康 100 分」的假象：没有任何数据可评估
         return {
             "score": 0,
+            "grade": "-",
             "dimensions": [],
             "flags": flags_texts,
             "summary": (
@@ -770,9 +771,15 @@ def health_check(
                 else "数据不足：记几笔账、加几条持仓后体检才有意义"
             ),
         }
-    score = max(0, 100 - 20 * len([d for d in dims if d["status"] != "good"]))
+    # 五维加权评分：与 calculations/health.py 同一口径。
+    # 旧实现用「100 - 20×坏维度数」是拍脑袋扣分——维度本身有轻重，
+    # 一套口径才能让体检页、呈批件、AI 回答说的是同一个分数。
+    from .calculations.health import health_score_from_dimensions
+
+    weighted, grade = health_score_from_dimensions(dims)
     return {
-        "score": min(100, score),
+        "score": weighted,
+        "grade": grade,
         "dimensions": dims,
         "flags": flags_texts,
         "summary": (

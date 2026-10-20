@@ -93,12 +93,14 @@ def get_active_member(session_key: str = _ACTIVE_KEY) -> int | None:
 
 
 async def _fetch_member(member_id: int) -> dict[str, Any] | None:
-    """根据 id 取成员信息"""
+    """根据 id 取成员信息（限当前租户，防跨租户按 id 探测）"""
+    from .tenant import current_user_id
+
     conn = await _conn()
     cur = await conn.execute(
         "SELECT id, username, display_name, role, avatar_color, created_at "
-        "FROM members WHERE id=?",
-        (member_id,),
+        "FROM members WHERE user_id=? AND id=?",
+        (current_user_id(), member_id),
     )
     row = await cur.fetchone()
     return dict(row) if row else None
@@ -127,6 +129,7 @@ async def init_db() -> None:
     )  # SQLite 默认关外键；显式打开以启用 FK 约束/级联
     await _db.executescript(SCHEMA)
     await _migrate_add_columns()
+    await _migrate_multitenant()
     # 全新库（settings 表为空）不再自动种示例：空账本起步，用户自己记账/加持仓。
     # 老库即使用户清空了数据也绝不重置；示例数据只能显式导入（设置页/演示 API）。
     await _ensure_defaults()
@@ -182,6 +185,177 @@ async def _migrate_add_columns() -> None:
         for col, decl in adds.items():
             if col not in existing:
                 await _db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+
+
+# 需要按租户隔离的表。四张"业务字段作主键"的表要重建（复合主键），
+# 其余表只需加 user_id 列。
+_TENANT_TABLES = (
+    "transactions",
+    "runs",
+    "sessions",
+    "budgets",
+    "user_memory",
+    "attachments",
+    "dept_reports",
+    "pending_actions",
+    "undo_records",
+    "member_loans",
+    "members",
+    "provenance_log",
+    "audit_logs",
+)
+
+# 复合主键重建表：旧主键 + user_id = 新主键
+_COMPOSITE_TABLES = {
+    "positions": ("symbol", "TEXT PRIMARY KEY"),
+    "subscriptions": ("name", "TEXT PRIMARY KEY"),
+    "debts": ("name", "TEXT PRIMARY KEY"),
+    "watchlist": ("symbol", "TEXT PRIMARY KEY"),
+    # goals 同样用业务名作主键：两个人都有「买房」目标时必须能共存
+    "goals": ("name", "TEXT PRIMARY KEY"),
+    # 会话摘要按 thread_id 主键；不同用户的同名 thread 必须各存一份
+    "conversation_summary": ("thread_id", "TEXT PRIMARY KEY"),
+}
+
+# 非主键但带 UNIQUE 约束的列：多租户下唯一性要按 (user_id, col) 计算
+_UNIQUE_COLS = {"sessions": "thread_id"}
+
+
+async def _migrate_multitenant() -> None:
+    """多租户迁移：加 user_id 维度，并把历史数据归到默认租户 0。
+
+    幂等：已经迁移过的库不会重复执行（按列存在性判断）。
+    为什么四张表要重建：它们用业务字段（symbol/name）作主键，多用户下
+    A 的「茅台」会覆盖 B 的「茅台」。改成 (user_id, symbol) 复合主键才能共存。
+    """
+    assert _db is not None
+
+    # 1) 普通表：直接加列（SQLite 支持 ADD COLUMN 带默认值）
+    for table in _TENANT_TABLES:
+        cur = await _db.execute(f"PRAGMA table_info({table})")
+        cols = {row["name"] for row in await cur.fetchall()}
+        if not cols:
+            continue  # 表不存在（老库可能缺表）
+        if "user_id" not in cols:
+            await _db.execute(
+                f"ALTER TABLE {table} ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0"
+            )
+    # 索引：按租户过滤是最高频查询
+    for table in _TENANT_TABLES:
+        try:
+            await _db.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_{table}_user ON {table}(user_id)"
+            )
+        except Exception:  # noqa: BLE001 — 表不存在时跳过
+            continue
+
+    # 2) 复合主键表：重建（SQLite 不支持改主键，只能建新表搬数据）
+    for table, (key_col, _decl) in _COMPOSITE_TABLES.items():
+        cur = await _db.execute(f"PRAGMA table_info({table})")
+        info = await cur.fetchall()
+        if not info:
+            continue
+        cols = {row["name"] for row in info}
+        if "user_id" in cols:
+            continue  # 已迁移
+        await _rebuild_with_user_id(table, key_col, [r["name"] for r in info])
+
+    # 3) 仅带 UNIQUE 约束的表（sessions.thread_id）：唯一性改为 (user_id, col)
+    for table, col in _UNIQUE_COLS.items():
+        cur = await _db.execute(f"PRAGMA index_list({table})")
+        idx_rows = await cur.fetchall()
+        # 找到该列上的唯一索引名
+        unique_names: list[str] = []
+        for r in idx_rows:
+            if not r["unique"]:
+                continue
+            iinfo = await (await _db.execute(f"PRAGMA index_info({r['name']})")).fetchall()
+            if [x["name"] for x in iinfo] == [col]:
+                unique_names.append(str(r["name"]))
+        cur = await _db.execute(f"PRAGMA table_info({table})")
+        info = await cur.fetchall()
+        cols = {row["name"] for row in info}
+        if not info or ("user_id" in cols and not unique_names):
+            continue
+        await _rebuild_unique_as_composite(table, col, [r["name"] for r in info])
+        for name in unique_names:
+            try:
+                await _db.execute(f"DROP INDEX IF EXISTS {name}")
+            except Exception:  # noqa: BLE001 — 自增唯一索引不可单独删除，重建表时已去掉
+                pass
+        await _db.execute(
+            f"CREATE UNIQUE INDEX IF NOT EXISTS idx_{table}_user_{col}"
+            f" ON {table}(user_id, {col})"
+        )
+
+    await _db.commit()
+
+
+async def _rebuild_unique_as_composite(
+    table: str, col: str, columns: list[str]
+) -> None:
+    """重建表：去掉列级 UNIQUE，保留数据（唯一性由调用方补的复合唯一索引保证）。"""
+    assert _db is not None
+    tmp = f"{table}__uq_migrate"
+    cur = await _db.execute(f"PRAGMA table_info({table})")
+    info = await cur.fetchall()
+    defs: list[str] = ["user_id INTEGER NOT NULL DEFAULT 0"]
+    for r in info:
+        name, decl = r["name"], str(r["type"] or "")
+        if name == "user_id":
+            continue
+        if r["notnull"]:
+            decl += " NOT NULL"
+        if r["dflt_value"] is not None:
+            decl += f" DEFAULT {r['dflt_value']}"
+        if r["pk"]:
+            decl += " PRIMARY KEY"
+        defs.append(f"{name} {decl}".strip())
+    await _db.execute(f"CREATE TABLE {tmp} (\n    {',\n    '.join(defs)}\n)")
+    collist = ", ".join(c for c in columns if c != "user_id")
+    await _db.execute(
+        f"INSERT INTO {tmp} (user_id, {collist}) SELECT 0, {collist} FROM {table}"
+    )
+    await _db.execute(f"DROP TABLE {table}")
+    await _db.execute(f"ALTER TABLE {tmp} RENAME TO {table}")
+
+
+async def _rebuild_with_user_id(table: str, key_col: str, columns: list[str]) -> None:
+    """把单主键表重建为 (user_id, 原主键) 复合主键，保留全部数据。
+
+    用 PRAGMA 拿到的列信息重建，而不是解析原 DDL 文本：
+    后者要处理注释、换行、约束顺序，容易在真实 schema 上解析错。
+    """
+    assert _db is not None
+    tmp = f"{table}__mt_migrate"
+    cur = await _db.execute(f"PRAGMA table_info({table})")
+    info = await cur.fetchall()
+
+    defs: list[str] = []
+    for r in info:
+        name, decl = r["name"], str(r["type"] or "")
+        if r["notnull"]:
+            decl += " NOT NULL"
+        if r["dflt_value"] is not None:
+            decl += f" DEFAULT {r['dflt_value']}"
+        if name != key_col and r["pk"]:
+            # 非主键列上的单列主键（理论上没有），保留其唯一性
+            decl += " PRIMARY KEY"
+        defs.append(f"{name} {decl}".strip())
+    col_defs = ",\n    ".join(defs)
+    await _db.execute(
+        f"CREATE TABLE {tmp} (\n    user_id INTEGER NOT NULL DEFAULT 0,\n"
+        f"    {col_defs},\n    PRIMARY KEY (user_id, {key_col})\n)"
+    )
+    collist = ", ".join(columns)
+    await _db.execute(
+        f"INSERT INTO {tmp} (user_id, {collist}) SELECT 0, {collist} FROM {table}"
+    )
+    await _db.execute(f"DROP TABLE {table}")
+    await _db.execute(f"ALTER TABLE {tmp} RENAME TO {table}")
+    await _db.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{table}_user ON {table}(user_id)"
+    )
 
 
 async def close_db() -> None:
@@ -269,22 +443,32 @@ async def _count(table: str) -> int:
 
 async def _seed_all() -> None:
     assert _db is not None
+    # 示例数据属于默认租户（0）：显式写 user_id，避免多租户列 NOT NULL 失败，
+    # 也避免示例数据"漏"到某个登录用户的空间里。
     await _db.executemany(
-        "INSERT INTO positions(symbol,name,kind,industry,shares,cost,last,buy_date,fee)"
-        " VALUES(:symbol,:name,:kind,:industry,:shares,:cost,:last,:buy_date,:fee)",
-        [{**p, "buy_date": None, "fee": 0.0} for p in SEED_POSITIONS],
+        "INSERT INTO positions(user_id,symbol,name,kind,industry,shares,cost,last,buy_date,fee)"
+        " VALUES(:user_id,:symbol,:name,:kind,:industry,:shares,:cost,:last,:buy_date,:fee)",
+        [{**p, "buy_date": None, "fee": 0.0, "user_id": 0} for p in SEED_POSITIONS],
     )
     await _db.executemany(
-        "INSERT INTO transactions(date,item,category,amount) VALUES(?,?,?,?)",
-        [(_seed_date(d), item, cat, amt) for d, item, cat, amt in SEED_TRANSACTIONS],
+        "INSERT INTO transactions(user_id,date,item,category,amount) VALUES(?,?,?,?,?)",
+        [
+            (0, _seed_date(d), item, cat, amt)
+            for d, item, cat, amt in SEED_TRANSACTIONS
+        ],
     )
     await _db.executemany(
-        "INSERT INTO subscriptions(name,monthly,note,due_day) VALUES(:name,:monthly,:note,:due_day)",
-        [{**s, "due_day": s.get("due_day", "")} for s in SEED_SUBSCRIPTIONS],
+        "INSERT INTO subscriptions(user_id,name,monthly,note,due_day)"
+        " VALUES(:user_id,:name,:monthly,:note,:due_day)",
+        [
+            {**s, "due_day": s.get("due_day", ""), "user_id": 0}
+            for s in SEED_SUBSCRIPTIONS
+        ],
     )
     await _db.executemany(
-        "INSERT INTO debts(name,monthly,balance,rate,due_day) VALUES(:name,:monthly,:balance,:rate,:due_day)",
-        [{**d, "due_day": d.get("due_day", "")} for d in SEED_DEBTS],
+        "INSERT INTO debts(user_id,name,monthly,balance,rate,due_day)"
+        " VALUES(:user_id,:name,:monthly,:balance,:rate,:due_day)",
+        [{**d, "due_day": d.get("due_day", ""), "user_id": 0} for d in SEED_DEBTS],
     )
     await _db.executemany(
         "INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)",
@@ -316,15 +500,20 @@ async def _migrate_sessions_from_runs() -> None:
     同时自愈清理历史版本已误建的系统线程会话行。
     """
     conn = await _conn()
+    # 启动期维护：跨租户清理系统归档线程（cron / skill:*）的会话行。
+    # 这些线程本就不属于任何用户的会话列表，清理是幂等的全局操作。
     await conn.execute(
-        "DELETE FROM sessions WHERE thread_id='cron' OR thread_id LIKE 'skill:%'"
+        "DELETE FROM sessions WHERE thread_id='cron' OR thread_id LIKE 'skill:%'"  # tenant: allow
     )
+    # 按租户各建一份：同一 thread_id 可能属于不同用户，不能混用
     rows = await (
         await conn.execute(
-            "SELECT r.thread_id, r.question FROM runs r"
-            " WHERE r.id = (SELECT MIN(id) FROM runs WHERE thread_id = r.thread_id)"
+            "SELECT r.user_id, r.thread_id, r.question FROM runs r"
+            " WHERE r.id = (SELECT MIN(id) FROM runs x"
+            "               WHERE x.thread_id = r.thread_id AND x.user_id = r.user_id)"
             "   AND r.thread_id <> 'cron' AND r.thread_id NOT LIKE 'skill:%'"
-            "   AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.thread_id = r.thread_id)"
+            "   AND NOT EXISTS (SELECT 1 FROM sessions s"
+            "                   WHERE s.thread_id = r.thread_id AND s.user_id = r.user_id)"
         )
     ).fetchall()
     if not rows:
@@ -333,9 +522,9 @@ async def _migrate_sessions_from_runs() -> None:
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     for r in rows:
         await conn.execute(
-            "INSERT OR IGNORE INTO sessions(thread_id,title,created_at,updated_at)"
-            " VALUES(?,?,?,?)",
-            (r["thread_id"], str(r["question"])[:40] or "新会话", now, now),
+            "INSERT OR IGNORE INTO sessions(user_id,thread_id,title,created_at,updated_at)"
+            " VALUES(?,?,?,?,?)",
+            (r["user_id"], r["thread_id"], str(r["question"])[:40] or "新会话", now, now),
         )
     await conn.commit()  # M1.3：读池时代所有写路径必须真实提交，否则读池不可见
 
@@ -438,31 +627,52 @@ async def execute(sql: str, params: tuple = ()) -> None:
 
 
 async def list_positions() -> list[dict[str, Any]]:
-    return await fetch_all("SELECT * FROM positions ORDER BY symbol")
+    # 租户过滤：只返回当前用户的持仓（默认租户 0 = 未启用登录的本机用户）
+    from .tenant import current_user_id
+
+    return await fetch_all(
+        "SELECT * FROM positions WHERE user_id=? ORDER BY symbol",
+        (current_user_id(),),
+    )
 
 
 async def list_transactions(member_id: int | None = None) -> list[dict[str, Any]]:
     """列出交易流水。
 
-    - member_id=None：返回所有流水 + 无 owner 的流水（向后兼容单用户模式）
+    - member_id=None：返回当前租户的全部流水
     - member_id=0 or specific id：返回 shared=1 的流水 + 自己拥有的流水
     """
+    from .tenant import current_user_id
+
+    uid = current_user_id()
     if member_id is None:
-        return await fetch_all("SELECT * FROM transactions ORDER BY date DESC, id DESC")
+        return await fetch_all(
+            "SELECT * FROM transactions WHERE user_id=? ORDER BY date DESC, id DESC",
+            (uid,),
+        )
     # 有 member_id：共享流水 + 自己的流水（含私有）
     return await fetch_all(
-        "SELECT * FROM transactions WHERE is_shared=1 OR owner_id=? "
+        "SELECT * FROM transactions WHERE user_id=? AND (is_shared=1 OR owner_id=?) "
         "ORDER BY date DESC, id DESC",
-        (member_id,),
+        (uid, member_id),
     )
 
 
 async def list_subscriptions() -> list[dict[str, Any]]:
-    return await fetch_all("SELECT * FROM subscriptions ORDER BY name")
+    from .tenant import current_user_id
+
+    return await fetch_all(
+        "SELECT * FROM subscriptions WHERE user_id=? ORDER BY name",
+        (current_user_id(),),
+    )
 
 
 async def list_debts() -> list[dict[str, Any]]:
-    return await fetch_all("SELECT * FROM debts ORDER BY name")
+    from .tenant import current_user_id
+
+    return await fetch_all(
+        "SELECT * FROM debts WHERE user_id=? ORDER BY name", (current_user_id(),)
+    )
 
 
 async def get_settings() -> dict[str, str]:

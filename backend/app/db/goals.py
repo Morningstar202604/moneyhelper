@@ -16,7 +16,13 @@ from ._core import (
 
 
 async def list_goals() -> list[dict[str, Any]]:
-    return await fetch_all("SELECT * FROM goals ORDER BY created_at DESC, name")
+    """当前租户的目标列表。"""
+    from .tenant import current_user_id
+
+    return await fetch_all(
+        "SELECT * FROM goals WHERE user_id=? ORDER BY created_at DESC, name",
+        (current_user_id(),),
+    )
 
 
 async def add_goal(g: dict[str, Any]) -> dict[str, Any]:
@@ -35,12 +41,15 @@ async def add_goal(g: dict[str, Any]) -> dict[str, Any]:
     except (TypeError, ValueError):
         saved = 0.0
     deadline = str(g.get("deadline") or "").strip()[:7]
+    from .tenant import current_user_id
+
     conn = await _conn()
     await conn.execute(
-        "INSERT INTO goals(name,target,saved,deadline,created_at)"
-        " VALUES(?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET"
+        "INSERT INTO goals(user_id,name,target,saved,deadline,created_at)"
+        " VALUES(?,?,?,?,?,?) ON CONFLICT(user_id,name) DO UPDATE SET"
         " target=excluded.target, saved=excluded.saved, deadline=excluded.deadline",
         (
+            current_user_id(),
             name,
             target,
             saved,
@@ -84,9 +93,12 @@ async def update_goal(name: str, patch: dict[str, Any]) -> dict[str, Any]:
         params.append(v)
     if not fields:
         raise ValueError("没有可更新的字段")
+    from .tenant import current_user_id
+
     conn = await _conn()
     cur = await conn.execute(
-        f"UPDATE goals SET {', '.join(fields)} WHERE name=?", [*params, name]
+        f"UPDATE goals SET {', '.join(fields)} WHERE user_id=? AND name=?",
+        [*params, current_user_id(), name],
     )
     await _mark_user_data(conn)
     await conn.commit()
@@ -96,8 +108,12 @@ async def update_goal(name: str, patch: dict[str, Any]) -> dict[str, Any]:
 
 
 async def delete_goal(name: str) -> dict[str, Any]:
+    from .tenant import current_user_id
+
     conn = await _conn()
-    cur = await conn.execute("DELETE FROM goals WHERE name=?", (name,))
+    cur = await conn.execute(
+        "DELETE FROM goals WHERE user_id=? AND name=?", (current_user_id(), name)
+    )
     await _mark_user_data(conn)
     await conn.commit()
     return {"ok": True, "deleted": cur.rowcount}

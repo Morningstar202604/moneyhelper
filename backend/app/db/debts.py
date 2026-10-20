@@ -22,16 +22,22 @@ async def add_debt(d: dict[str, Any]) -> dict[str, Any]:
     }
     if not clean["name"]:
         raise ValueError("名称不能为空")
+    from .tenant import current_user_id
+
+    uid = current_user_id()
     # 撤销快照：upsert 前的状态（已存在=旧行，新增='{}'）
     existing = await (
-        await conn.execute("SELECT * FROM debts WHERE name=?", (clean["name"],))
+        await conn.execute(
+            "SELECT * FROM debts WHERE user_id=? AND name=?", (uid, clean["name"])
+        )
     ).fetchone()
     await _record_snapshot("debt", clean["name"], _row_to_json(existing))
     await conn.execute(
-        "INSERT INTO debts(name,monthly,balance,rate,due_day) VALUES(:name,:monthly,:balance,:rate,:due_day)"
-        " ON CONFLICT(name) DO UPDATE SET monthly=excluded.monthly,"
+        "INSERT INTO debts(user_id,name,monthly,balance,rate,due_day)"
+        " VALUES(:user_id,:name,:monthly,:balance,:rate,:due_day)"
+        " ON CONFLICT(user_id,name) DO UPDATE SET monthly=excluded.monthly,"
         " balance=excluded.balance, rate=excluded.rate, due_day=excluded.due_day",
-        clean,
+        {**clean, "user_id": uid},
     )
     await _mark_user_data(conn)
     await conn.commit()
@@ -39,15 +45,18 @@ async def add_debt(d: dict[str, Any]) -> dict[str, Any]:
 
 
 async def delete_debt(name: str) -> dict[str, Any]:
+    from .tenant import current_user_id
+
     conn = await _conn()
+    uid = current_user_id()
     # 撤销快照：记录删除前的完整旧行，撤回时 INSERT OR REPLACE 恢复
     old = await (
-        await conn.execute("SELECT * FROM debts WHERE name=?", (name,))
+        await conn.execute("SELECT * FROM debts WHERE user_id=? AND name=?", (uid, name))
     ).fetchone()
     if old is None:
         return {"ok": False, "deleted": 0}
     await _record_snapshot("debt", name, _row_to_json(old))
-    cur = await conn.execute("DELETE FROM debts WHERE name=?", (name,))
+    cur = await conn.execute("DELETE FROM debts WHERE user_id=? AND name=?", (uid, name))
     await _mark_user_data(conn)
     await conn.commit()
     return {"ok": True, "deleted": cur.rowcount}
@@ -65,16 +74,22 @@ async def add_subscription(s: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("名称不能为空")
     if clean["monthly"] <= 0:
         raise ValueError("月支出需大于 0")
+    from .tenant import current_user_id
+
+    uid = current_user_id()
     # 撤销快照：upsert 前的状态（已存在=旧行，新增='{}'）
     existing = await (
-        await conn.execute("SELECT * FROM subscriptions WHERE name=?", (clean["name"],))
+        await conn.execute(
+            "SELECT * FROM subscriptions WHERE user_id=? AND name=?", (uid, clean["name"])
+        )
     ).fetchone()
     await _record_snapshot("subscription", clean["name"], _row_to_json(existing))
     await conn.execute(
-        "INSERT INTO subscriptions(name,monthly,note,due_day) VALUES(:name,:monthly,:note,:due_day)"
-        " ON CONFLICT(name) DO UPDATE SET monthly=excluded.monthly,"
+        "INSERT INTO subscriptions(user_id,name,monthly,note,due_day)"
+        " VALUES(:user_id,:name,:monthly,:note,:due_day)"
+        " ON CONFLICT(user_id,name) DO UPDATE SET monthly=excluded.monthly,"
         " note=excluded.note, due_day=excluded.due_day",
-        clean,
+        {**clean, "user_id": uid},
     )
     await _mark_user_data(conn)
     await conn.commit()
@@ -82,15 +97,22 @@ async def add_subscription(s: dict[str, Any]) -> dict[str, Any]:
 
 
 async def delete_subscription(name: str) -> dict[str, Any]:
+    from .tenant import current_user_id
+
     conn = await _conn()
+    uid = current_user_id()
     # 撤销快照：记录删除前的完整旧行，撤回时 INSERT OR REPLACE 恢复
     old = await (
-        await conn.execute("SELECT * FROM subscriptions WHERE name=?", (name,))
+        await conn.execute(
+            "SELECT * FROM subscriptions WHERE user_id=? AND name=?", (uid, name)
+        )
     ).fetchone()
     if old is None:
         return {"ok": False, "deleted": 0}
     await _record_snapshot("subscription", name, _row_to_json(old))
-    cur = await conn.execute("DELETE FROM subscriptions WHERE name=?", (name,))
+    cur = await conn.execute(
+        "DELETE FROM subscriptions WHERE user_id=? AND name=?", (uid, name)
+    )
     await _mark_user_data(conn)
     await conn.commit()
     return {"ok": True, "deleted": cur.rowcount}

@@ -13,6 +13,7 @@ from ._core import (
     fetch_all,
     uuid_hex,
 )
+from .tenant import current_user_id
 
 # --------------------------------------------------------------------------
 # 运行历史
@@ -35,9 +36,10 @@ async def save_run(
     conn = await _conn()
     created = datetime.now().astimezone().isoformat(timespec="seconds")
     cur = await conn.execute(
-        "INSERT INTO runs(thread_id,question,answer,level,flags_json,created_at,route,llm,route_reason,tools,actions)"
-        " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO runs(user_id,thread_id,question,answer,level,flags_json,created_at,route,llm,route_reason,tools,actions)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
         (
+            current_user_id(),
             thread_id or "default",
             question,
             answer,
@@ -70,22 +72,28 @@ async def delete_last_run(
     conn = await _conn()
     if question:
         cur = await conn.execute(
-            "SELECT id FROM runs WHERE thread_id=? AND question=?"
+            "SELECT id FROM runs WHERE user_id=? AND thread_id=? AND question=?"
             " ORDER BY id DESC LIMIT 1",
-            (thread_id, question),
+            (current_user_id(), thread_id, question),
         )
         row = await cur.fetchone()
         if row:
-            await conn.execute("DELETE FROM runs WHERE id=?", (row["id"],))
+            await conn.execute(
+                "DELETE FROM runs WHERE user_id=? AND id=?",
+                (current_user_id(), row["id"]),
+            )
             await conn.commit()
             return {"ok": True, "deleted": 1}
         return {"ok": True, "deleted": 0}
     cur = await conn.execute(
-        "SELECT id FROM runs WHERE thread_id=? ORDER BY id DESC LIMIT 1", (thread_id,)
+        "SELECT id FROM runs WHERE user_id=? AND thread_id=? ORDER BY id DESC LIMIT 1",
+        (current_user_id(), thread_id),
     )
     row = await cur.fetchone()
     if row:
-        await conn.execute("DELETE FROM runs WHERE id=?", (row["id"],))
+        await conn.execute(
+            "DELETE FROM runs WHERE user_id=? AND id=?", (current_user_id(), row["id"])
+        )
         await conn.commit()
     return {"ok": True}
 
@@ -96,12 +104,14 @@ async def list_runs(
     clamped = _clamp_limit(limit)
     if thread_id:
         rows = await fetch_all(
-            "SELECT * FROM runs WHERE thread_id=? ORDER BY id DESC LIMIT ?",
-            (thread_id, clamped),
+            "SELECT * FROM runs WHERE user_id=? AND thread_id=?"
+            " ORDER BY id DESC LIMIT ?",
+            (current_user_id(), thread_id, clamped),
         )
     else:
         rows = await fetch_all(
-            "SELECT * FROM runs ORDER BY id DESC LIMIT ?", (clamped,)
+            "SELECT * FROM runs WHERE user_id=? ORDER BY id DESC LIMIT ?",
+            (current_user_id(), clamped),
         )
     return [_hydrate_run(r) for r in rows]
 
@@ -114,9 +124,9 @@ async def list_scheduled_runs(limit: int = 30) -> list[dict[str, Any]]:
     """
     clamped = _clamp_limit(limit)
     rows = await fetch_all(
-        "SELECT * FROM runs WHERE thread_id='cron' OR thread_id LIKE 'skill:%'"
+        "SELECT * FROM runs WHERE user_id=? AND (thread_id='cron' OR thread_id LIKE 'skill:%')"
         " ORDER BY id DESC LIMIT ?",
-        (clamped,),
+        (current_user_id(), clamped),
     )
     return [_hydrate_run(r) for r in rows]
 
@@ -130,9 +140,10 @@ async def claim_pending_nl(thread_id: str) -> bool:
     conn = await _conn()
     cur = await conn.execute(
         "UPDATE runs SET route='nl_pending_consumed' "
-        "WHERE id = (SELECT id FROM runs WHERE thread_id=? ORDER BY id DESC LIMIT 1) "
+        "WHERE id = (SELECT id FROM runs WHERE user_id=? AND thread_id=?"
+        "            ORDER BY id DESC LIMIT 1) "
         "AND route='nl_pending'",
-        (thread_id,),
+        (current_user_id(), thread_id),
     )
     await conn.commit()
     return cur.rowcount == 1
@@ -160,10 +171,11 @@ async def search_runs(q: str, limit: int = 50) -> list[dict[str, Any]]:
     kw = f"%{esc}%"
     rows = await fetch_all(
         "SELECT r.*, s.title AS session_title"
-        " FROM runs r LEFT JOIN sessions s ON s.thread_id = r.thread_id"
-        " WHERE r.question LIKE ? ESCAPE '\\' OR r.answer LIKE ? ESCAPE '\\'"
+        " FROM runs r LEFT JOIN sessions s"
+        "   ON s.thread_id = r.thread_id AND s.user_id = r.user_id"
+        " WHERE r.user_id=? AND (r.question LIKE ? ESCAPE '\\' OR r.answer LIKE ? ESCAPE '\\')"
         " ORDER BY r.id DESC LIMIT ?",
-        (kw, kw, _clamp_limit(limit)),
+        (current_user_id(), kw, kw, _clamp_limit(limit)),
     )
     return [_hydrate_run(r) for r in rows]
 
@@ -171,7 +183,9 @@ async def search_runs(q: str, limit: int = 50) -> list[dict[str, Any]]:
 async def delete_run(run_id: int) -> dict[str, Any]:
     """删除单条历史问答记录。"""
     conn = await _conn()
-    cur = await conn.execute("DELETE FROM runs WHERE id=?", (int(run_id),))
+    cur = await conn.execute(
+        "DELETE FROM runs WHERE user_id=? AND id=?", (current_user_id(), int(run_id))
+    )
     await conn.commit()
     return {"ok": True, "deleted": cur.rowcount or 0}
 
@@ -179,9 +193,10 @@ async def delete_run(run_id: int) -> dict[str, Any]:
 async def clear_history() -> dict[str, Any]:
     """清空全部历史：删除所有会话、问答记录与会话摘要。"""
     conn = await _conn()
-    await conn.execute("DELETE FROM runs")
-    await conn.execute("DELETE FROM sessions")
-    await conn.execute("DELETE FROM conversation_summary")
+    uid = current_user_id()
+    await conn.execute("DELETE FROM runs WHERE user_id=?", (uid,))
+    await conn.execute("DELETE FROM sessions WHERE user_id=?", (uid,))
+    await conn.execute("DELETE FROM conversation_summary WHERE user_id=?", (uid,))
     await conn.commit()
     return {"ok": True, "cleared": True}
 
@@ -206,11 +221,12 @@ async def upsert_session(thread_id: str, title: str) -> dict[str, Any]:
     conn = await _conn()
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     await conn.execute(
-        "INSERT INTO sessions(thread_id,title,created_at,updated_at) VALUES(?,?,?,?)"
-        " ON CONFLICT(thread_id) DO UPDATE SET"
+        "INSERT INTO sessions(user_id,thread_id,title,created_at,updated_at)"
+        " VALUES(?,?,?,?,?)"
+        " ON CONFLICT(user_id,thread_id) DO UPDATE SET"
         " title=CASE WHEN sessions.title='新会话' THEN excluded.title ELSE sessions.title END,"
         " updated_at=excluded.updated_at",
-        (thread_id, title[:40] or "新会话", now, now),
+        (current_user_id(), thread_id, title[:40] or "新会话", now, now),
     )
     await conn.commit()
     return {"ok": True, "thread_id": thread_id}
@@ -223,8 +239,9 @@ async def create_session(
     tid = thread_id or uuid_hex()
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     cur = await conn.execute(
-        "INSERT INTO sessions(thread_id,title,created_at,updated_at) VALUES(?,?,?,?)",
-        (tid, title[:40] or "新会话", now, now),
+        "INSERT INTO sessions(user_id,thread_id,title,created_at,updated_at)"
+        " VALUES(?,?,?,?,?)",
+        (current_user_id(), tid, title[:40] or "新会话", now, now),
     )
     await conn.commit()
     return {"ok": True, "id": cur.lastrowid, "thread_id": tid}
@@ -235,8 +252,9 @@ async def list_sessions() -> list[dict[str, Any]]:
     # 误建，界面也不会把它们当会话展示；启动迁移会做彻底清理。
     rows = await fetch_all(
         "SELECT id, thread_id, title, created_at, updated_at"
-        " FROM sessions WHERE thread_id <> 'cron' AND thread_id NOT LIKE 'skill:%'"
-        " ORDER BY updated_at DESC"
+        " FROM sessions WHERE user_id=? AND thread_id <> 'cron' AND thread_id NOT LIKE 'skill:%'"
+        " ORDER BY updated_at DESC",
+        (current_user_id(),),
     )
     return rows
 
@@ -244,10 +262,11 @@ async def list_sessions() -> list[dict[str, Any]]:
 async def rename_session(session_id: int, title: str) -> dict[str, Any]:
     conn = await _conn()
     await conn.execute(
-        "UPDATE sessions SET title=?, updated_at=? WHERE id=?",
+        "UPDATE sessions SET title=?, updated_at=? WHERE user_id=? AND id=?",
         (
             str(title).strip()[:40] or "新会话",
             datetime.now().astimezone().isoformat(timespec="seconds"),
+            current_user_id(),
             int(session_id),
         ),
     )
@@ -260,14 +279,21 @@ async def delete_session(session_id: int) -> dict[str, Any]:
     conn = await _conn()
     row = await (
         await conn.execute(
-            "SELECT thread_id FROM sessions WHERE id=?", (int(session_id),)
+            "SELECT thread_id FROM sessions WHERE user_id=? AND id=?",
+            (current_user_id(), int(session_id)),
         )
     ).fetchone()
-    await conn.execute("DELETE FROM sessions WHERE id=?", (int(session_id),))
+    await conn.execute(
+        "DELETE FROM sessions WHERE user_id=? AND id=?", (current_user_id(), int(session_id))
+    )
     if row:
-        await conn.execute("DELETE FROM runs WHERE thread_id=?", (row["thread_id"],))
         await conn.execute(
-            "DELETE FROM conversation_summary WHERE thread_id=?", (row["thread_id"],)
+            "DELETE FROM runs WHERE user_id=? AND thread_id=?",
+            (current_user_id(), row["thread_id"]),
+        )
+        await conn.execute(
+            "DELETE FROM conversation_summary WHERE user_id=? AND thread_id=?",
+            (current_user_id(), row["thread_id"]),
         )
     await conn.commit()
     return {"ok": True, "deleted": True}
@@ -278,7 +304,8 @@ async def session_thread_id(session_id: int) -> str | None:
     conn = await _conn()
     row = await (
         await conn.execute(
-            "SELECT thread_id FROM sessions WHERE id=?", (int(session_id),)
+            "SELECT thread_id FROM sessions WHERE user_id=? AND id=?",
+            (current_user_id(), int(session_id)),
         )
     ).fetchone()
     return row["thread_id"] if row else None
@@ -290,7 +317,8 @@ async def move_runs(from_tid: str, to_tid: str) -> int:
         return 0
     conn = await _conn()
     cur = await conn.execute(
-        "UPDATE runs SET thread_id=? WHERE thread_id=?", (to_tid, from_tid)
+        "UPDATE runs SET thread_id=? WHERE user_id=? AND thread_id=?",
+        (to_tid, current_user_id(), from_tid),
     )
     await conn.commit()
     return cur.rowcount or 0
@@ -299,8 +327,9 @@ async def move_runs(from_tid: str, to_tid: str) -> int:
 async def get_conversation_summary(thread_id: str) -> dict[str, Any] | None:
     """取会话压缩摘要；无则返回 None。"""
     rows = await fetch_all(
-        "SELECT summary, source, covered_to, updated_at FROM conversation_summary WHERE thread_id=?",
-        (thread_id,),
+        "SELECT summary, source, covered_to, updated_at FROM conversation_summary"
+        " WHERE user_id=? AND thread_id=?",
+        (current_user_id(), thread_id),
     )
     if not rows:
         return None
@@ -314,11 +343,18 @@ async def set_conversation_summary(
     conn = await _conn()
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     await conn.execute(
-        "INSERT INTO conversation_summary(thread_id,summary,source,covered_to,updated_at)"
-        " VALUES(?,?,?,?,?) ON CONFLICT(thread_id) DO UPDATE SET"
+        "INSERT INTO conversation_summary(user_id,thread_id,summary,source,covered_to,updated_at)"
+        " VALUES(?,?,?,?,?,?) ON CONFLICT(user_id,thread_id) DO UPDATE SET"
         " summary=excluded.summary, source=excluded.source,"
         " covered_to=excluded.covered_to, updated_at=excluded.updated_at",
-        (thread_id, summary[:4000], source[:16], int(covered_to or 0), now),
+        (
+            current_user_id(),
+            thread_id,
+            summary[:4000],
+            source[:16],
+            int(covered_to or 0),
+            now,
+        ),
     )
     await conn.commit()
     return {"ok": True}
@@ -328,7 +364,8 @@ async def clear_conversation_summary(thread_id: str) -> dict[str, Any]:
     """删除某会话摘要（会话重置/清理时用）。"""
     conn = await _conn()
     await conn.execute(
-        "DELETE FROM conversation_summary WHERE thread_id=?", (thread_id,)
+        "DELETE FROM conversation_summary WHERE user_id=? AND thread_id=?",
+        (current_user_id(), thread_id),
     )
     await conn.commit()
     return {"ok": True}
@@ -349,9 +386,10 @@ async def create_pending_action(
     ).isoformat(timespec="seconds")
     conn = await _conn()
     await conn.execute(
-        "INSERT INTO pending_actions(token,tool_name,args,summary,lang,status,created_at,expires_at)"
-        " VALUES(?,?,?,?,?,'pending',?,?)",
+        "INSERT INTO pending_actions(user_id,token,tool_name,args,summary,lang,status,created_at,expires_at)"
+        " VALUES(?,?,?,?,?,?,'pending',?,?)",
         (
+            current_user_id(),
             token,
             tool_name,
             json.dumps(args, ensure_ascii=False),
@@ -375,8 +413,8 @@ async def create_pending_action(
 async def get_pending_action(token: str) -> dict[str, Any] | None:
     """按 token 取待确认动作；不存在/已消费/已取消/已过期一律返回 None（token 一次性）。"""
     rows = await fetch_all(
-        "SELECT * FROM pending_actions WHERE token=? AND status='pending'",
-        (token,),
+        "SELECT * FROM pending_actions WHERE user_id=? AND token=? AND status='pending'",
+        (current_user_id(), token),
     )
     if not rows:
         return None
@@ -385,8 +423,9 @@ async def get_pending_action(token: str) -> dict[str, Any] | None:
     if str(row["expires_at"] or "") < _now_iso():
         conn = await _conn()
         await conn.execute(
-            "UPDATE pending_actions SET status='expired' WHERE token=? AND status='pending'",
-            (token,),
+            "UPDATE pending_actions SET status='expired'"
+            " WHERE user_id=? AND token=? AND status='pending'",
+            (current_user_id(), token),
         )
         await conn.commit()
         return None
@@ -408,7 +447,8 @@ async def claim_pending_action(token: str) -> dict[str, Any] | None:
     只有 rowcount==1 的调用者拿到执行权，天然互斥（进程内锁 + 多进程都成立）。
     """
     rows = await fetch_all(
-        "SELECT * FROM pending_actions WHERE token=? AND status='pending'", (token,)
+        "SELECT * FROM pending_actions WHERE user_id=? AND token=? AND status='pending'",
+        (current_user_id(), token),
     )
     if not rows:
         return None
@@ -418,8 +458,9 @@ async def claim_pending_action(token: str) -> dict[str, Any] | None:
         return None
     conn = await _conn()
     cur = await conn.execute(
-        "UPDATE pending_actions SET status='consumed' WHERE token=? AND status='pending'",
-        (token,),
+        "UPDATE pending_actions SET status='consumed'"
+        " WHERE user_id=? AND token=? AND status='pending'",
+        (current_user_id(), token),
     )
     await conn.commit()
     if cur.rowcount != 1:
@@ -437,8 +478,8 @@ async def claim_pending_action(token: str) -> dict[str, Any] | None:
 async def mark_pending_action(token: str, status: str) -> dict[str, Any]:
     conn = await _conn()
     cur = await conn.execute(
-        "UPDATE pending_actions SET status=? WHERE token=? AND status='pending'",
-        (status, token),
+        "UPDATE pending_actions SET status=? WHERE user_id=? AND token=? AND status='pending'",
+        (status, current_user_id(), token),
     )
     await conn.commit()
     return {"ok": True, "changed": cur.rowcount}

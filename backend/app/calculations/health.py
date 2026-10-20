@@ -253,3 +253,33 @@ def _to_grade(score: int) -> str:
         return "D"
     else:
         return "F"
+
+
+# ---------------------------------------------------------------------------
+# 与 analysis.health_check 的桥接
+# ---------------------------------------------------------------------------
+
+# 体检五维各 20 分。status 是 analysis 侧的定性判断（good/warn/bad），
+# 这里给出对应的分值，保证「体检页 / 呈批件 / AI 回答」用的是同一套分数。
+_STATUS_SCORE = {"good": 20, "warn": 10, "bad": 0}
+
+
+def health_score_from_dimensions(dimensions: list[dict[str, Any]]) -> tuple[int, str]:
+    """把 analysis.health_check 产出的五维定性结论折算成 (总分, 等级)。
+
+    维度上限统一 20 分（五项合计 100）。缺失的维度不参与计算，
+    按已有维度占比折算，避免"少算一项就自动变成满分/零分"。
+    """
+    if not dimensions:
+        return 0, "-"
+    earned = 0
+    possible = 0
+    for dim in dimensions:
+        status = str(dim.get("status") or "").lower()
+        weight = int(dim.get("max") or 20)
+        possible += weight
+        earned += _STATUS_SCORE.get(status, weight // 2)
+    if possible <= 0:
+        return 0, "-"
+    score = round(earned / possible * 100)
+    return min(100, max(0, score)), _to_grade(score)

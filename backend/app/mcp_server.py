@@ -244,7 +244,21 @@ async def sell_position(symbol: str, shares: float = 0, ctx: Context | None = No
         price = float((q or {}).get("price") or 0)
     except Exception:  # noqa: BLE001 — 行情不可用不影响审批判定的降级
         price = 0.0
-    amount = float(shares or 0) * price
+
+    # 清仓（shares=0）此前直接算成 0 元，永远不会触发审批——而清仓恰恰是
+    # 金额最大、最不可逆的操作。这里用持仓市值兜底：现价缺失时退回成本价。
+    effective_shares = float(shares or 0)
+    if not effective_shares:
+        try:
+            rows = await db.list_positions()
+        except Exception:  # noqa: BLE001
+            rows = []
+        pos = next((p for p in rows if p.get("symbol") == symbol), None)
+        if pos:
+            effective_shares = float(pos.get("shares") or 0)
+            if price <= 0:
+                price = float(pos.get("last") or pos.get("cost") or 0)
+    amount = effective_shares * price
     summary = f"卖出 {symbol} {shares:g} 份" if shares else f"清仓 {symbol}"
     if not await _confirm_write(ctx, summary, amount):
         return "已取消：用户未确认这笔大额卖出，持仓未改动。"

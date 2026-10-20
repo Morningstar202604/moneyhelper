@@ -109,7 +109,34 @@ async def api_auth(request: Request, call_next):
             from .provenance import set_request_actor
 
             set_request_actor(actor)
+        # 租户隔离：JWT 用户决定这一请求读写哪份数据。无 JWT 时保持默认租户 0
+        # （本机单用户模式），共享口令模式下同样归 0——一个实例仍然是一个账本。
+        from .db.tenant import reset_current_user_id, set_current_user_id
+
+        token = set_current_user_id(_resolve_tenant(request))
+        try:
+            return await call_next(request)
+        finally:
+            reset_current_user_id(token)
     return await call_next(request)
+
+
+def _resolve_tenant(request: Request) -> int:
+    """从 Bearer JWT 解析租户（用户 id）；解析不出来归默认租户。"""
+    header = request.headers.get("authorization", "")
+    if not header.lower().startswith("bearer "):
+        from .db.tenant import LOCAL_USER_ID
+
+        return LOCAL_USER_ID
+    try:
+        from . import auth as auth_mod
+
+        payload = auth_mod._decode_jwt(header[7:].strip())
+        return int(payload.get("sub") or 0)
+    except Exception:  # noqa: BLE001 — 解析失败按默认租户处理（鉴权层已拦截非法口令）
+        from .db.tenant import LOCAL_USER_ID
+
+        return LOCAL_USER_ID
 
 
 def _resolve_actor(request: Request, api_token: str) -> str:

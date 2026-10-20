@@ -10,6 +10,7 @@ from ._core import (
     _mark_user_data,
     fetch_all,
 )
+from .tenant import current_user_id
 
 # --------------------------------------------------------------------------
 # 审计日志（P2 金融级治理）
@@ -29,9 +30,10 @@ async def add_audit_log(
     conn = await _conn()
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     await conn.execute(
-        "INSERT INTO audit_logs(ts,action,method,path,status,actor,detail,duration_ms)"
-        " VALUES(?,?,?,?,?,?,?,?)",
+        "INSERT INTO audit_logs(user_id,ts,action,method,path,status,actor,detail,duration_ms)"
+        " VALUES(?,?,?,?,?,?,?,?,?)",
         (
+            current_user_id(),
             now,
             str(action)[:20],
             str(method)[:8],
@@ -53,19 +55,22 @@ async def list_audit_logs(
     clamped = _clamp_limit(limit, default=200)
     if action:
         rows = await fetch_all(
-            "SELECT * FROM audit_logs WHERE action=? ORDER BY id DESC LIMIT ?",
-            (str(action)[:20], clamped),
+            "SELECT * FROM audit_logs WHERE user_id=? AND action=? ORDER BY id DESC LIMIT ?",
+            (current_user_id(), str(action)[:20], clamped),
         )
     else:
         rows = await fetch_all(
-            "SELECT * FROM audit_logs ORDER BY id DESC LIMIT ?", (clamped,)
+            "SELECT * FROM audit_logs WHERE user_id=? ORDER BY id DESC LIMIT ?",
+            (current_user_id(), clamped),
         )
     return rows
 
 
 async def clear_audit_logs() -> dict[str, Any]:
     conn = await _conn()
-    cur = await conn.execute("DELETE FROM audit_logs")
+    cur = await conn.execute(
+        "DELETE FROM audit_logs WHERE user_id=?", (current_user_id(),)
+    )
     await conn.commit()
     return {"ok": True, "deleted": cur.rowcount or 0}
 
@@ -77,8 +82,8 @@ async def clear_audit_logs() -> dict[str, Any]:
 
 async def list_attachments(limit: int = 50) -> list[dict[str, Any]]:
     rows = await fetch_all(
-        "SELECT id, filename, kind, size, created_at FROM attachments ORDER BY id DESC LIMIT ?",
-        (_clamp_limit(limit),),
+        "SELECT id, filename, kind, size, created_at FROM attachments WHERE user_id=? ORDER BY id DESC LIMIT ?",
+        (current_user_id(), _clamp_limit(limit)),
     )
     return rows
 
@@ -89,8 +94,9 @@ async def add_attachment(
     conn = await _conn()
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     cur = await conn.execute(
-        "INSERT INTO attachments(filename,kind,size,content,created_at) VALUES(?,?,?,?,?)",
+        "INSERT INTO attachments(user_id,filename,kind,size,content,created_at) VALUES(?,?,?,?,?,?)",
         (
+            current_user_id(),
             str(filename)[:200],
             str(kind)[:20] or "text",
             int(size or 0),
@@ -104,13 +110,19 @@ async def add_attachment(
 
 
 async def get_attachment(att_id: int) -> dict[str, Any] | None:
-    rows = await fetch_all("SELECT * FROM attachments WHERE id=?", (int(att_id),))
+    rows = await fetch_all(
+        "SELECT * FROM attachments WHERE user_id=? AND id=?",
+        (current_user_id(), int(att_id)),
+    )
     return rows[0] if rows else None
 
 
 async def delete_attachment(att_id: int) -> dict[str, Any]:
     conn = await _conn()
-    cur = await conn.execute("DELETE FROM attachments WHERE id=?", (int(att_id),))
+    cur = await conn.execute(
+        "DELETE FROM attachments WHERE user_id=? AND id=?",
+        (current_user_id(), int(att_id)),
+    )
     await _mark_user_data(conn)
     await conn.commit()
     return {"ok": True, "deleted": cur.rowcount or 0}

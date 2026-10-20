@@ -7,6 +7,9 @@ import pytest
 # 测试默认关闭限流，避免高频接口测例触发 429；限流本身由 test_rate_limit.py 显式测
 os.environ.setdefault("XIAOMAN_DISABLE_RATE_LIMIT", "1")
 os.environ.setdefault("VAULT_PASSPHRASE", "test-passphrase-for-unit-tests-12345")
+# 固定 JWT 密钥：否则 auth 模块每次导入生成随机 secret，
+# 同一测试里签发与校验可能跨模块实例而不一致（多租户 HTTP 测试会 401）。
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret-for-unit-tests-32bytes")
 
 # 在导入 app 前初始化 vault（test_api.py 使用 ASGITransport 不触发 lifespan → vault 需手动激活）
 from app import vault as _vault

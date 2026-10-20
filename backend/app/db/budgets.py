@@ -10,6 +10,7 @@ from ._core import (
     _conn,
     fetch_all,
 )
+from .tenant import current_user_id
 
 # --------------------------------------------------------------------------
 # 预算（budgets：month + category → amount；__total 为总预算）
@@ -17,9 +18,12 @@ from ._core import (
 
 
 async def list_budgets(month: str) -> list[dict[str, Any]]:
+    """当前租户在指定月份的预算。"""
+    from .tenant import current_user_id
+
     return await fetch_all(
-        "SELECT month, category, amount FROM budgets WHERE month=? ORDER BY category",
-        (month,),
+        "SELECT month, category, amount FROM budgets WHERE user_id=? AND month=? ORDER BY category",
+        (current_user_id(), month),
     )
 
 
@@ -85,7 +89,9 @@ async def total_cash() -> float:
     注意：这只是活期头寸，不含投资/股票/基金市值。
     """
     rows = await fetch_all(
-        "SELECT SUM(shares * last) AS cash FROM positions WHERE kind = '现金'"
+        "SELECT SUM(shares * last) AS cash FROM positions"
+        " WHERE user_id=? AND kind = '现金'",
+        (current_user_id(),),
     )
     return float((rows[0].get("cash") or 0) if rows else 0.0)
 
@@ -98,6 +104,8 @@ async def save_budgets(month: str, items: list[dict[str, Any]]) -> dict[str, Any
     """
     if not isinstance(month, str) or not re.fullmatch(r"\d{4}-\d{2}", month):
         raise ValueError(f"budget month 格式非法: {month!r}，应为 YYYY-MM")
+    from .tenant import current_user_id
+
     conn = await _conn()
     seen: dict[str, float] = {}
     for it in items:
@@ -107,11 +115,13 @@ async def save_budgets(month: str, items: list[dict[str, Any]]) -> dict[str, Any
             continue
         seen[cat[:40]] = amt
     try:
-        await conn.execute("DELETE FROM budgets WHERE month=?", (month,))
+        await conn.execute(
+            "DELETE FROM budgets WHERE user_id=? AND month=?", (current_user_id(), month)
+        )
         for cat, amt in seen.items():
             await conn.execute(
-                "INSERT INTO budgets(month,category,amount) VALUES(?,?,?)",
-                (month, cat, amt),
+                "INSERT INTO budgets(user_id,month,category,amount) VALUES(?,?,?,?)",
+                (current_user_id(), month, cat, amt),
             )
         await conn.commit()
     except Exception:  # aqg: top-level boundary — 事务失败统一回滚后原样抛出，不吞异常
@@ -124,7 +134,7 @@ async def month_expense_by_category(month: str) -> dict[str, float]:
     """当月支出按分类汇总（amount<0 视为支出，取绝对值）。"""
     rows = await fetch_all(
         "SELECT category, SUM(-amount) AS spent FROM transactions"
-        " WHERE date LIKE ? AND amount < 0 GROUP BY category",
-        (f"{month}%",),
+        " WHERE user_id=? AND date LIKE ? AND amount < 0 GROUP BY category",
+        (current_user_id(), f"{month}%"),
     )
     return {r["category"]: float(r["spent"] or 0) for r in rows}

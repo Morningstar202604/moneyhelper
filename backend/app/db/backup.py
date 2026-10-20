@@ -1,4 +1,5 @@
 """数据可移植域：全量导出/导入/月度趋势。"""
+
 from __future__ import annotations
 
 import json
@@ -20,6 +21,7 @@ from ._core import (  # noqa: F401
     list_transactions,
 )
 from .history import list_sessions
+from .tenant import current_user_id
 
 # --------------------------------------------------------------------------
 # 数据导出 / 月度趋势
@@ -28,7 +30,9 @@ from .history import list_sessions
 
 async def export_data() -> dict[str, Any]:
     """全量导出（备份）：持仓 / 流水 / 订阅 / 负债 / 预算 / 目标 / 长期记忆 / 设置 / 会话 / 问答。"""
-    runs = await fetch_all("SELECT * FROM runs ORDER BY id")
+    runs = await fetch_all(
+        "SELECT * FROM runs WHERE user_id=? ORDER BY id", (current_user_id(),)
+    )
     for r in runs:
         try:
             r["flags"] = json.loads(r.pop("flags_json") or "[]")
@@ -53,19 +57,40 @@ async def export_data() -> dict[str, Any]:
         "transactions": await list_transactions(),
         "subscriptions": await list_subscriptions(),
         "debts": await list_debts(),
-        "budgets": await fetch_all("SELECT * FROM budgets ORDER BY month, category"),
-        "goals": await fetch_all("SELECT * FROM goals ORDER BY name"),
-        "memory": await fetch_all("SELECT * FROM user_memory ORDER BY id"),
+        "budgets": await fetch_all(
+            "SELECT * FROM budgets WHERE user_id=? ORDER BY month, category",
+            (current_user_id(),),
+        ),
+        "goals": await fetch_all(
+            "SELECT * FROM goals WHERE user_id=? ORDER BY name", (current_user_id(),)
+        ),
+        "memory": await fetch_all(
+            "SELECT * FROM user_memory WHERE user_id=? ORDER BY id",
+            (current_user_id(),),
+        ),
         "settings": settings,
         "sessions": await list_sessions(),
         "runs": runs,
         # 家庭/协作数据：漏掉这些表会导致恢复后"成员消失、流水失去归属"
-        "members": await fetch_all("SELECT * FROM members ORDER BY id"),
-        "member_loans": await fetch_all("SELECT * FROM member_loans ORDER BY id"),
-        "watchlist": await fetch_all("SELECT * FROM watchlist ORDER BY symbol"),
+        "members": await fetch_all(
+            "SELECT * FROM members WHERE user_id=? ORDER BY id", (current_user_id(),)
+        ),
+        "member_loans": await fetch_all(
+            "SELECT * FROM member_loans WHERE user_id=? ORDER BY id",
+            (current_user_id(),),
+        ),
+        "watchlist": await fetch_all(
+            "SELECT * FROM watchlist WHERE user_id=? ORDER BY symbol",
+            (current_user_id(),),
+        ),
         # 审计与溯源链：备份要能支撑"恢复后仍可追责"
-        "provenance": await fetch_all("SELECT * FROM provenance_log ORDER BY id"),
-        "audit": await fetch_all("SELECT * FROM audit_logs ORDER BY id"),
+        "provenance": await fetch_all(
+            "SELECT * FROM provenance_log WHERE user_id=? ORDER BY id",
+            (current_user_id(),),
+        ),
+        "audit": await fetch_all(
+            "SELECT * FROM audit_logs WHERE user_id=? ORDER BY id", (current_user_id(),)
+        ),
     }
 
 
@@ -76,8 +101,8 @@ async def monthly_trend(months: int = 6) -> list[dict[str, Any]]:
         " SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) AS income,"
         " SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END) AS expense,"
         " SUM(amount) AS net"
-        " FROM transactions GROUP BY month ORDER BY month DESC LIMIT ?",
-        (int(months),),
+        " FROM transactions WHERE user_id=? GROUP BY month ORDER BY month DESC LIMIT ?",
+        (current_user_id(), int(months)),
     )
     return [dict(r) for r in reversed(rows)]
 
@@ -105,6 +130,7 @@ async def _import_backup_locked(
     conn: aiosqlite.Connection, data: dict[str, Any], counts: dict[str, int]
 ) -> None:
     """import_backup 的实际写入段（调用方必须已持有写锁）。"""
+    uid = current_user_id()
     try:
         for t in (
             "positions",
@@ -122,14 +148,15 @@ async def _import_backup_locked(
             "provenance_log",
             "audit_logs",
         ):
-            await conn.execute(f"DELETE FROM {t}")
+            # 只清当前租户：多租户下清全表会把别人的数据一起抹掉
+            await conn.execute(f"DELETE FROM {t} WHERE user_id=?", (uid,))
 
         counts["positions"] = await _restore_table(
             conn,
             "positions",
             data.get("positions"),
-            "INSERT INTO positions(symbol,name,kind,industry,shares,cost,last,buy_date,fee)"
-            " VALUES(:symbol,:name,:kind,:industry,:shares,:cost,:last,:buy_date,:fee)",
+            "INSERT INTO positions(user_id,symbol,name,kind,industry,shares,cost,last,buy_date,fee)"
+            " VALUES(:user_id,:symbol,:name,:kind,:industry,:shares,:cost,:last,:buy_date,:fee)",
         )
         # 还原完整流水字段：只写 date/item/category/amount 会丢成员归属与共享标记，
         # 恢复后家庭视图与按成员统计全部失真。
@@ -137,40 +164,43 @@ async def _import_backup_locked(
             conn,
             "transactions",
             data.get("transactions"),
-            "INSERT INTO transactions(date,item,category,amount,owner_id,is_shared)"
-            " VALUES(:date,:item,:category,:amount,:owner_id,:is_shared)",
+            "INSERT INTO transactions(user_id,date,item,category,amount,owner_id,is_shared)"
+            " VALUES(:user_id,:date,:item,:category,:amount,:owner_id,:is_shared)",
         )
         counts["subscriptions"] = await _restore_table(
             conn,
             "subscriptions",
             data.get("subscriptions"),
-            "INSERT INTO subscriptions(name,monthly,note,due_day) VALUES(:name,:monthly,:note,:due_day)",
+            "INSERT INTO subscriptions(user_id,name,monthly,note,due_day)"
+            " VALUES(:user_id,:name,:monthly,:note,:due_day)",
         )
         counts["debts"] = await _restore_table(
             conn,
             "debts",
             data.get("debts"),
-            "INSERT INTO debts(name,monthly,balance,rate,due_day) VALUES(:name,:monthly,:balance,:rate,:due_day)",
+            "INSERT INTO debts(user_id,name,monthly,balance,rate,due_day)"
+            " VALUES(:user_id,:name,:monthly,:balance,:rate,:due_day)",
         )
         counts["budgets"] = await _restore_table(
             conn,
             "budgets",
             data.get("budgets"),
-            "INSERT INTO budgets(month,category,amount) VALUES(:month,:category,:amount)",
+            "INSERT INTO budgets(user_id,month,category,amount)"
+            " VALUES(:user_id,:month,:category,:amount)",
         )
         counts["goals"] = await _restore_table(
             conn,
             "goals",
             data.get("goals"),
-            "INSERT INTO goals(name,target,saved,deadline,created_at)"
-            " VALUES(:name,:target,:saved,:deadline,:created_at)",
+            "INSERT INTO goals(user_id,name,target,saved,deadline,created_at)"
+            " VALUES(:user_id,:name,:target,:saved,:deadline,:created_at)",
         )
         counts["memory"] = await _restore_table(
             conn,
             "user_memory",
             data.get("memory"),
-            "INSERT INTO user_memory(content,kind,created_at,updated_at)"
-            " VALUES(:content,:kind,:created_at,:updated_at)",
+            "INSERT INTO user_memory(user_id,content,kind,created_at,updated_at)"
+            " VALUES(:user_id,:content,:kind,:created_at,:updated_at)",
         )
 
         # 家庭成员与借贷：必须先 members 后 member_loans（外键方向）。
@@ -179,35 +209,36 @@ async def _import_backup_locked(
             conn,
             "members",
             data.get("members"),
-            "INSERT INTO members(id,username,display_name,role,avatar_color,created_at)"
-            " VALUES(:id,:username,:display_name,:role,:avatar_color,:created_at)",
+            "INSERT INTO members(user_id,id,username,display_name,role,avatar_color,created_at)"
+            " VALUES(:user_id,:id,:username,:display_name,:role,:avatar_color,:created_at)",
         )
         counts["member_loans"] = await _restore_table(
             conn,
             "member_loans",
             data.get("member_loans"),
-            "INSERT INTO member_loans(id,from_member_id,to_member_id,amount,currency,note,settled,created_at,settled_at)"
-            " VALUES(:id,:from_member_id,:to_member_id,:amount,:currency,:note,:settled,:created_at,:settled_at)",
+            "INSERT INTO member_loans(user_id,id,from_member_id,to_member_id,amount,currency,note,settled,created_at,settled_at)"
+            " VALUES(:user_id,:id,:from_member_id,:to_member_id,:amount,:currency,:note,:settled,:created_at,:settled_at)",
         )
         counts["watchlist"] = await _restore_table(
             conn,
             "watchlist",
             data.get("watchlist"),
-            "INSERT INTO watchlist(symbol,name,kind,created_at) VALUES(:symbol,:name,:kind,:created_at)",
+            "INSERT INTO watchlist(user_id,symbol,name,kind,created_at)"
+            " VALUES(:user_id,:symbol,:name,:kind,:created_at)",
         )
         counts["provenance"] = await _restore_table(
             conn,
             "provenance_log",
             data.get("provenance"),
-            "INSERT INTO provenance_log(id,timestamp,action,entity_type,entity_id,before_json,after_json,source,username,metadata_json)"
-            " VALUES(:id,:timestamp,:action,:entity_type,:entity_id,:before_json,:after_json,:source,:username,:metadata_json)",
+            "INSERT INTO provenance_log(user_id,id,timestamp,action,entity_type,entity_id,before_json,after_json,source,username,metadata_json)"
+            " VALUES(:user_id,:id,:timestamp,:action,:entity_type,:entity_id,:before_json,:after_json,:source,:username,:metadata_json)",
         )
         counts["audit"] = await _restore_table(
             conn,
             "audit_logs",
             data.get("audit"),
-            "INSERT INTO audit_logs(ts,action,method,path,status,actor,detail,duration_ms)"
-            " VALUES(:ts,:action,:method,:path,:status,:actor,:detail,:duration_ms)",
+            "INSERT INTO audit_logs(user_id,ts,action,method,path,status,actor,detail,duration_ms)"
+            " VALUES(:user_id,:ts,:action,:method,:path,:status,:actor,:detail,:duration_ms)",
         )
 
         # 设置：整表覆盖，但 AI Key 永不恢复（明文 Key 不进备份/恢复链路）
@@ -228,9 +259,10 @@ async def _import_backup_locked(
             if not isinstance(s, dict) or not s.get("thread_id"):
                 continue
             await conn.execute(
-                "INSERT OR IGNORE INTO sessions(thread_id,title,created_at,updated_at)"
-                " VALUES(?,?,?,?)",
+                "INSERT OR IGNORE INTO sessions(user_id,thread_id,title,created_at,updated_at)"
+                " VALUES(?,?,?,?,?)",
                 (
+                    uid,
                     s["thread_id"],
                     str(s.get("title") or "新会话")[:40],
                     s.get("created_at") or "",
@@ -243,9 +275,10 @@ async def _import_backup_locked(
             if not isinstance(r, dict) or not r.get("question"):
                 continue
             await conn.execute(
-                "INSERT INTO runs(thread_id,question,answer,level,flags_json,created_at,route,llm,route_reason,tools,actions)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO runs(user_id,thread_id,question,answer,level,flags_json,created_at,route,llm,route_reason,tools,actions)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
+                    uid,
                     r.get("thread_id") or "default",
                     str(r.get("question") or "")[:500],
                     str(r.get("answer") or ""),
@@ -274,15 +307,20 @@ async def _restore_table(
     rows: Any,
     sql: str,
 ) -> int:
-    """把备份列表写回指定表；坏行跳过不影响整体。"""
+    """把备份列表写回指定表；坏行跳过不影响整体。
+
+    统一注入当前租户：备份包本身不带 user_id（也不该带），恢复时一律落到
+    当前登录用户名下，避免把别人的备份还原进自己的账本或反之。
+    """
     if not isinstance(rows, list):
         return 0
+    uid = current_user_id()
     n = 0
     for row in rows:
         if not isinstance(row, dict):
             continue
         try:
-            await conn.execute(sql, row)
+            await conn.execute(sql, {**row, "user_id": uid})
             n += 1
         except Exception:  # noqa: BLE001 — 单行失败跳过
             continue

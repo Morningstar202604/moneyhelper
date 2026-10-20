@@ -12,6 +12,7 @@ from ._core import (
     _mark_user_data,
     fetch_all,
 )
+from .tenant import current_user_id
 
 # --------------------------------------------------------------------------
 # 长期记忆（user_memory：agent 记住用户长期信息）
@@ -19,8 +20,12 @@ from ._core import (
 
 
 async def list_memory() -> list[dict[str, Any]]:
+    """当前租户的长期记忆。"""
+    from .tenant import current_user_id
+
     return await fetch_all(
-        "SELECT * FROM user_memory ORDER BY updated_at DESC, id DESC"
+        "SELECT * FROM user_memory WHERE user_id=? ORDER BY updated_at DESC, id DESC",
+        (current_user_id(),),
     )
 
 
@@ -77,19 +82,21 @@ async def add_memory(content: str, kind: str = "fact") -> dict[str, Any]:
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     conn = await _conn()
     cur = await conn.execute(
-        "SELECT id FROM user_memory WHERE content=? LIMIT 1", (content,)
+        "SELECT id FROM user_memory WHERE user_id=? AND content=? LIMIT 1",
+        (current_user_id(), content),
     )
     row = await cur.fetchone()
     if row:
         await conn.execute(
-            "UPDATE user_memory SET updated_at=?, kind=? WHERE id=?",
-            (now, kind, row["id"]),
+            "UPDATE user_memory SET updated_at=?, kind=? WHERE user_id=? AND id=?",
+            (now, kind, current_user_id(), row["id"]),
         )
         await conn.commit()
         return {"ok": True, "id": row["id"], "deduped": True}
     await conn.execute(
-        "INSERT INTO user_memory(content,kind,created_at,updated_at) VALUES(?,?,?,?)",
-        (content, kind, now, now),
+        "INSERT INTO user_memory(user_id,content,kind,created_at,updated_at)"
+        " VALUES(?,?,?,?,?)",
+        (current_user_id(), content, kind, now, now),
     )
     await _mark_user_data(conn)
     await conn.commit()
@@ -100,7 +107,9 @@ async def add_memory(content: str, kind: str = "fact") -> dict[str, Any]:
 
 async def delete_memory(mem_id: int) -> dict[str, Any]:
     conn = await _conn()
-    cur = await conn.execute("DELETE FROM user_memory WHERE id=?", (mem_id,))
+    cur = await conn.execute(
+        "DELETE FROM user_memory WHERE user_id=? AND id=?", (current_user_id(), mem_id)
+    )
     await _mark_user_data(conn)
     await conn.commit()
     return {"ok": True, "deleted": cur.rowcount}
@@ -108,7 +117,9 @@ async def delete_memory(mem_id: int) -> dict[str, Any]:
 
 async def clear_memory() -> dict[str, Any]:
     conn = await _conn()
-    cur = await conn.execute("DELETE FROM user_memory")
+    cur = await conn.execute(
+        "DELETE FROM user_memory WHERE user_id=?", (current_user_id(),)
+    )
     await _mark_user_data(conn)
     await conn.commit()
     return {"ok": True, "deleted": cur.rowcount}
@@ -119,7 +130,9 @@ async def delete_memory_by_kind(kind: str) -> dict[str, Any]:
     if not kind:
         return {"ok": False, "reason": "empty kind"}
     conn = await _conn()
-    cur = await conn.execute("DELETE FROM user_memory WHERE kind=?", (kind,))
+    cur = await conn.execute(
+        "DELETE FROM user_memory WHERE user_id=? AND kind=?", (current_user_id(), kind)
+    )
     await _mark_user_data(conn)
     await conn.commit()
     return {"ok": True, "deleted": cur.rowcount}
@@ -129,8 +142,12 @@ async def touch_memory(mem_id: int) -> dict[str, Any]:
     """记忆被注入/使用时刷新 last_used（主动遗忘：只淘汰长期未用）。"""
     conn = await _conn()
     await conn.execute(
-        "UPDATE user_memory SET last_used=? WHERE id=?",
-        (datetime.now().astimezone().isoformat(timespec="seconds"), int(mem_id)),
+        "UPDATE user_memory SET last_used=? WHERE user_id=? AND id=?",
+        (
+            datetime.now().astimezone().isoformat(timespec="seconds"),
+            current_user_id(),
+            int(mem_id),
+        ),
     )
     await conn.commit()
     return {"ok": True}
@@ -148,8 +165,8 @@ async def forget_memory(older_than_days: int = 180) -> dict[str, Any]:
         _dt.datetime.now().astimezone() - _dt.timedelta(days=int(older_than_days))
     ).isoformat(timespec="seconds")
     cur = await conn.execute(
-        "DELETE FROM user_memory WHERE last_used != '' AND last_used < ?",
-        (cutoff,),
+        "DELETE FROM user_memory WHERE user_id=? AND last_used != '' AND last_used < ?",
+        (current_user_id(), cutoff),
     )
     await _mark_user_data(conn)
     await conn.commit()
@@ -164,8 +181,9 @@ async def stale_memory_count(older_than_days: int = 180) -> int:
         _dt.datetime.now().astimezone() - _dt.timedelta(days=int(older_than_days))
     ).isoformat(timespec="seconds")
     rows = await fetch_all(
-        "SELECT COUNT(*) AS n FROM user_memory WHERE last_used != '' AND last_used < ?",
-        (cutoff,),
+        "SELECT COUNT(*) AS n FROM user_memory"
+        " WHERE user_id=? AND last_used != '' AND last_used < ?",
+        (current_user_id(), cutoff),
     )
     return int(rows[0]["n"]) if rows else 0
 

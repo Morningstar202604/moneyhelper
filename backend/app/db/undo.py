@@ -12,6 +12,7 @@ from ._core import (  # noqa: F401
     _now_iso,
     fetch_all,
 )
+from .tenant import current_user_id
 
 # --------------------------------------------------------------------------
 # 撤销（undo）：实体级还原（P2 金融级治理）
@@ -42,9 +43,10 @@ async def _record_snapshot(
     """
     conn = await _conn()
     cur = await conn.execute(
-        "INSERT INTO undo_records(entity,entity_id,before_json,reason,consumed_at,created_at)"
-        " VALUES(?,?,?,?,?,?)",
+        "INSERT INTO undo_records(user_id,entity,entity_id,before_json,reason,consumed_at,created_at)"
+        " VALUES(?,?,?,?,?,?,?)",
         (
+            current_user_id(),
             entity,
             entity_id,
             before_json,
@@ -64,9 +66,9 @@ async def _find_latest_usable_snapshot(
     """同一实体可能有多条快照，取最近一条未被撤回（consumed_at=''）的记录；没有返回 None。"""
     cur = await conn.execute(
         "SELECT * FROM undo_records"
-        " WHERE entity=? AND entity_id=? AND consumed_at=''"
+        " WHERE user_id=? AND entity=? AND entity_id=? AND consumed_at=''"
         " ORDER BY id DESC LIMIT 1",
-        (entity, entity_id),
+        (current_user_id(), entity, entity_id),
     )
     return await cur.fetchone()
 
@@ -85,13 +87,25 @@ async def _restore_from_snapshot(
     deleted = False
     if before_json.strip() in ("", "{}"):
         if entity == "transaction":
-            await conn.execute("DELETE FROM transactions WHERE id=?", (int(entity_id),))
+            await conn.execute(
+                "DELETE FROM transactions WHERE user_id=? AND id=?",
+                (current_user_id(), int(entity_id)),
+            )
         elif entity == "position":
-            await conn.execute("DELETE FROM positions WHERE symbol=?", (entity_id,))
+            await conn.execute(
+                "DELETE FROM positions WHERE user_id=? AND symbol=?",
+                (current_user_id(), entity_id),
+            )
         elif entity == "debt":
-            await conn.execute("DELETE FROM debts WHERE name=?", (entity_id,))
+            await conn.execute(
+                "DELETE FROM debts WHERE user_id=? AND name=?",
+                (current_user_id(), entity_id),
+            )
         elif entity == "subscription":
-            await conn.execute("DELETE FROM subscriptions WHERE name=?", (entity_id,))
+            await conn.execute(
+                "DELETE FROM subscriptions WHERE user_id=? AND name=?",
+                (current_user_id(), entity_id),
+            )
         else:
             raise ValueError(f"不支持撤回的实体类型：{entity}")
         deleted = True
@@ -112,16 +126,17 @@ async def _restore_from_snapshot(
         owner_id = int(owner_raw) if owner_raw not in (None, "", 0, "0") else None
         is_shared = 1 if data.get("is_shared") else 0
         await conn.execute(
-            "INSERT OR REPLACE INTO transactions(id,date,item,category,amount,owner_id,is_shared)"
-            " VALUES(?,?,?,?,?,?,?)",
-            (int(entity_id), d, it, cat, amt, owner_id, is_shared),
+            "INSERT OR REPLACE INTO transactions(user_id,id,date,item,category,amount,owner_id,is_shared)"
+            " VALUES(?,?,?,?,?,?,?,?)",
+            (current_user_id(), int(entity_id), d, it, cat, amt, owner_id, is_shared),
         )
     elif entity == "position":
         # 任何字段缺失用 '' / 0 兜底，避免 CHECK 失败；符号一致即满足主键；符号本身不回退
         await conn.execute(
-            "INSERT OR REPLACE INTO positions(symbol,name,kind,industry,shares,cost,last,buy_date,fee)"
-            " VALUES(?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO positions(user_id,symbol,name,kind,industry,shares,cost,last,buy_date,fee)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?)",
             (
+                current_user_id(),
                 entity_id,
                 data.get("name") or "未命名",
                 data.get("kind") or "股票",
@@ -135,9 +150,10 @@ async def _restore_from_snapshot(
         )
     elif entity == "debt":
         await conn.execute(
-            "INSERT OR REPLACE INTO debts(name,monthly,balance,rate,due_day)"
-            " VALUES(?,?,?,?,?)",
+            "INSERT OR REPLACE INTO debts(user_id,name,monthly,balance,rate,due_day)"
+            " VALUES(?,?,?,?,?,?)",
             (
+                current_user_id(),
                 entity_id,
                 data.get("monthly"),
                 data.get("balance"),
@@ -147,9 +163,10 @@ async def _restore_from_snapshot(
         )
     elif entity == "subscription":
         await conn.execute(
-            "INSERT OR REPLACE INTO subscriptions(name,monthly,note,due_day)"
-            " VALUES(?,?,?,?)",
+            "INSERT OR REPLACE INTO subscriptions(user_id,name,monthly,note,due_day)"
+            " VALUES(?,?,?,?,?)",
             (
+                current_user_id(),
                 entity_id,
                 data.get("monthly"),
                 data.get("note", ""),
@@ -171,7 +188,10 @@ async def _undo_apply(record_id: int) -> dict[str, Any]:
     """
     conn = await _conn()
     # step 0: 取快照
-    cur = await conn.execute("SELECT * FROM undo_records WHERE id=?", (record_id,))
+    cur = await conn.execute(
+        "SELECT * FROM undo_records WHERE user_id=? AND id=?",
+        (current_user_id(), record_id),
+    )
     snap = await cur.fetchone()
     if snap is None:
         raise LookupError(f"undo 记录 {record_id} 不存在")
@@ -188,8 +208,8 @@ async def _undo_apply(record_id: int) -> dict[str, Any]:
     # step 2: 标记 consumed_at（WHERE consumed_at='' 防止 TOCTOU）
     consumed_at = _now_iso()
     cur = await conn.execute(
-        "UPDATE undo_records SET consumed_at=? WHERE id=? AND consumed_at=''",
-        (consumed_at, record_id),
+        "UPDATE undo_records SET consumed_at=? WHERE user_id=? AND id=? AND consumed_at=''",
+        (consumed_at, current_user_id(), record_id),
     )
     if cur.rowcount == 0:
         # 并发消费：另一个请求已撤回此快照
@@ -215,8 +235,8 @@ async def list_undo_records(
 
     末尾 N 条按 id DESC（最新在前），便于前端撤回面板按时间倒序展示。
     """
-    sql = "SELECT * FROM undo_records WHERE 1=1"
-    params: list[Any] = []
+    sql = "SELECT * FROM undo_records WHERE user_id=?"
+    params: list[Any] = [current_user_id()]
     if not include_consumed:
         sql += " AND consumed_at=''"
     if entity:

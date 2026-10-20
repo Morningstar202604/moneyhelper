@@ -188,6 +188,13 @@ async def _try_agent(
 
     schemas = _allowed_schemas(order.dept)
     impls = _allowed_impls(order.dept)
+    # 工单级白名单：派工阶段已经把模型编造/跨部门的工具名过滤掉了，
+    # 这里是第二道闸——执行阶段真正收窄到工单声明的工具面。
+    # 没有它，LLM 派工"只给这个部门两个工具"的约束等于无效。
+    if order.tools_allowed:
+        allowed = {n.removeprefix("tool_") for n in order.tools_allowed}
+        schemas = [s for s in schemas if s["function"]["name"] in allowed]
+        impls = {k: v for k, v in impls.items() if k in allowed}
     if not schemas or not impls:
         return None
 
