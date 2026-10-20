@@ -20,6 +20,8 @@ import json
 from datetime import datetime
 from typing import Any
 
+from starlette.routing import BaseRoute
+
 from . import db
 from . import tools as xtools
 from .logging_utils import get_logger
@@ -461,7 +463,7 @@ async def _compute_goal_progress() -> str:
 
 async def _import_transactions(source: str, csv_text: str) -> str:
     """批量导入交易：解析 CSV + 去重 + 写入 + 审计。"""
-    from ..csvimport import classify as _auto_classify
+    from .csvimport import classify as _auto_classify
     from .import_parsers import get_parser
 
     parser = get_parser(source)
@@ -626,10 +628,8 @@ def build_asgi() -> tuple[Any, Any] | None:
     # 并存挂载。SSE 的移除安排在下一个大版本，届时在 CHANGELOG 明示。
     from fastmcp.server.http import create_streamable_http_app
 
-    # 内部路径直接写成 /mcp，配合"挂到根"的挂载方式：
-    # mount("/mcp", sub) + 内部路由 "/" 会出现 307 重定向（/mcp -> /mcp/），
-    # 而带斜杠的 POST 会被当成 GET 处理返回 405（实测）。挂根 + 内部 /mcp
-    # 是无斜杠即用的唯一组合。
+    # 内部路由保留 /mcp：下面用「精确路径挂载」把 /mcp 与 /mcp/ 都直接交给它，
+    # 不经过 Starlette 的斜杠重定向（307 会让不跟随重定向的 MCP 客户端失败）。
     streamable = create_streamable_http_app(server=mcp, streamable_http_path="/mcp")
     sse = None
     try:
@@ -682,6 +682,36 @@ class _DynamicSse(_DynamicMcp):
         await target(scope, receive, send)
 
 
+class _ExactPathRoute(BaseRoute):
+    """只匹配精确路径（含可选尾斜杠）并把原始 scope 交给子应用。
+
+    为什么不用 Mount：Starlette 对 `Mount("/mcp")` 的精确路径 `/mcp` 会先做
+    307 重定向到 `/mcp/`，而 MCP 客户端（含官方 SDK）默认不跟随重定向，
+    表现为"连不上"。这里直接匹配、不改写路径，`/mcp` 与 `/mcp/` 都直达子应用。
+    不匹配的路径返回 Match.NONE，后续静态托管等路由照常生效。
+    """
+
+    def __init__(self, path: str, app: Any) -> None:
+        self.path = path
+        self.app = app
+
+    def matches(self, scope) -> tuple[Any, dict[str, Any]]:
+        from starlette.routing import Match
+
+        if scope["type"] != "http":
+            return Match.NONE, {}
+        raw = scope.get("path", "")
+        if raw in (self.path, self.path + "/"):
+            return Match.FULL, scope
+        return Match.NONE, {}
+
+    async def handle(self, scope, receive, send) -> None:
+        await self.app(scope, receive, send)
+
+    async def __call__(self, scope, receive, send) -> None:
+        await self.handle(scope, receive, send)
+
+
 def mount_to_app(app: Any, holder: dict[str, Any] | None = None) -> None:
     """把 MCP 子应用挂到 FastAPI app（/mcp 为 Streamable HTTP，/mcp-sse 为 SSE）。
 
@@ -700,45 +730,34 @@ def mount_to_app(app: Any, holder: dict[str, Any] | None = None) -> None:
         holder = {"built": built}
     streamable = _DynamicMcp(holder)
 
-    import os
-    import secrets
-
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import JSONResponse
 
     # /mcp 走 app.mount 会绕过主 app 的 @app.middleware("http") 中间件链，
-    # 如果不用独立鉴权包裹，任何能访问 /mcp 的人都可触发全量财务工具（sell_position/backup_now）。
+    # 所以这里复用主 app 的同一套判定（口令 + Host/Origin 白名单），
+    # 否则就会出现"主站有防护、MCP 侧裸奔"的第二条信任边界。
+    from .middleware import host_guard_check, token_ok
+
     class _McpAuthGuard(BaseHTTPMiddleware):
         async def dispatch(self, request, call_next):
-            key = os.getenv("API_TOKEN", "").strip()
-            if key:
-                token = request.query_params.get("token", "")
-                header = request.headers.get("authorization", "")
-                if not (
-                    secrets.compare_digest(token, key)
-                    or secrets.compare_digest(header, f"Bearer {key}")
-                ):
-                    return JSONResponse({"error": "需要访问口令"}, status_code=401)
-            # 无口令模式：沿用主 app 同口径 Host 白名单
+            if not token_ok(request):
+                return JSONResponse({"error": "需要访问口令"}, status_code=401)
+            denied = host_guard_check(request)
+            if denied is not None:
+                return JSONResponse({"error": denied}, status_code=403)
             return await call_next(request)
 
-    # 路径布局（实测出来的唯一可用组合，勿随意改动）：
+    # 路径布局：
     #   /mcp                 Streamable HTTP（默认，MCP 规范推荐；无斜杠即用）
     #   /mcp-sse/sse         SSE 端点（旧客户端兼容，保留一个版本期）
     #   /mcp-sse/messages/   SSE 上行端点（仅 POST）
     #
-    # 两个约束：
-    # 1) Streamable 子应用必须挂到根（内部路由已是 /mcp）。mount 到 /mcp 会
-    #    产生 307（/mcp -> /mcp/），而带斜杠的 POST 会被当成 GET 返回 405。
-    # 2) SSE 子应用内部用绝对路径 /sse、/messages/，挂到 /mcp-sse 后实际路径
-    #    就是 /mcp-sse/sse。若把内部路径也写成前缀，会变成 /mcp-sse/mcp-sse/sse。
-    # 3) 两个都挂到根会互相遮蔽（先挂的吃掉所有请求），所以 SSE 必须用独立前缀。
-    # 顺序关键：Starlette 的 Mount("/") 会匹配所有剩余请求，必须先挂更具体的
-    # 前缀（/mcp-sse），否则 SSE 请求会被根挂载的 streamable 吃掉返回 404
-    # （streamable 内部只有 /mcp 一条路由）。
+    # 绝不挂 Mount("/")：根挂载会拦截所有未匹配请求（含前端静态资源），
+    # 导致单端口部署时首页 404。streamable 子应用的内部路由就是 "/mcp"，
+    # 因此用精确路径路由直接转发原始 scope（/mcp 与 /mcp/ 都命中，无 307）。
     sse_dynamic = _DynamicSse(holder)
     app.mount("/mcp-sse", _McpAuthGuard(sse_dynamic))
-    app.mount("/", _McpAuthGuard(streamable))
+    app.router.routes.append(_ExactPathRoute("/mcp", _McpAuthGuard(streamable)))
     log.info("mcp.transport: streamable-http at /mcp, sse at /mcp-sse/sse")
 
 

@@ -304,6 +304,9 @@ async def _ask_impl(payload: dict, protocol: str = "internal"):
                 # 待确认写操作：前端拿 token 显示确认卡片，确认后走 /api/confirm 执行
                 "pending_token": result.get("pending_token", ""),
                 "pending_summary": result.get("pending_summary", ""),
+                # 备份口令：只在当次 final 事件下发一次（不落库、不进历史），
+                # 否则用户拿到加密包却没有解密口令，备份等于不可恢复。
+                "passphrase": result.get("passphrase", ""),
             }
         )
 
@@ -487,8 +490,7 @@ async def confirm(payload: dict):
             return {"ok": True, "cancelled": True, "summary": pending["summary"]}
 
         # 优先走 LangGraph 原生 HITL：从 interrupt 挂起点用 Command(resume) 恢复图，
-        # 由 action 节点执行/取消并落库，返回图续跑的最终答案。无挂起线程（进程重启 /
-        # 非 interrupt 路径）则降级为直接执行工具（向后兼容）。
+        # 由 action 节点原子抢占 pending 并执行，返回图续跑的最终答案。
         from .. import agent_graph
 
         resumed = await agent_graph.resume_action(token, "confirm")
@@ -506,7 +508,15 @@ async def confirm(payload: dict):
                 "graph": True,
             }
 
-        await db.mark_pending_action(token, "consumed")
+        # 没有挂起的图（进程重启 / 非 interrupt 路径）：同样必须先原子抢占，
+        # 抢占失败说明已被执行过，直接返回 409，避免同一笔写操作被执行两次。
+        claimed = await db.claim_pending_action(token)
+        if claimed is None:
+            log.warning("confirm: token=%s already consumed", token[:12])
+            return JSONResponse(
+                {"error": "动作已执行或已失效，未重复执行"}, status_code=409
+            )
+        pending = claimed
         from .. import tools as tools_mod
 
         impl = tools_mod.TOOL_IMPL.get(pending["tool_name"])

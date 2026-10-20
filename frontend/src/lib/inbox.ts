@@ -4,7 +4,7 @@
  * 比它新的一律计未读；打开面板即整体标读。
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { ScheduledOutput } from "./types";
 
@@ -58,6 +58,10 @@ export function fetchScheduledOutputs(limit = 30): Promise<ScheduledOutput[]> {
 export function useScheduledOutputs() {
   const [outputs, setOutputs] = useState<ScheduledOutput[] | null>(null);
   const [seenId, setSeenId] = useState<number>(readSeenId);
+  // 用 ref 暴露最新列表给 markAllRead：若让 markAllRead 依赖 outputs，
+  // 回调身份会随每次刷新变化，导致依赖它的 effect 反复触发（请求循环）。
+  const outputsRef = useRef<ScheduledOutput[] | null>(null);
+  outputsRef.current = outputs;
 
   const refresh = useCallback(async (): Promise<ScheduledOutput[]> => {
     try {
@@ -87,17 +91,18 @@ export function useScheduledOutputs() {
     };
   }, [refresh]);
 
-  /** 整体标读；不传参时用当前已加载列表（打开面板场景会先 refresh 再传入最新列表）。 */
-  const markAllRead = useCallback(
-    (items?: ScheduledOutput[]) => {
-      const list = items ?? outputs ?? [];
-      if (list.length === 0) return;
-      const maxId = Math.max(...list.map((o) => o.id));
-      writeSeenId(maxId);
-      setSeenId(maxId);
-    },
-    [outputs],
-  );
+  /** 整体标读；不传参时用当前已加载列表（打开面板场景会先 refresh 再传入最新列表）。
+
+   * 依赖保持为空：内部只通过 ref 读最新列表，回调身份稳定，
+   * 依赖它的 effect 不会因为一次刷新就重新触发。
+   */
+  const markAllRead = useCallback((items?: ScheduledOutput[]) => {
+    const list = items ?? outputsRef.current ?? [];
+    if (list.length === 0) return;
+    const maxId = Math.max(...list.map((o) => o.id));
+    writeSeenId(maxId);
+    setSeenId(maxId);
+  }, []);
 
   return { outputs, unread: countUnread(outputs ?? [], seenId), refresh, markAllRead };
 }

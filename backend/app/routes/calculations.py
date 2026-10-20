@@ -91,9 +91,14 @@ async def returns_endpoint(months: int = Query(default=6, ge=1, le=120)) -> dict
         total_mv = sum(float(p.get("shares", 0)) * float(p.get("last", 0)) for p in positions)
         total_cost = sum(float(p.get("shares", 0)) * float(p.get("cost", 0)) for p in positions)
 
-        # 期间净投入（正交易金额之和）
+        # 期间净投入只算"非工资性"的现金流入：工资是收入，不是追加本金。
+        # 把工资算进来会系统性压低收益率（分母变大、分子没变）。
+        income_categories = {"收入", "工资", "salary", "income"}
         net_inflows = sum(
-            float(t.get("amount", 0)) for t in recent_txns if float(t.get("amount", 0)) > 0
+            float(t.get("amount", 0))
+            for t in recent_txns
+            if float(t.get("amount", 0)) > 0
+            and str(t.get("category") or "").strip() not in income_categories
         )
 
         if total_cost > 0:
@@ -106,21 +111,19 @@ async def returns_endpoint(months: int = Query(default=6, ge=1, le=120)) -> dict
                 "net_inflows": round(net_inflows, 2),
             }
 
-    # --- XIRR (基于交易现金流) ---
-    if recent_txns:
-        cashflows: list[tuple[date, float]] = []
-        # 添加当前市值作为终值
+    # --- XIRR (基于持仓成本与当前市值) ---
+    # 口径：期初按成本价一次性投入（现金流为负），期末市值（为正）。
+    # 不把账本问答/工资流水混进投资现金流——那会把生活收入算成投资收益。
+    if positions:
         today = date.today()
         total_mv = sum(float(p.get("shares", 0)) * float(p.get("last", 0)) for p in positions)
-        if total_mv > 0:
-            cashflows.append((today, total_mv))
-
-        for t in recent_txns:
-            d = _parse_date(t.get("date", ""))
-            if d:
-                cashflows.append((d, float(t.get("amount", 0))))
-
-        if len(cashflows) >= 2:
+        total_cost = sum(float(p.get("shares", 0)) * float(p.get("cost", 0)) for p in positions)
+        if total_mv > 0 and total_cost > 0:
+            start = today - timedelta(days=max(1, months * 31))
+            cashflows: list[tuple[date, float]] = [
+                (start, -total_cost),
+                (today, total_mv),
+            ]
             try:
                 xirr_val = calculate_xirr(cashflows)
                 result["xirr"] = {

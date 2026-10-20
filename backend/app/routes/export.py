@@ -55,7 +55,8 @@ async def import_backup(payload: dict) -> dict:
     else:
         data = payload
     version = str((data.get("meta") or {}).get("version") or data.get("version") or "")
-    if not (version.startswith(("wealth-office-v", "xiaoman-v")) or version == "2"):
+    # 2 = 旧版（无家庭成员/审计），3 = 当前版。两者都能恢复，向后兼容。
+    if not (version.startswith(("wealth-office-v", "xiaoman-v")) or version in ("2", "3")):
         return JSONResponse(
             {"error": f"备份格式不被识别（version={version or '空'}）"}, status_code=400
         )

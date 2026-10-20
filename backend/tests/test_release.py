@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -132,7 +133,17 @@ def test_no_hardcoded_version_in_main() -> None:
 def test_release_script_is_executable() -> None:
     script = REPO / "scripts" / "release.sh"
     assert script.is_file()
-    assert script.stat().st_mode & 0o111, "release.sh 必须可执行"
+    if os.name == "nt":
+        # Windows 没有 POSIX 权限位：git 记录的 100755 由 core.filemode 反映，
+        # 用 git ls-files -s 校验（不依赖文件系统的 mode 位）。
+        out = subprocess.run(
+            ["git", "ls-files", "-s", "scripts/release.sh"],
+            cwd=REPO, capture_output=True, text=True, timeout=30,
+        )
+        assert out.returncode == 0, out.stderr
+        assert out.stdout.startswith("100755"), f"git 记录的权限不是可执行：{out.stdout!r}"
+    else:
+        assert script.stat().st_mode & 0o111, "release.sh 必须可执行"
 
 
 def test_release_script_has_no_push() -> None:
@@ -154,6 +165,37 @@ def test_release_yml_valid_and_guards_version() -> None:
     assert "softprops/action-gh-release" in text
 
 
+def _bash() -> str:
+    """返回可用的 bash 解释器。
+
+    Windows 的 PATH 里可能有 C:\\Windows\\System32\\bash.exe（WSL 转发器），
+    它不指向真实 bash，运行会失败。这里逐个探测候选并验证能执行命令。
+    """
+    candidates = [
+        os.environ.get("XIAOMAN_BASH", ""),
+        r"C:\Program Files\Git\usr\bin\bash.exe" if os.name == "nt" else "",
+        r"C:\Program Files\Git\bin\bash.exe" if os.name == "nt" else "",
+        "/usr/bin/bash",
+        "bash",
+    ]
+    for cand in candidates:
+        if not cand:
+            continue
+        if os.path.isabs(cand) and not os.path.exists(cand):
+            continue
+        try:
+            probe = subprocess.run(
+                [cand, "-c", "echo ok"],
+                capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=30,
+            )
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if probe.returncode == 0 and "ok" in (probe.stdout or ""):
+            return cand
+    __import__("pytest").skip("当前环境没有可用的 bash（Windows 需安装 Git for Windows）")
+
+
 def test_release_dry_run_does_not_modify_files() -> None:
     """--dry-run 必须零副作用（用户靠它预演）。
 
@@ -163,6 +205,7 @@ def test_release_dry_run_does_not_modify_files() -> None:
     import shutil
     import tempfile
 
+    bash = _bash()
     script = REPO / "scripts" / "release.sh"
     tmp = Path(tempfile.mkdtemp(prefix="rel-"))
     try:
@@ -177,16 +220,25 @@ def test_release_dry_run_does_not_modify_files() -> None:
         shutil.copy2(script, tmp / "scripts" / "release.sh")
 
         env = {
-            "PATH": "/usr/bin:/bin:/usr/local/bin",
-            "HOME": str(tmp),
+            # 继承真实 PATH：Windows 的 git 不在 /usr/bin，写死会让脚本找不到 git。
+            "PATH": os.environ.get("PATH", ""),
+            # 保留真实 HOME：Windows 上 git 依赖用户目录下的辅助进程/配置，
+            # 指向临时空目录会触发 "RPC failed"（实测）。
+            "HOME": os.environ.get("HOME") or os.environ.get("USERPROFILE", str(tmp)),
+            "USERPROFILE": os.environ.get("USERPROFILE", str(tmp)),
             "GIT_AUTHOR_NAME": "t",
             "GIT_AUTHOR_EMAIL": "t@example.com",
             "GIT_COMMITTER_NAME": "t",
             "GIT_COMMITTER_EMAIL": "t@example.com",
+            # 隔离全局/系统 git 配置，避免本机 core.autocrlf、默认身份影响断言
+            "GIT_CONFIG_GLOBAL": str(tmp / ".gitconfig"),
+            "GIT_CONFIG_NOSYSTEM": "1",
         }
+
         def run(*a: str) -> subprocess.CompletedProcess[str]:
             return subprocess.run(
-                a, cwd=tmp, check=True, capture_output=True, text=True, env=env
+                a, cwd=tmp, check=True, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", env=env,
             )
         run("git", "init", "-q", "-b", "main")
         run("git", "add", "-A")
@@ -197,10 +249,11 @@ def test_release_dry_run_does_not_modify_files() -> None:
             for p in ("backend/app/version.py", "pyproject.toml", "frontend/package.json", "CHANGELOG.md")
         }
         out = subprocess.run(
-            ["bash", "scripts/release.sh", "--dry-run"],
-            cwd=tmp, capture_output=True, text=True, env=env,
+            [bash, "scripts/release.sh", "--dry-run"],
+            cwd=tmp, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", env=env,
         )
-        assert out.returncode == 0, out.stderr[-800:]
+        assert out.returncode == 0, (out.stdout or "")[-800:] + (out.stderr or "")[-800:]
         # 预演应提示下一版本为 1.3.0（feat → minor）
         assert "1.3.0" in out.stdout
         # 所有文件内容未变

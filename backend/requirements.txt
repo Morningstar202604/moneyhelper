@@ -1,44 +1,45 @@
 # 后端依赖（FastAPI + LangGraph 编排 + 确定性内核）
-# 版本策略：pin 到 minor（>=x.y,<x.y+1），禁止安装时漂移
+# 约定：pin 到 minor（>=x.y,<x.y+1），保证安装可复现、不随发布漂移。
+
+# --- Web 层 ---
 fastapi>=0.115,<0.116
 uvicorn[standard]>=0.32,<0.33
-aiosqlite>=0.22,<0.23        # 异步 SQLite，不阻塞事件循环
-httpx>=0.28,<0.29            # 行情（东财 push2 / push2his）
-litellm>=1.77,<2            # 统一 LLM 接入（OpenAI/Anthropic/DeepSeek/Gemini/通义/豆包）——替掉自研 llm.py openai SDK 直连
-openai>=2.20,<3             # LiteLLM 直接依赖（litellm 要求 openai<3；代码不直接 import，版本随 litellm 锁定）
-tiktoken>=0.8,<1                # 上下文 token 精确计数（context.py 直接依赖，勿靠传递依赖）
-cn2an>=0.5.24,<0.6           # 中文数字金额（三千块 / 一万二 / 五毛）
-python-dotenv>=1.0,<2
-apscheduler>=3.10,<4         # 定时晨报（替代自研 asyncio 循环）
-cryptography>=44,<45         # 本地加密备份（口令派生 Fernet）
-pydantic>=2.14,<2.15          # 请求体校验（FastAPI 自带依赖）；2.14 起 eval_type_backport 移除，需与 mcp>=1.30 搭配（全量测试锁定）
-pyjwt>=2.9,<3               # JWT 令牌（用户体系无状态鉴权）
-passlib[bcrypt]>=1.7,<2      # bcrypt 密码哈希（用户注册/登录）
-alembic>=1.13,<2             # 数据库迁移（版本化 schema 演进）
+sse-starlette>=1.6,<2           # SSE 流式问答（EventSourceResponse：ping 保活 + 断连检测）
+python-multipart>=0.0.9,<1      # 附件上传（multipart/form-data）
 
-# 测试 / 静态检查（开发）
+# --- 数据层 ---
+aiosqlite>=0.22,<0.23           # 异步 SQLite，不阻塞事件循环
+cryptography>=44,<45            # 本地加密备份（PBKDF2 + Fernet）
+
+# --- 编排与模型 ---
+langgraph>=1.0,<2               # 多智能体图（supervisor + 专项节点）
+langgraph-checkpoint-sqlite>=3,<4   # 磁盘 checkpoint（HITL 可跨进程重启）
+litellm>=1.77,<2                # 统一 LLM 接入（OpenAI/Anthropic/DeepSeek/Gemini/通义/豆包）
+openai>=2.20,<3                 # LiteLLM 直接依赖（litellm 要求 openai<3）
+tiktoken>=0.8,<1                # 上下文 token 精确计数（context.py 直接依赖）
+
+# --- 协议 ---
+mcp>=1.30,<2                    # MCP 官方 SDK（StreamableHTTP 客户端）
+fastmcp>=2.0,<3                 # MCP Server 框架（财务工具标准化暴露）
+
+# --- 内核工具 ---
+httpx>=0.28,<0.29               # 行情（东财 push2 / push2his）
+cn2an>=0.5.24,<0.6              # 中文数字金额（三千块 / 一万二 / 五毛）
+apscheduler>=3.10,<4            # 定时晨报 / 订阅巡检 / 技能定时动作
+cachetools>=5.0,<6              # TTL 缓存
+rank-bm25>=0.2,<1               # 长期记忆检索（本地、零网络）
+duckduckgo_search>=6.0,<7       # 通用联网搜索工具
+
+# --- 配置与鉴权 ---
+python-dotenv>=1.0,<2
+pydantic>=2.14,<2.15            # 请求体校验（与 fastmcp 2.x 配套）
+pyjwt>=2.9,<3                   # JWT 令牌
+passlib[bcrypt]>=1.7,<2         # bcrypt 密码哈希
+
+# --- 测试 / 静态检查（开发）---
 pytest>=8.0,<9
-pytest-timeout>=2,<3      # 全局测试超时：防止依赖外网的测试无限挂起
+pytest-timeout>=2,<3            # 全局超时：防止依赖外网的用例挂起
 pytest-cov>=5,<7
 pytest-asyncio>=0.24,<1
-pytest-xdist>=3.5,<4     # 并行测试（CI 提速；api 套件 107s→48s）
+pytest-xdist>=3.5,<4            # 并行测试（CI 提速）
 ruff>=0.8,<1
-langgraph>=1.0,<2
-langgraph-checkpoint-sqlite>=3,<4   # LangGraph 磁盘 checkpoint（AsyncSqliteSaver：线程状态落盘 + 重启可恢复 HITL）
-sse-starlette>=1.6,<2       # SSE 流式问答（EventSourceResponse：ping 保活 + 断连检测）
-mcp>=1.30,<2                # MCP 官方 SDK（StreamableHTTP 客户端；替换自研 JSON-RPC 实现）
-                            # 1.30 起兼容 pydantic 2.14（1.16 的 func_metadata 引用已移除的 eval_type_backport）
-fastmcp>=2.0,<3             # MCP Server 框架：把小满工具暴露为标准 MCP Server（Claude Code/Cursor 直接接入）
-rank-bm25>=0.2,<1           # BM25 检索（替换手写打分；中文分词仍由 memory_retrieve 提供）
-cachetools>=5.0,<6          # TTL 缓存（替换 quotes.py 自建缓存注册表）
-duckduckgo_search>=6.0,<7   # 通用搜索（替换 tools.py Bing HTML 抓取）
-
-# —— 通用层：直接接业界成熟开源，不重复造轮子（见 docs/ARCHITECTURE-v2.md）——
-mem0ai>=0.1,<1              # 长记忆层：抽取/去重/更新/rerank 全由 mem0 pipeline 做，替换自写 memory+reflections+BM25
-# langfuse 换成 Arize Phoenix（开源，单容器本地跑，不需要外部账号）
-opentelemetry-api>=1.27,<2
-opentelemetry-sdk>=1.27,<2
-opentelemetry-exporter-otlp-proto-http>=1.27,<2
-chromadb>=0.5,<1            # mem0 本地向量后端（零外部服务，SQLite 同级 local-first）
-langchain-litellm>=0.2,<0.3  # ChatLiteLLM（react_agent.py 直接使用）；0.3+ 要求 langchain-core>=1，与下方 <0.4 冲突
-langchain-core>=0.3.15,<0.4  # StructuredTool（react_agent.py）；与 langchain-litellm 0.2.x 配套

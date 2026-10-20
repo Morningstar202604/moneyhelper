@@ -215,20 +215,30 @@ def _reschedule() -> None:
     if _sched is None:
         return
     _sched.remove_all_jobs()
+    hm = _parse_time(_state.get("report_time"))
+    h, m = hm if hm is not None else (8, 0)
     # skill 开关（设置→Agent）真正生效：morning_report 关闭时不再注册定时晨报
-    # （手动「生成今日晨报」走 action 路径，不受影响）
+    # （手动「生成今日晨报」走 action 路径，不受影响）。
+    # 注意：订阅到期巡检与晨报是两件独立的事（前者是提醒，后者是报告），
+    # 关晨报不得连带关掉提醒——历史上这里提前 return 把它们绑死了。
     if not _state.get("report_enabled", True):
         _state["next_run_at"] = "（晨报已在设置中关闭）"
-        return
-    hm = _parse_time(_state.get("report_time"))
-    if hm is None:
+    elif hm is None:
         _sched.add_job(_cron_job, trigger="interval", minutes=1440, id="morning_report")
         _state["next_run_at"] = "（周期 24h 兜底）"
-        return
-    h, m = hm
-    _sched.add_job(_cron_job, CronTrigger(hour=h, minute=m, timezone="Asia/Shanghai"), id="morning_report")
-    _sched.add_job(_check_subscriptions_due, CronTrigger(hour=h, minute=m, timezone="Asia/Shanghai"), id="subs_due_check")
-    _state["next_run_at"] = f"每天 {h:02d}:{m:02d}"
+    else:
+        _sched.add_job(
+            _cron_job,
+            CronTrigger(hour=h, minute=m, timezone="Asia/Shanghai"),
+            id="morning_report",
+        )
+        _state["next_run_at"] = f"每天 {h:02d}:{m:02d}"
+    # 订阅巡检始终按晨报时间点跑（未配置时间时用 08:00），与晨报开关无关
+    _sched.add_job(
+        _check_subscriptions_due,
+        CronTrigger(hour=h, minute=m, timezone="Asia/Shanghai"),
+        id="subs_due_check",
+    )
 
 
 async def _cron_job() -> None:

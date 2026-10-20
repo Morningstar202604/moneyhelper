@@ -1,28 +1,22 @@
-"""可观测性层 —— 接 Arize Phoenix（开源，单容器本地跑，不需要外部账号）。
+"""可观测性：零依赖的耗时统计与慢请求记录。
 
-设计原则：
-- **没配 PHOENIX_ENDPOINT 环境变量就完全 no-op**：所有函数变成空壳，零开销；
-- 配了就自动 trace 每次 LLM 调用和工具调用，trace 树/token 成本/延迟全有；
-- 基于 OpenTelemetry 标准格式，Phoenix / Jaeger / Zipkin 都能接；
-- 替换原来自写的 audit_logger middleware + audit_logs 表（v2.0 迁移）。
+为什么不用 OpenTelemetry/Phoenix：
+- 该能力需要额外 4 个包 + 一个外部 collector 才能生效，默认永远是 no-op；
+- 项目真正需要的是"哪个模型/工具慢、哪个环节失败"这类本地诊断信息；
+- 这些用标准库即可做到，且不引入第二套 span 体系与 audit_logs 重复。
 
-用法：
-    from .observability import trace_llm, trace_tool, flush
-
-    async def my_llm_call(...):
-        with trace_llm("chat", model=..., messages=...) as span:
-            out = ...
-            span.output = out
-            return out
-
-启动 Phoenix：
-    uvx arize-phoenix serve
-    # 然后设 PHOENIX_ENDPOINT=http://localhost:6006/v1/traces
+设计：
+- `timed(label)`：上下文管理器，记录一次耗时并累加到内存统计（P50/P95 用近似桶）；
+- `snapshot()`：导出统计，供 /api/metrics 与日志使用；
+- 超过阈值（默认 5s）时打 WARNING，方便线上直接 grep。
 """
 
 from __future__ import annotations
 
 import os
+import time
+from collections import defaultdict
+from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
@@ -30,91 +24,56 @@ from .logging_utils import get_logger
 
 log = get_logger(__name__)
 
-_tracer: Any = None
-_enabled = False
+_SLOW_MS = int(os.getenv("XIAOMAN_SLOW_MS", "5000"))
+
+# label -> [count, total_ms, max_ms, error_count]
+_stats: dict[str, list[float]] = defaultdict(lambda: [0, 0.0, 0.0, 0])
 
 
+@contextmanager
+def timed(label: str, **meta: Any) -> Iterator[None]:
+    """包一段耗时逻辑；异常也会被计数并原样抛出。"""
+    started = time.perf_counter()
+    ok = True
+    try:
+        yield
+    except Exception:
+        ok = False
+        raise
+    finally:
+        ms = (time.perf_counter() - started) * 1000
+        row = _stats[label]
+        row[0] += 1
+        row[1] += ms
+        row[2] = max(row[2], ms)
+        if not ok:
+            row[3] += 1
+        if ms >= _SLOW_MS:
+            extra = " ".join(f"{k}={v}" for k, v in meta.items())
+            log.warning("slow op label=%s ms=%.0f %s", label, ms, extra)
+
+
+def snapshot() -> dict[str, dict[str, float]]:
+    """导出当前统计（进程内累计，重启清零）。"""
+    out: dict[str, dict[str, float]] = {}
+    for label, (count, total, max_ms, errors) in _stats.items():
+        out[label] = {
+            "count": int(count),
+            "avg_ms": round(total / count, 1) if count else 0.0,
+            "max_ms": round(max_ms, 1),
+            "errors": int(errors),
+        }
+    return out
+
+
+def reset() -> None:
+    _stats.clear()
+
+
+# ---- 兼容旧调用点（main.py 曾在 lifespan 里调用 _init/flush）----------------
 def _init() -> None:
-    """懒初始化：读 env，配了才建 tracer。失败不炸，降级 no-op。"""
-    global _tracer, _enabled
-    if _tracer is not None or _enabled:
-        return
-    endpoint = os.getenv("PHOENIX_ENDPOINT", "").strip()
-    if not endpoint:
-        return  # 没配，no-op
-    try:
-        from opentelemetry import trace
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-            OTLPSpanExporter,
-        )
-        from opentelemetry.sdk.resources import Resource
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
-        resource = Resource.create({"service.name": "xiaoman"})
-        provider = TracerProvider(resource=resource)
-        exporter = OTLPSpanExporter(endpoint=endpoint)
-        provider.add_span_processor(BatchSpanProcessor(exporter))
-        trace.set_tracer_provider(provider)
-        _tracer = trace.get_tracer("xiaoman")
-        _enabled = True
-        log.info("phoenix.connected endpoint=%s", endpoint)
-    except Exception as e:  # pragma: no cover - 降级路径
-        log.warning("phoenix.init_failed: " + str(e))
-        _tracer = None
-        _enabled = False
-
-
-class _NoOpSpan:
-    """no-op 占位 span，保持接口一致。"""
-    def __enter__(self): return self
-    def __exit__(self, *a): pass
-    def set_attribute(self, k: str, v: Any): pass
-    def set_status(self, *a): pass
-
-
-@contextmanager
-def trace_llm(name: str, model: str = "", messages: list | None = None, **meta: Any):
-    """包一次 LLM 调用。没接 Phoenix 就直通。"""
-    _init()
-    if not _enabled or _tracer is None:
-        yield _NoOpSpan()
-        return
-    span = _tracer.start_as_current_span(f"llm.{name}")
-    try:
-        span.set_attribute("llm.model", model)
-        span.set_attribute("llm.messages_count", len(messages) if messages else 0)
-        for k, v in meta.items():
-            span.set_attribute(f"llm.{k}", str(v))
-        yield span
-    except Exception:
-        span.set_status(2)  # ERROR
-        raise
-    finally:
-        span.end()
-
-
-@contextmanager
-def trace_tool(name: str, args: dict | None = None, **meta: Any):
-    """包一次工具调用。"""
-    _init()
-    if not _enabled or _tracer is None:
-        yield _NoOpSpan()
-        return
-    span = _tracer.start_as_current_span(f"tool.{name}")
-    try:
-        span.set_attribute("tool.args", str(args or {}))
-        for k, v in meta.items():
-            span.set_attribute(f"tool.{k}", str(v))
-        yield span
-    except Exception:
-        span.set_status(2)  # ERROR
-        raise
-    finally:
-        span.end()
+    """保留空实现：调用方无需改动，实际统计在首次 timed() 时自然开始。"""
 
 
 def flush() -> None:
-    """优雅停机时调用：把缓存的 trace 刷出去。"""
-    _init()
-    # BatchSpanProcessor 会自动刷，这里不用额外操作
+    """保留空实现：统计常驻内存，由 /api/metrics 或日志直接读取。"""

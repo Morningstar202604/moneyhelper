@@ -59,14 +59,9 @@ def _to_sina(symbol: str) -> str | None:
 
 
 def _parse_price(raw: Any) -> float | None:
-    """fltt=2：接口返回元为单位的原价（整数/浮点/字符串均可）。"""
-    if raw is None or raw == "-" or raw == "" or isinstance(raw, bool):
-        return None
-    try:
-        px = float(raw)
-        return px if px > 0 else None
-    except (TypeError, ValueError):
-        return None
+    """价格解析：必须是正数（0 与负数视为无效，如盘前 0.000）。"""
+    value = _num(raw)
+    return value if value is not None and value > 0 else None
 
 
 async def _eastmoney_quotes(symbols: list[str]) -> dict[str, float]:
@@ -311,8 +306,8 @@ async def indices_quotes() -> list[dict[str, Any]]:
                 "symbol": sym,
                 "name": name,
                 "price": px,
-                "change": _parse_price(item.get("f4")),
-                "change_pct": _parse_price(item.get("f3")),
+                "change": _num(item.get("f4")),
+                "change_pct": _num(item.get("f3")),
             }
         )
     _indices_cache["v"] = out
@@ -437,8 +432,8 @@ async def quote_now(symbol: str) -> dict[str, Any] | None:
                     "symbol": key,
                     "name": data.get("f58") or "",
                     "price": price,
-                    "change": _parse_price(data.get("f169")),
-                    "change_pct": _parse_price(data.get("f170")),
+                    "change": _num(data.get("f169")),
+                    "change_pct": _num(data.get("f170")),
                     "source": "eastmoney",
                 }
         except Exception:  # noqa: BLE001 — 单股报价失败降级
@@ -503,6 +498,12 @@ _KLINE_FIELDS = (
 
 
 def _num(raw: Any) -> float | None:
+    """数值解析：允许 0 与负数（涨跌额/涨跌幅需要负值），只排除缺失与占位符。
+
+    不能复用 _parse_price：价格必须为正，但涨跌额/涨跌幅下跌时就是负数。
+    """
+    if raw is None or raw == "-" or raw == "" or isinstance(raw, bool):
+        return None
     try:
         return float(raw)
     except (TypeError, ValueError):

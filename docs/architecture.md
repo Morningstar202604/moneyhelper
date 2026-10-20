@@ -26,7 +26,7 @@ flowchart TB
     subgraph data[数据层]
         DB[(SQLite WAL<br/>db/ 域模块包)]
         POOL[读连接池 ro×3<br/>写单连接串行]
-        MEM[mem0 长期记忆<br/>chroma 本地向量]
+        MEM[长期记忆<br/>本地 BM25 检索，零外发]
         OBS[Phoenix OTel]
     end
     WEB --> API

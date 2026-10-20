@@ -29,9 +29,19 @@ _log = get_logger("llm")
 
 
 # 提供给 lifespan 关闭时调用的清理函数（关闭持久 HTTP 连接、恢复全局状态）。
-# 本模块当前无需显式关闭，保留空实现以避免 AttributeError。
+# LiteLLM 会用 aiohttp 维护连接池；不关会让进程退出时挂住（实测：脚本跑完后
+# 卡在解释器退出，必须 kill）。这里显式关闭并清掉单例，下次启动重新建。
 async def aclose() -> None:
-    pass
+    global _client_singleton, _client_singleton_cfg_key
+    _client_singleton = None
+    _client_singleton_cfg_key = None
+    closer = getattr(litellm, "close_litellm_async_clients", None)
+    if closer is None:
+        return
+    try:
+        await closer()
+    except Exception as exc:  # noqa: BLE001 — 关闭失败不该影响停机流程
+        _log.debug("llm.aclose_failed: %s", exc)
 
 
 load_dotenv()
@@ -405,6 +415,13 @@ class _CompatCompletions:
         if tools:
             litellm_kwargs["tools"] = tools
             litellm_kwargs["tool_choice"] = tool_choice
+            # LiteLLM 1.106 在"带 tools"时会无条件导入它自己的 MCP 网关
+            # （litellm.proxy._experimental.mcp_server），该模块引用 mcp>=2 才有的
+            # CacheableResult；而本项目必须锁 mcp 1.30（fastmcp 2.x 要求 <2.0，
+            # mcp 2.x 又会把 starlette 拉到 1.x 顶掉 fastapi 0.115）。
+            # 两条依赖无法同时满足，因此显式跳过这条我们根本不用的分支——
+            # 否则任何 function calling 调用都会 ImportError，工具链路整体失效。
+            litellm_kwargs["_skip_mcp_handler"] = True
         if max_tokens:
             litellm_kwargs["max_tokens"] = max_tokens
 
@@ -563,8 +580,8 @@ def provider_presets() -> dict[str, dict[str, str]]:
 # LiteLLM 薄封装（v2.0 新增路径）
 # ---------------------------------------------------------------------------
 # 旧路径（stream_narrate / json_complete / stream_text_short）继续走自写 OpenAI SDK 直连，
-# 269 个测试依赖它，本轮不动。新代码（agent.py 切 create_react_agent、mem0 抽取、
-# Langfuse trace）走这个 litellm_chat()，由 LiteLLM 统一接 100+ 模型，故障转移/重试/
+# 现有测试依赖它，本轮不动。Agent 与工具循环走 _CompatClient（LiteLLM 后端，
+# 见本文件顶部 _CompatCompletions），由 LiteLLM 统一接 100+ 模型，故障转移/重试/
 # 成本统计全是 LiteLLM 自带，不再自己写国产端点预设。
 
 

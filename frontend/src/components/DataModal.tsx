@@ -98,6 +98,8 @@ export function DataModal({
       open={open}
       onClose={onClose}
       title={t(TITLE_KEY[kind])}
+      pushContent
+      widthKey="wo.dataPanelWidth"
       headerExtra={
         <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto" role="tablist" aria-label={t("nav.features")}>
           {KINDS.map((k) => (

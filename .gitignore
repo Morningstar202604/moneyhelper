@@ -12,6 +12,8 @@ frontend/node_modules/
 frontend/dist/
 # 密钥（模型端点凭据）
 backend/.env
+.env
+.env.local
 .aqg/
 
 # 运行时数据（含个人持仓/审计链；seed 在代码里重建）

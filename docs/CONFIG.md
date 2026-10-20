@@ -13,6 +13,10 @@
 | `LLM_MODEL` | `deepseek-chat` | 模型名 |
 | `API_TOKEN` | 空 | 访问口令。空 = 不鉴权（仅限本机/内网）；设置后 `/api/*` 需 Bearer/`?token=`，前端弹口令框 |
 | `ALLOWED_HOSTS` | 空 | 未设口令时额外放行的 Host（逗号分隔）。默认只放行本机 |
+| `MCP_ENABLE` | `1` | 是否挂载 MCP Server。`/mcp` 提供 Streamable HTTP，`/mcp-sse/sse` 兼容旧客户端；鉴权与来源校验与主应用一致 |
+| `XIAOMAN_DB_PATH` | 空 | 数据库路径。空值会被忽略并回落到 `backend/app/data/wealth.db`；相对路径按启动目录解析 |
+| `XIAOMAN_DISABLE_RATE_LIMIT` | 空 | `1` 关闭限流（默认 200 次/分钟/IP）；仅测试与本地调试使用 |
+| `XIAOMAN_SLOW_MS` | `5000` | 慢操作告警阈值（毫秒），超过即写 WARNING 日志 |
 | `CORS_ALLOW_ALL` | 空 | 调试用：仅放行前端开发源（`1` 开启）。生产同域托管无需改动 |
 
 > 提示：AI 配置以**应用内设置页为准**（`ai_base_url` / `ai_api_key` / `ai_model` / `ai_enabled`），落库后优先级高于环境变量，重启不丢。

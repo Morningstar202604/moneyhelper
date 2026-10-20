@@ -37,9 +37,27 @@
 - **模型随意换**：基于 LiteLLM 统一接入，DeepSeek / 豆包 / 通义千问 / Claude / OpenAI / Gemini 任选，自动故障转移。未配模型也能用，内置分析兜底。
 - **多 Agent 编排**：LangGraph 图编排（supervisor → 各专项节点），另有「财务部门模式」——一句话拆成工单，四部门并行取数，秘书汇总呈批。
 - **MCP 协议**：所有财务工具经 fastmcp 暴露为标准 MCP Server，Claude Code / Cursor 可直接接入你的本地财务数据。
-- **长记忆**：mem0 负责偏好与家庭背景的记忆抽取与更新，跨会话生效。
+- **长记忆**：偏好与家庭背景存本地记忆表，用 BM25 检索注入回答；记忆内容不出本机。
 - **行情三级降级**：东方财富 → 新浪 → 本地快照，全挂时用快照价并明确标注「离线估值，非实时」。
 - **PWA 可安装**：桌面 / 移动端都能装成独立应用。
+
+## 界面与适配
+
+界面按视口自适应，同一套代码覆盖台式机、笔记本、平板与手机：
+
+| 宽度 | 布局 |
+|---|---|
+| ≥1280 | 左侧会话栏（可拖拽调宽）+ 居中对话 + 右侧数据面板（可拖拽调宽，挤占而非遮挡） |
+| 768–1279 | 侧栏保留、数据面板覆盖式滑出，对话不被压缩到不可用 |
+| <768 | 顶栏精简 + 底部五项导航（问答/总览/持仓/定时产出/设置），其余入口走抽屉 |
+
+细节：
+- 侧栏与数据面板宽度独立记忆（localStorage），双击分隔条复位
+- 设置页在窄屏按「基础/AI 与自动化/数据与安全」三组折叠，避免 11 个入口铺满首屏
+- 面板有焦点陷阱与关闭后焦点归还，Esc 可关闭
+- 首屏只加载对话相关代码，Dashboard/部门看板/收件箱按需懒加载
+
+截图核对：`cd frontend && npm run shots`（需要先启动服务，默认抓 1440/1024/768/390 四档）。
 
 ## 界面速览
 
@@ -57,20 +75,27 @@
 
 要求：Python 3.10+，Node.js 18+。
 
-**一键启动（推荐）**
+**一键启动（推荐，Windows / macOS / Linux 通用）**
 
 ```bash
-scripts/dev.sh        # macOS / Linux，后端 8788 + 前端 5198
-start.bat             # Windows 双击
+scripts/dev.sh          # 开发模式：后端 8788 + 前端 5198（Git Bash / WSL / macOS / Linux）
+scripts/dev.sh --prod   # 生产模式：构建前端后单端口 8788 伺服
+start.bat               # Windows 双击（自动建 venv、装依赖、开两个窗口）
+start.bat --prod        # Windows 生产模式：单窗口、单端口
 ```
+
+脚本会自动创建虚拟环境、安装依赖、检查端口占用；Windows 的 venv 在 `Scripts/`、Unix 在 `bin/`，脚本会自行判断。
 
 **手动启动**
 
 ```bash
 # 后端（必须进 backend/ 目录执行）
 cd backend
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python -m venv .venv
+# Windows: .venv\Scripts\python -m pip install -r requirements.txt
+.venv/bin/python -m pip install -r requirements.txt
 cp .env.example .env   # 可选：填 LLM_* 启用模型，注释里有国产端点示例
+# Windows: .venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8788
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8788
 
 # 前端开发模式（/api 代理到 8788）
@@ -84,8 +109,11 @@ cd frontend && npm run build  # 然后打开 http://127.0.0.1:8788
 **Docker**
 
 ```bash
-docker compose up -d --build   # 单容器，端口 8787，数据卷 xiaoman-data
+# 对外提供服务时务必设置 API_TOKEN，否则只允许本机/内网来源
+API_TOKEN=your-token docker compose up -d --build   # 单容器，端口 8787，数据卷 xiaoman-data
 ```
+
+数据库默认落在 `backend/app/data/wealth.db`（`XIAOMAN_DB_PATH` 可覆盖，空值会被忽略并回落到默认路径）。
 
 首次启动为空库，各页有对话式引导；AI 不配置也能完整使用。
 
@@ -96,26 +124,35 @@ docker compose up -d --build   # 单容器，端口 8787，数据卷 xiaoman-dat
 | 前端 | React 19 + Vite + Tailwind 4 · ECharts · TanStack Table · PWA |
 | 后端 | FastAPI + LangGraph 多 Agent 编排 + 确定性分析内核 |
 | 数据 | SQLite（aiosqlite + WAL）· 加密备份（PBKDF2 + Fernet） |
-| AI | LiteLLM 统一接入（OpenAI 兼容端点）· mem0 长记忆 · fastmcp |
+| AI | LiteLLM 统一接入（OpenAI 兼容端点）· 本地 BM25 长记忆 · fastmcp |
 | 行情 | 东方财富 → 新浪 → 本地快照，三级降级 |
 
 ## 架构
 
 ```mermaid
 flowchart LR
-    FE[前端 React 5 页签] --> API[FastAPI REST + SSE + 静态托管]
-    API --> G[LangGraph 编排 supervisor 流水线]
+    FE[前端 React SPA] --> API[FastAPI REST + SSE + 静态托管]
+    API --> G[LangGraph 编排]
     API --> D[财务部门模式 工单并行]
-    G --> T[工具层 17 个确定性工具]
+    G --> T[工具层 22 个财务工具 + 2 个通用工具]
     D --> T
     T --> K[确定性内核 analysis 唯一数字来源]
     T --> DB[(SQLite 本地库)]
     T --> Q[行情三级降级]
     G --> L[LiteLLM 模型接入]
-    G --> M[mem0 长记忆]
+    G --> M[本地 BM25 长记忆，零外发]
+    API --> MCP[MCP Server /mcp · 31 工具]
 ```
 
-原则：**框架编排，内核算数**。模型只出现在分类与成文环节，任一环节失败自动降级到确定性路径，服务不中断、数字不出错。完整架构说明与四张 Mermaid 图见 [docs/architecture.md](docs/architecture.md)。
+原则：**框架编排，内核算数**。模型只出现在分类与成文环节；模型不可用时自动降级到确定性路径，服务不中断、数字不出错。
+
+关键不变量：
+- 写工具对模型不可见（schema 与实现双层剔除），模型无法直接改账本
+- 金额、盈亏、风控指标只由 `analysis` / `calculations` 计算
+- 长记忆完全本地（BM25），记忆内容不出本机
+- 待确认写操作用原子抢占（`claim_pending_action`）保证同一 token 只执行一次
+
+完整架构说明见 [docs/architecture.md](docs/architecture.md)。
 
 ## 仓库结构
 
@@ -129,16 +166,16 @@ backend/app/
   agent_graph.py     LangGraph 图：supervisor + 专项节点 + 条件路由
   department.py      财务部门模式：工单分解 → 并行取数 → 秘书汇总
   analysis.py        确定性内核：持仓 / 现金流 / 负债 / 集中度 / 风控
-  tools.py           Agent 工具层：17 个 function-calling 工具
+  tools.py           Agent 工具层：22 个财务工具 + 2 个通用工具
   quotes.py          行情：东财→新浪→快照 三级降级 + 统一缓存
   nlparse.py         一句话记账：规则引擎 + AI 兜底
   llm.py             LiteLLM 统一模型接入
-  mem.py             mem0 长记忆封装
+  mem.py             长记忆封装（本地 BM25 检索，零网络外发）
   mcp_server.py      MCP Server：财务工具标准化暴露
   backup.py          本地加密备份：口令不落盘
   vault.py / auth.py / scheduler.py / observability.py …
 frontend/src/
-  App.tsx            5 页签布局（桌面顶栏 / 移动底栏）
+  App.tsx            自适应布局：桌面可拖拽侧栏 / 手机底部导航
   components/        ChatView / Dashboard / HoldingsView / MarketView /
                      EntryView / SettingsView / AgentPanel …
   lib/               api / store / i18n（中英）/ charts / format
@@ -165,11 +202,11 @@ docs/                部署 / 配置 / 工作流 / 架构 / 规划文档（见�
 ## 测试
 
 ```bash
-# 后端：546 个测试（内核 / 行情降级 / Agent 循环 / LangGraph / API / 备份往返 / MCP …）
+# 后端：685 个测试（内核 / 行情降级 / Agent 循环 / LangGraph / API / 备份往返 / MCP …）
 cd backend && .venv/bin/python -m pytest tests -q
 cd backend && .venv/bin/python -m ruff check app tests
 
-# 前端：tsc + 构建 + 86 个单测 + 15 项 Playwright e2e
+# 前端：tsc + 构建 + 109 个单测 + Playwright e2e
 cd frontend && npm run build
 cd frontend && npm run test:e2e
 ```

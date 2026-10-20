@@ -13,6 +13,9 @@ from .. import db
 
 router = APIRouter()
 
+# 附件大小上限：文本/CSV 场景 2MB 足够，超过多半是误传二进制
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024
+
 
 # ---------------------------------------------------------------------------
 # 附件（P2 能力扩展）：上传 / 列出 / 删除
@@ -26,7 +29,16 @@ async def attachments(limit: int = 50) -> dict:
 
 @router.post("/api/attachments")
 async def upload_attachment(request: Request) -> dict:
-    """上传附件（multipart/form-data，字段 file）。文本/CSV 直接提取，PDF 走 pypdf（有则用）。"""
+    """上传附件（multipart/form-data，字段 file）。文本/CSV 直接提取。
+
+    不宣称 PDF 支持：没有 PDF 解析依赖时静默把二进制当文本是更糟的体验，
+    这里明确拒绝并给出可行动的提示。
+    """
+    content_type = (request.headers.get("content-type") or "").lower()
+    if not content_type.startswith("multipart/form-data"):
+        return JSONResponse(
+            {"error": "请使用 multipart/form-data 上传（字段名 file）"}, status_code=400
+        )
     try:
         form = await request.form()
     except Exception as exc:  # noqa: BLE001 — 表单解析失败给可读错误
@@ -35,22 +47,30 @@ async def upload_attachment(request: Request) -> dict:
     if upload is None or not hasattr(upload, "filename"):
         return JSONResponse({"error": "缺少 file 字段"}, status_code=400)
     filename = str(upload.filename or "未命名")
-    raw = await upload.read()
+    # 只读上限 +1 字节：既能判断是否超限，又不会把超大文件整块读进内存。
+    # 注意 Starlette 解析 multipart 时已把内容暂存到临时文件/spooled 缓冲，
+    # 所以这里防的是"应用层把整个文件读进内存"，不是网络层的 body 大小
+    # （后者需要反代层限制 client_max_body_size）。
+    raw = await upload.read(MAX_UPLOAD_BYTES + 1)
     size = len(raw)
-    if size > 2 * 1024 * 1024:
-        return JSONResponse({"error": "附件过大（最多 2MB）"}, status_code=400)
-    try:
-        text = raw.decode("utf-8", errors="replace")
-    except Exception:  # noqa: BLE001
-        text = ""
+    if size > MAX_UPLOAD_BYTES:
+        return JSONResponse(
+            {"error": f"附件过大（最多 {MAX_UPLOAD_BYTES // 1024 // 1024}MB）"},
+            status_code=400,
+        )
     lower = filename.lower()
-    kind = "csv" if lower.endswith(".csv") else "text"
+    if lower.endswith(".pdf"):
+        return JSONResponse(
+            {"error": "暂不支持 PDF 解析，请上传 .txt / .md / .csv 文本文件"},
+            status_code=415,
+        )
+    text = raw.decode("utf-8", errors="replace")
     if not text.strip():
         return JSONResponse(
-            {"error": "无法读取该文件内容（仅支持文本/CSV）"}, status_code=400
+            {"error": "无法读取该文件内容（仅支持 UTF-8 文本 / CSV）"}, status_code=400
         )
-    out = await db.add_attachment(filename, kind, size, text)
-    return out
+    kind = "csv" if lower.endswith(".csv") else "text"
+    return await db.add_attachment(filename, kind, size, text)
 
 
 @router.delete("/api/attachments/{att_id}")

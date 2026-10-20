@@ -2,6 +2,52 @@
 
 项目版本号与发布历史。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本语义遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [2.3.0] - 2026-10-20（可用性总修：工具链路、部署、响应式、跨平台）
+
+> 定位：把"能跑"变成"跑对"。本轮以实际运行验证为准，修复了会让核心能力整体失效的缺陷。
+
+### 修复（P0）
+
+- **工具调用整体失效**：LiteLLM 1.106 在带 `tools` 时会导入其内置 MCP 网关，该模块依赖 mcp>=2 才有的 `CacheableResult`，而项目锁定 mcp 1.30（fastmcp 2.x 要求 <2.0）。表现为任何 function calling 直接 ImportError，模型永远拿不到工具。现在显式传 `_skip_mcp_handler=True` 绕开这条未使用的分支。
+- **前端静态托管被遮蔽**：MCP 子应用曾 `Mount("/")`，拦截所有未匹配请求，单端口部署时 `/` 与 `/index.html` 返回 503。改为只挂 `/mcp`，并新增精确路径路由，使 `/mcp` 与 `/mcp/` 都直达（不再 307）。
+- **`/mcp` 鉴权与来源校验**：改为复用主应用同一套判定（口令 + 本机/内网来源 + Host/Origin 白名单），消除"主站有防护、MCP 侧裸奔"的第二信任边界。
+- **MCP 批量导入 100% 失败**：`mcp_server.py` 中 `from ..csvimport` 越界相对导入，改为 `from .csvimport`。
+- **设置页无法保存**：`saveMutate` 从未被调用，月收入/应急目标/储蓄率/晨报时间只改本地 state。新增底部保存栏（含未保存提示与放弃改动）。
+- **首屏 hooks 顺序违规**：`App.tsx` 在部分 hooks 之间条件 return 登录页，已注册实例且无 token 时会白屏。条件 return 移到全部 hooks 之后。
+- **依赖不可解**：`langgraph` 与 `langchain-core<0.4` 约束互斥；移除重复的 `react_agent`（官方 ReAct 包装）后统一走 `agent.run_agent`，依赖树恢复可解。
+- **Docker 数据路径退化**：compose 注入空串导致 `XIAOMAN_DB_PATH=""`，`Path("")` 解析为当前目录。路径解析改为忽略空值并展开相对路径；compose 不再传该变量。
+- **`.env` 泄密路径**：一键脚本把含密钥的 `.env` 写到仓库根但未被忽略，现已在 `.gitignore` 覆盖根目录 `.env`。
+
+### 修复（P1）
+
+- **确认接口可重复执行**：新增 `claim_pending_action` 原子抢占（条件 UPDATE + rowcount 校验），并发/重放只有一方能执行；图内与降级路径都改用它。
+- **成员删除外键失败**：改为先删 `member_loans` 再删 `members`，并包在事务里。
+- **撤回流水外键失败**：`owner_id` 为空时保持 NULL，不再写成 0。
+- **备份不完整**：导出/恢复补齐成员、借贷、自选、溯源、审计五类数据；流水恢复保留 `owner_id`/`is_shared`；格式版本升到 3（兼容读 v2）。
+- **关闭晨报连带关掉订阅巡检**：两者解耦，巡检始终注册。
+- **收益率口径**：简单收益率只把非工资性流入算作追加本金；XIRR 改为"成本投入 → 当前市值"两笔现金流，不再把生活收支混进投资收益。
+- **附件上传必然 400**：前端不再对 FormData 强制注入 JSON Content-Type；后端校验 multipart 并拒绝 PDF（明确告知，而不是把二进制当文本）。
+- **财务快照卡恒为空**：字段名修正为 `total_market_value`，储蓄率不再重复乘 100。
+- **收件箱请求循环**：`markAllRead` 改用 ref 读取最新列表，回调身份稳定，不再触发 effect 反复请求。
+- **Service Worker 永不更新**：构建脚本改为按内容哈希替换 `CACHE` 常量，并可幂等重跑。
+- **行情下跌不显示跌幅**：涨跌额/涨跌幅改用允许负数的解析器。
+- **`/api/health-check` 免鉴权**：从白名单移除（会输出财务体检结论）。
+- **工具层设置键不一致**：补 `lang` 白名单，`morning_report_time` 归一为 `report_time` 并触发调度重排。
+
+### 变更
+
+- **长记忆改为纯本地**：移除 mem0 + chromadb（其 embedder 默认走 OpenAI，记忆内容会离开本机），改用本地 BM25 检索 `user_memory`，接口 `remember/recall` 不变。
+- **删除未接线的规则引擎**：`rules.py` / `settings_rules.py` 全仓无调用，连同测试一并移除。
+- **删除 11 个未使用 UI 组件与 7 个 Radix 依赖**。
+- **可观测性改为零依赖**：移除 OpenTelemetry/Phoenix 依赖，改用标准库记录 LLM/工具耗时，`/api/metrics` 输出平均值/峰值/次数。
+- **响应式**：侧栏与数据面板支持拖拽调宽（持久化、双击复位）；手机端新增底部导航；设置页在窄屏按三组折叠；数据面板在 xl 断点才挤占主区，消除 768–1279 的半遮挡；面板补齐焦点陷阱与焦点归还。
+- **首屏体积**：Dashboard/部门面板/收件箱面板改为懒加载，主包 581KB → 453KB。
+
+### 跨平台
+
+- `scripts/dev.sh`、`scripts/lint.sh`、`scripts/e2e-backend.sh`、`deploy/one-click.sh` 自动探测 `Scripts/python.exe` 与 `bin/python`，Python 命令按 `python3 → python → py` 回退。
+- `start.bat` 支持 `--prod`，自动建 venv 与装依赖；`.gitattributes` 固定 `.bat` 为 CRLF、`.sh` 为 LF。
+
 ## [1.4.0] - 2026-10-07（安全加固 + 前端渲染修复 + 测试覆盖提升 + 订阅/撤回/预算）
 
 > 定位：安全漏洞全面修复；空白页根因治理；CI 真正跑测试；订阅到期巡检+撤回面板+预算/订阅卡片落地。

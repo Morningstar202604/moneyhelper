@@ -56,8 +56,11 @@ async function fetchWithTimeout(path: string, init: RequestInit, timeoutMs: numb
 
 function authHeaders(init: RequestInit): HeadersInit {
   const token = getToken();
+  // FormData/Blob 由浏览器自己带 Content-Type（含 multipart boundary）；
+  // 手动写死 application/json 会把 boundary 覆盖掉，后端解析不到文件。
+  const isForm = typeof FormData !== "undefined" && init.body instanceof FormData;
   return {
-    "Content-Type": "application/json",
+    ...(isForm ? {} : { "Content-Type": "application/json" }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(init.headers ?? {}),
   };

@@ -42,7 +42,7 @@ SETTING_KEYS_ALLOWED = frozenset({
     "quote_source_mode", "report_time", "voice_input", "show_export",
     "expand_process", "show_suggestions", "auto_refresh", "auto_refresh_seconds",
     "compact_numbers", "color_scheme", "default_tab", "savings_goal",
-    "report_focus",
+    "report_focus", "lang",
     "ai_base_url", "ai_api_key", "ai_model",  # 这三个在下方被显式拒绝
 })
 
@@ -531,13 +531,20 @@ async def tool_set_setting(args: dict[str, Any], lang: str = "zh") -> str:
         return "lang must be zh or en" if en else "语言只能是 zh 或 en"
     if key in ("compact_numbers", "show_suggestions") and raw not in ("on", "off"):
         return f"{key} must be on or off" if en else f"{key} 只能是 on 或 off"
-    if key == "morning_report_time" and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", raw):
-        return "Morning report time must be HH:MM (24-hour)" if en else "晨报时间需为 HH:MM（24 小时制）"
+    if key in ("morning_report_time", "report_time"):
+        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", raw):
+            return "Morning report time must be HH:MM (24-hour)" if en else "晨报时间需为 HH:MM（24 小时制）"
+        key = "report_time"  # 模型常用 morning_report_time 说法，统一落到真实键名
     try:
         await db.set_setting(key, raw)
     except Exception as exc:  # noqa: BLE001
         return f"Setting failed: {exc}" if en else f"设置失败：{exc}"
     await invalidate_quotes_cache()
+    if key == "report_time":
+        try:
+            await scheduler.notify_settings_changed()
+        except Exception:  # noqa: BLE001 — 重排失败不影响设置已保存
+            pass
     if en:
         return f"Updated setting: {key} = {raw} (changes that need a restart were applied immediately)."
     return f"已更新设置：{key} = {raw}（下次启动生效的部分已即时应用）。"

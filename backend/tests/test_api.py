@@ -1073,7 +1073,7 @@ async def test_import_backup_roundtrip(client) -> None:
         json={"settings": {"ai_api_key": "sk-secret", "savings_goal": "18"}},
     )
     backup = (await client.get("/api/export")).json()
-    assert str(backup.get("version")) == "2"
+    assert str(backup.get("version")) == "3"  # 3 = 含家庭成员/审计链的当前格式
     assert "sk-secret" not in json.dumps(backup)
 
     # 清空业务表
@@ -1327,7 +1327,7 @@ async def test_agent_behavior_settings(client) -> None:
 async def test_export_and_trend(client) -> None:
     r = await client.get("/api/export")
     body = r.json()
-    assert body["version"] == 2
+    assert body["version"] == 3  # 3 = 含家庭成员/审计链的当前格式
     assert body["positions"] and body["transactions"] and body["settings"]
 
     r = await client.get("/api/trend?months=6")

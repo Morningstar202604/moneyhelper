@@ -94,19 +94,28 @@ async def member_update(member_id: int, **kwargs: Any) -> dict[str, Any]:
 
 
 async def member_delete(member_id: int) -> dict[str, Any]:
-    """移除成员（该成员的流水 owner_id 置 NULL，不级联删除）。"""
+    """移除成员（该成员的流水 owner_id 置 NULL，不级联删除）。
+
+    顺序要求：先删引用方（member_loans），再删被引用方（members）。
+    反序会触发外键约束，导致"有借贷记录的成员永远删不掉"。
+    整体在事务里，任一步失败回滚，不留半截状态。
+    """
     conn = await _conn()
-    # 软切断：该成员的流水不再归属任何人（保持流水不计丢）
-    await conn.execute(
-        "UPDATE transactions SET owner_id=NULL WHERE owner_id=?", (member_id,)
-    )
-    cur = await conn.execute("DELETE FROM members WHERE id=?", (member_id,))
-    # 清理借贷中涉及此成员的行
-    await conn.execute(
-        "DELETE FROM member_loans WHERE from_member_id=? OR to_member_id=?",
-        (member_id, member_id),
-    )
-    await conn.commit()
+    try:
+        await conn.execute("BEGIN")
+        # 软切断：该成员的流水不再归属任何人（保持流水不计丢）
+        await conn.execute(
+            "UPDATE transactions SET owner_id=NULL WHERE owner_id=?", (member_id,)
+        )
+        await conn.execute(
+            "DELETE FROM member_loans WHERE from_member_id=? OR to_member_id=?",
+            (member_id, member_id),
+        )
+        cur = await conn.execute("DELETE FROM members WHERE id=?", (member_id,))
+        await conn.commit()
+    except Exception:
+        await conn.rollback()
+        raise
     return {"ok": True, "deleted": cur.rowcount}
 
 

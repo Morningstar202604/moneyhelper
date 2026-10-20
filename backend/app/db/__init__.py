@@ -95,6 +95,7 @@ from .family import (
 )
 from .goals import add_goal, delete_goal, list_goals, update_goal
 from .history import (
+    claim_pending_action,
     claim_pending_nl,
     clear_conversation_summary,
     clear_history,
@@ -200,6 +201,7 @@ __all__ = [
     "add_watchlist",
     "all_members_summary",
     "budget_usage",
+    "claim_pending_action",
     "claim_pending_nl",
     "clear_audit_logs",
     "clear_conversation_summary",

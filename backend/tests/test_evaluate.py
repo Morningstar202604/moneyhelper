@@ -26,6 +26,9 @@ from app.evaluate import EvalItem
 @pytest.fixture(autouse=True)
 async def _temp_db(tmp_path, monkeypatch):
     monkeypatch.setattr(db._core, "DB_PATH", tmp_path / "wealth.db")
+    # 先关掉上一个测试遗留的连接，再按临时路径重开：
+    # 否则 init_db 会复用那条连接，把数据写进别的测试（或真实）的库。
+    await db.close_db()
     await db.init_db()
     await db.reset_to_seed()
     yield

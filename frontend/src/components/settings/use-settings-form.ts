@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { store, useBootstrap } from "@/lib/store";
 import { useMutate } from "@/lib/use-mutate";
 import { useI18n } from "@/lib/i18n";
 
-/** 「保存设置」按钮覆盖的键（其余开关即时生效、AI 配置走独立保存）。 */
+/** 「保存」批量提交覆盖的键；其余开关即时生效，AI 配置走独立保存。 */
 export const BATCH_KEYS = [
   "monthly_income",
   "emergency_target_months",
@@ -19,10 +19,21 @@ export function useSettingsForm() {
   const { t } = useI18n();
   const { bootstrap } = useBootstrap();
   const [form, setForm] = useState<Record<string, string>>({});
+  const [saved, setSaved] = useState<Record<string, string>>({});
 
+  // bootstrap 变化时同步表单与「已保存快照」：
+  // saved 用来判断是否有未保存改动，不能和 form 共用同一对象引用。
   useEffect(() => {
-    if (bootstrap) setForm({ ...bootstrap.settings });
+    if (!bootstrap) return;
+    const snapshot = { ...bootstrap.settings };
+    setForm(snapshot);
+    setSaved(snapshot);
   }, [bootstrap]);
+
+  const dirty = useMemo(
+    () => BATCH_KEYS.some((k) => (form[k] ?? "") !== (saved[k] ?? "")),
+    [form, saved],
+  );
 
   // hooks 必须无条件调用：bootstrap 为 null 时的 loading 早退放在 hooks 之后
   const saveMutate = useMutate<undefined, void>({
@@ -35,6 +46,7 @@ export function useSettingsForm() {
       });
       if (res.errors.length) throw new Error(`${t("settings.saveFail")}: ${res.errors.join("; ")}`);
       await store.refreshBootstrap();
+      setSaved({ ...form });
       return undefined;
     },
     key: "settings.saved",
@@ -62,7 +74,10 @@ export function useSettingsForm() {
     key: "settings.demoRestored",
   });
 
-  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const set = useCallback((k: string, v: string) => setForm((f) => ({ ...f, [k]: v })), []);
+
+  /** 放弃未保存改动：回到上次保存/加载的快照。 */
+  const resetForm = useCallback(() => setForm({ ...saved }), [saved]);
 
   /** 开关类即改即生效（与外观一致，无需点保存按钮）。 */
   const toggle = (k: string) => {
@@ -79,6 +94,8 @@ export function useSettingsForm() {
     reset,
     set,
     toggle,
+    resetForm,
+    dirty,
   };
 }
 

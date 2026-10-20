@@ -1,3 +1,15 @@
+## 跨平台说明（Windows / Linux / macOS）
+
+- **启动脚本自动适配**：`scripts/dev.sh`、`scripts/lint.sh`、`scripts/e2e-backend.sh`、`deploy/one-click.sh` 会探测 `backend/.venv/Scripts/python.exe`（Windows）或 `backend/.venv/bin/python`（Unix），并按 `python3 → python → py` 回退。
+- **Windows 双击启动**：`start.bat` 自动创建 venv、安装依赖、开两个控制台窗口；`start.bat --prod` 构建前端后单端口运行。
+- **换行符**：`.gitattributes` 固定 `.bat/.cmd/.ps1` 为 CRLF、`.sh` 为 LF。用 Windows 编辑器改脚本时不要顺手改成 CRLF，否则 Linux 侧会报 `bad interpreter`。
+- **文件名大小写**：仓库同时存在 `docs/ARCHITECTURE.md` 与 `docs/architecture.md`。Windows 默认大小写不敏感，克隆后只会落一个文件并显示"已修改"。如需完整还原，对 `docs/` 启用目录级大小写敏感：
+  ```powershell
+  fsutil file setCaseSensitiveInfo docs enable
+  ```
+  然后用 `git checkout -- docs/` 重新检出。
+- **路径**：数据库与备份路径全部经 `Path` 处理，支持 Windows 盘符、UNC 与 Linux 绝对路径；`XIAOMAN_DB_PATH` 为相对路径时按启动目录解析。
+
 # 部署配置指南
 
 > 适用版本：2026-10 收尾版（空库首启 · 对话中枢 · 本地加密备份）。部署前建议先看根目录 `README.zh.md`（中文版）/ `README.md`（English）的快速开始。

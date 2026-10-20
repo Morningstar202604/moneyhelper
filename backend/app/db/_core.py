@@ -37,7 +37,25 @@ from ._schema import (
 
 
 _default_db = Path(__file__).resolve().parent.parent / "data" / "wealth.db"
-DB_PATH = Path(os.getenv("XIAOMAN_DB_PATH", str(_default_db)))
+
+
+def _resolve_db_path() -> Path:
+    """解析数据库路径：环境变量优先，空串视为未设置（compose 的 ${VAR:-} 会注入空串）。
+
+    空串直接交给 Path("") 会退化成当前目录，导致建库失败或写错位置，
+    因此这里显式过滤空值，并展开 ~ 与相对路径。
+    """
+    raw = (os.getenv("XIAOMAN_DB_PATH") or "").strip()
+    if not raw:
+        return _default_db
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        path = (Path.cwd() / path).resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+DB_PATH = _resolve_db_path()
 
 _db: aiosqlite.Connection | None = None
 _inited = False

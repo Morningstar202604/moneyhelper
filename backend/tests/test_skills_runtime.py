@@ -1,7 +1,7 @@
 """技能开关的运行时落点：设置 → Agent 的技能真正生效（而非只存配置）。
 
 覆盖：
-- 内置技能关闭 → 对应 agent 工具从工具面移除（react 路径实测）
+- 内置技能关闭 → 对应 agent 工具从工具面移除
 - 「长期记忆」关闭 → 「记住…」明确回执且不写入；开启 → 正常写入
 - 自定义技能（AI 生成）启用 → 注入 agent 个性化指令块；关闭/内置技能不进注入
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 
-from app import agent_config, db, react_agent
+from app import agent, agent_config, db
 
 
 async def _set_skill(temp_db, skill_id: str, enabled: bool, *, name: str = "", desc: str = "") -> None:
@@ -21,13 +21,20 @@ async def _set_skill(temp_db, skill_id: str, enabled: bool, *, name: str = "", d
     await db.set_setting("agent_config", json.dumps(cfg, ensure_ascii=False))
 
 
+async def _supervisor_tool_names() -> set[str]:
+    """按 agent.run_agent 的实际装配规则算出工具名集合。"""
+    names = {t["function"]["name"] for t in agent.READ_TOOLS}
+    names -= await agent_config.disabled_tool_names()
+    return names
+
+
 async def test_disabled_builtin_skill_removes_tools(temp_db) -> None:
-    """关闭「风险体检」→ react 工具面不再有 get_risk_flags / get_health_check。"""
-    names_before = {t.name for t in await react_agent._build_finance_tools("supervisor")}
+    """关闭「风险体检」→ 工具面不再有 get_risk_flags / get_health_check。"""
+    names_before = await _supervisor_tool_names()
     assert {"get_risk_flags", "get_health_check"} <= names_before
 
     await _set_skill(temp_db, "risk_analysis", False)
-    names_after = {t.name for t in await react_agent._build_finance_tools("supervisor")}
+    names_after = await _supervisor_tool_names()
     assert "get_risk_flags" not in names_after
     assert "get_health_check" not in names_after
     # 其他只读工具不受影响（开关粒度正确）
@@ -36,7 +43,7 @@ async def test_disabled_builtin_skill_removes_tools(temp_db) -> None:
 
 async def test_disabled_goals_skill_removes_tool(temp_db) -> None:
     await _set_skill(temp_db, "goals_tracking", False)
-    names = {t.name for t in await react_agent._build_finance_tools("supervisor")}
+    names = await _supervisor_tool_names()
     assert "get_goals" not in names
 
 

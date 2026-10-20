@@ -631,6 +631,11 @@ export function Dashboard({
   const cf = dashboard.cashflow;
   const cash = dashboard.positions.filter((p) => p.kind === "现金").reduce((s, p) => s + p.cost, 0);
   const todayPnl = dashboard.today_pnl.total;
+  // 今日收益率的分母要用「非现金持仓成本」：后端 today_pnl 明确排除现金，
+  // 用含现金的 total_cost 当分母会把收益率系统性压低。
+  const nonCashCost = dashboard.positions
+    .filter((p) => p.kind !== "现金")
+    .reduce((s, p) => s + p.cost * p.shares, 0);
   // 是否有非现金持仓：无持仓时「资产分布」占满整行，避免两列 grid 只渲染一列导致右侧大留白
   const hasNonCash = dashboard.positions.some((p) => p.kind !== "现金");
 
@@ -702,7 +707,7 @@ export function Dashboard({
         <StatCell
           label={tr("dash.todayPnl")}
           value={fmtMoney(todayPnl, true, compact)}
-          sub={fmtPct(todayPnl && t.total_cost ? todayPnl / t.total_cost * 100 : 0, true)}
+          sub={fmtPct(todayPnl && nonCashCost ? (todayPnl / nonCashCost) * 100 : 0, true)}
           tone={todayPnl >= 0 ? "up" : "down"}
         />
         <StatCell label={tr("dash.totalPnl")} value={fmtMoney(t.total_pnl, true, compact)} sub={fmtPct(t.total_pnl_pct, true)} tone={t.total_pnl >= 0 ? "up" : "down"} />

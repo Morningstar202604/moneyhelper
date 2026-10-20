@@ -30,6 +30,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from . import agent_config, db, llm, mcp_client, tools
+from .observability import timed
 
 # 写类工具已被确定性分支覆盖（记账/记忆/买卖/设置/备份/晨报都有前置 action/record/memory
 # 节点拦截），agent 模式只暴露读类 + 自选维护工具，防止模型在追问/分析语境里越权落库。
@@ -328,13 +329,14 @@ async def run_agent(
             pass
     for _turn in range(turn_cap):
         try:
-            resp = await client.chat.completions.create(
-                model=cfg["model"] or "gpt-4o-mini",  # model 可留空 → 用默认，与 stream_narrate 一致
-                messages=messages,
-                tools=tool_schemas,
-                tool_choice="auto",
-                temperature=0.2,
-            )
+            with timed("llm.tool_loop", model=cfg.get("model", ""), turn=_turn):
+                resp = await client.chat.completions.create(
+                    model=cfg["model"] or "gpt-4o-mini",  # model 可留空 → 用默认，与 stream_narrate 一致
+                    messages=messages,
+                    tools=tool_schemas,
+                    tool_choice="auto",
+                    temperature=0.2,
+                )
         except Exception as exc:  # noqa: BLE001 — 端点失败/不支持 tools → 降级
             raise AgentUnavailable(f"模型调用失败：{type(exc).__name__}") from exc
 
@@ -409,9 +411,11 @@ async def run_agent(
             try:
                 if mcp_hit is not None:
                     # MCP 工具调用（外部服务器）
-                    result = await mcp_client.call_mcp_tool(mcp_hit[0], mcp_hit[1], args)
+                    with timed(f"mcp.{mcp_hit[1]}", tool=name):
+                        result = await mcp_client.call_mcp_tool(mcp_hit[0], mcp_hit[1], args)
                 else:
-                    result = tools.truncate_tool_result(await impl(args))
+                    with timed(f"tool.{name}", tool=name):
+                        result = tools.truncate_tool_result(await impl(args))
                 status = "done"
             except Exception as exc:  # noqa: BLE001 — 工具失败回填错误，不让循环崩
                 result = f"工具执行失败：{type(exc).__name__}: {exc}"
@@ -458,4 +462,25 @@ async def run_agent(
             # 兼容旧契约：agent_step 仍发（summary 聚合）
             await emit({"type": "agent_step", "name": name, "args": args, "summary": summary})
 
+    # 轮次用尽：不要让整次问答作废。这里再给一次"禁止调工具"的收尾请求，
+    # 让模型基于已取到的工具结果成文；失败才抛出降级。
+    wrap_up = [
+        *messages,
+        {
+            "role": "system",
+            "content": "工具调用轮次已用尽。请基于上面已经拿到的工具结果直接回答，不要再请求调用工具；"
+            "如果信息不足，就说明缺少什么。",
+        },
+    ]
+    try:
+        final = await _stream_final_answer(client, cfg, wrap_up, None, emit)
+    except Exception:  # noqa: BLE001 — 收尾失败走调用方降级
+        final = ""
+    if final:
+        return {
+            "answer": final,
+            "steps": steps,
+            "tools_used": sorted({s["name"] for s in steps}),
+            "llm": "llm",
+        }
     raise AgentUnavailable(f"工具循环超过 {MAX_TURNS} 轮未收敛")

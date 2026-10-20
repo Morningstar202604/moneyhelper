@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { ChevronDown } from "lucide-react";
 import {
   Bot, Brain, BrainCog, KeyRound, Newspaper, PiggyBank, ScrollText, ShieldCheck, SlidersHorizontal, Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDashboard } from "@/lib/store";
 import { useI18n } from "@/lib/i18n";
+import { useIsDesktop } from "@/lib/use-media-query";
 import { useSettingsForm, type SectionId } from "@/components/settings/use-settings-form";
 import { PrefsSection } from "@/components/settings/PrefsSection";
 import { RulesSection } from "@/components/settings/RulesSection";
@@ -17,6 +19,7 @@ import { DataSection } from "@/components/settings/DataSection";
 import { TokenSection } from "@/components/settings/TokenSection";
 import { LogsSection } from "@/components/settings/LogsSection";
 import { AuditSection } from "@/components/settings/AuditSection";
+import { Button } from "@/components/ui/button";
 import { AgentSection } from "@/components/settings/AgentSection";
 
 const SECTIONS: { id: SectionId; labelKey: string; icon: typeof Wallet }[] = [
@@ -33,44 +36,96 @@ const SECTIONS: { id: SectionId; labelKey: string; icon: typeof Wallet }[] = [
   { id: "audit", labelKey: "settings.navAudit", icon: ShieldCheck },
 ];
 
+const SECTION_GROUPS: { key: string; ids: SectionId[] }[] = [
+  { key: "settings.groupGeneral", ids: ["prefs", "rules", "budget"] },
+  { key: "settings.groupAi", ids: ["ai", "agent", "report", "memory"] },
+  { key: "settings.groupData", ids: ["data", "token", "logs", "audit"] },
+];
+
 export function SettingsView() {
   const { t } = useI18n();
   const { dashboard } = useDashboard();
-  const { bootstrap, form, toggleMutate, reset, set, toggle } = useSettingsForm();
+  const isDesktop = useIsDesktop();
+  const { bootstrap, form, saveMutate, toggleMutate, reset, set, toggle, resetForm, dirty } = useSettingsForm();
 
   // active tab 状态很小，直接放组件内即可
   const [active, setActive] = useState<SectionId>("prefs");
+  // 手机端：分组折叠。桌面端常开侧栏，这个状态不参与渲染。
+  const [openGroup, setOpenGroup] = useState<string | null>("settings.groupGeneral");
 
   if (!bootstrap) {
     return <div className="p-8 text-center text-sm text-muted-foreground">{t("settings.loading")}</div>;
   }
 
+  const sectionButton = (s: (typeof SECTIONS)[number]) => {
+    const Icon = s.icon;
+    const on = active === s.id;
+    return (
+      <button
+        key={s.id}
+        type="button"
+        aria-current={on ? "page" : undefined}
+        // 不在这里收起分组：同组切换是高频操作，收起会让用户每次都要重新展开
+        onClick={() => setActive(s.id)}
+        className={cn(
+          "flex flex-row items-center gap-1.5 rounded-lg px-2 py-2 text-xs transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          on
+            ? "bg-accent text-accent-foreground font-medium"
+            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+        )}
+      >
+        <Icon className="w-4 h-4 shrink-0" />
+        <span className="truncate">{t(s.labelKey)}</span>
+      </button>
+    );
+  };
+
   return (
     <div className="md:flex md:items-start md:gap-3">
-      <nav className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-1 gap-1.5 md:w-48 md:shrink-0 md:sticky md:top-4 mb-3 md:mb-0">
-        {SECTIONS.map((s) => {
-          const Icon = s.icon;
-          const on = active === s.id;
-          return (
-            <button
-              key={s.id}
-              type="button"
-              aria-current={on ? "page" : undefined}
-              onClick={() => setActive(s.id)}
-              className={cn(
-                "flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 rounded-lg px-2 py-2 text-xs transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                on
-                  ? "bg-accent text-accent-foreground font-medium"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-              )}
-            >
-              <Icon className="w-4 h-4 shrink-0" />
-              <span className="truncate">{t(s.labelKey)}</span>
-            </button>
-          );
-        })}
-      </nav>
+      {/* 手机/平板：分组折叠。一次只展开一组，避免 11 个入口同时铺满首屏。
+          用条件渲染而不是 md:hidden：隐藏的 DOM 仍会被读屏与自动化工具命中，
+          同一入口出现两份可访问副本（与移动抽屉同一类问题）。 */}
+      {!isDesktop && (
+        <nav aria-label={t("nav.main")} className="mb-3 space-y-1">
+          {SECTION_GROUPS.map((g) => {
+            const ids = new Set<SectionId>(g.ids);
+            const items = SECTIONS.filter((s) => ids.has(s.id));
+            const expanded = openGroup === g.key;
+            const containsActive = items.some((s) => s.id === active);
+            return (
+              <div key={g.key} className="rounded-lg border border-border">
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  onClick={() => setOpenGroup(expanded ? null : g.key)}
+                  className="flex w-full items-center justify-between px-3 py-2 text-sm"
+                >
+                  <span className={cn("font-medium", containsActive && "text-primary")}>{t(g.key)}</span>
+                  <ChevronDown
+                    className={cn("h-4 w-4 text-muted-foreground transition-transform", expanded && "rotate-180")}
+                  />
+                </button>
+                {expanded && (
+                  <div className="grid grid-cols-2 gap-1 border-t border-border p-1.5">
+                    {items.map((s) => sectionButton(s))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </nav>
+      )}
+
+      {/* 桌面：常驻侧栏 */}
+      {isDesktop && (
+        <nav
+          aria-label={t("nav.main")}
+          className="w-48 shrink-0 sticky top-4 grid grid-cols-1 gap-1.5"
+        >
+          {SECTIONS.map((s) => sectionButton(s))}
+        </nav>
+      )}
 
       <motion.div
         key={active}
@@ -127,6 +182,25 @@ export function SettingsView() {
         {active === "logs" && <LogsSection />}
 
         {active === "audit" && <AuditSection />}
+
+        {dirty && (
+          <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-between gap-3 border-t border-border bg-background/95 px-3 py-2 backdrop-blur">
+            <span className="text-xs text-muted-foreground">{t("settings.unsavedHint")}</span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => resetForm()}
+                disabled={saveMutate.isPending}
+              >
+                {t("settings.discard")}
+              </Button>
+              <Button size="sm" onClick={() => void saveMutate.mutate(undefined)} disabled={saveMutate.isPending}>
+                {saveMutate.isPending ? t("settings.saving") : t("settings.saveSettings")}
+              </Button>
+            </div>
+          </div>
+        )}
       </motion.div>
     </div>
   );

@@ -106,7 +106,10 @@ async def _restore_from_snapshot(
         amt = data.get("amount")
         if not all([d, it, cat]) or amt is None:
             raise ValueError(f"transaction 快照字段不完整：{before_json[:120]!r}")
-        owner_id = data.get("owner_id") or 0
+        # owner_id 必须原样恢复：None 表示"无归属"，写成 0 会违反外键
+        # （transactions.owner_id REFERENCES members(id)，members 没有 id=0）。
+        owner_raw = data.get("owner_id")
+        owner_id = int(owner_raw) if owner_raw not in (None, "", 0, "0") else None
         is_shared = 1 if data.get("is_shared") else 0
         await conn.execute(
             "INSERT OR REPLACE INTO transactions(id,date,item,category,amount,owner_id,is_shared)"

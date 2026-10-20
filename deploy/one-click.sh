@@ -101,20 +101,32 @@ fi
 # 本机模式
 # ---------------------------------------------------------------------------
 say "检查依赖"
-command -v python3 >/dev/null 2>&1 || die "缺少 python3（需 3.10+）"
+# Python 命令按平台探测：Windows 常只有 python，没有 python3
+PYCMD=""
+for c in python3 python py; do
+  if command -v "$c" >/dev/null 2>&1; then PYCMD="$c"; break; fi
+done
+[ -n "$PYCMD" ] || die "缺少 Python（需 3.10+）"
 command -v node >/dev/null 2>&1 || die "缺少 node（需 18+）"
 
 BACKEND="$ROOT/backend"
 FRONTEND="$ROOT/frontend"
 
-if [ ! -x "$BACKEND/.venv/bin/python" ]; then
-  say "创建虚拟环境"
-  python3 -m venv "$BACKEND/.venv"
-fi
+venv_py() {
+  if [ -x "$BACKEND/.venv/bin/python" ]; then echo "$BACKEND/.venv/bin/python"
+  elif [ -x "$BACKEND/.venv/Scripts/python.exe" ]; then echo "$BACKEND/.venv/Scripts/python.exe"
+  else echo ""; fi
+}
 
-if ! "$BACKEND/.venv/bin/python" -c "import fastapi, uvicorn, aiosqlite" >/dev/null 2>&1; then
+if [ -z "$(venv_py)" ]; then
+  say "创建虚拟环境"
+  "$PYCMD" -m venv "$BACKEND/.venv"
+fi
+VPY="$(venv_py)"
+
+if ! "$VPY" -c "import fastapi, uvicorn, aiosqlite" >/dev/null 2>&1; then
   say "安装后端依赖（国内镜像）"
-  "$BACKEND/.venv/bin/pip" install -q -i https://pypi.tuna.tsinghua.edu.cn/simple \
+  "$VPY" -m pip install -q -i https://pypi.tuna.tsinghua.edu.cn/simple \
     -r "$BACKEND/requirements.txt"
 fi
 
@@ -132,4 +144,4 @@ echo "  按 Ctrl+C 停止"
 echo "  API 文档：http://127.0.0.1:${PORT}/docs"
 echo
 cd "$BACKEND"
-exec .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port "$PORT"
+exec "$VPY" -m uvicorn app.main:app --host 0.0.0.0 --port "$PORT"

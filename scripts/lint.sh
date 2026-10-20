@@ -4,12 +4,18 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PY="$ROOT/backend/.venv/bin/python"
+# Windows 的 venv 在 Scripts/，Unix 在 bin/：按存在性选择
+if [ -x "$ROOT/backend/.venv/bin/python" ]; then
+  PY="$ROOT/backend/.venv/bin/python"
+elif [ -x "$ROOT/backend/.venv/Scripts/python.exe" ]; then
+  PY="$ROOT/backend/.venv/Scripts/python.exe"
+else
+  echo "✗ 找不到虚拟环境解释器（先跑 scripts/dev.sh 初始化）" >&2
+  exit 1
+fi
 
 fail() { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 ok()   { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
-
-[ -x "$PY" ] || fail "找不到 backend/.venv/bin/python"
 
 cd "$ROOT/backend"
 "$PY" -m ruff check app tests || fail "ruff: backend/app + tests"

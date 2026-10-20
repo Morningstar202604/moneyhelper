@@ -37,7 +37,7 @@ The other tabs (Overview / Holdings / Market / Ledger) are views of the conversa
 - **Model-agnostic**: unified access via LiteLLM — DeepSeek / Doubao / Qwen / Claude / OpenAI / Gemini, with automatic failover. Fully usable without any model configured.
 - **Multi-agent orchestration**: a LangGraph graph (supervisor pipeline), plus a "finance department mode" that splits one request into tickets, runs departments in parallel, and summarizes for approval.
 - **MCP protocol**: all finance tools are exposed as a standard MCP Server via fastmcp — Claude Code / Cursor can query your local data directly.
-- **Long-term memory**: mem0 handles preference extraction and updates across sessions.
+- **Long-term memory**: preferences live in a local table and are recalled with BM25; memory never leaves the machine.
 - **3-level quote fallback**: Eastmoney → Sina → local snapshot, clearly labeled when offline.
 - **PWA**: installable on desktop and mobile.
 
@@ -56,7 +56,7 @@ Requirements: Python 3.10+, Node.js 18+.
 **One-click (recommended)**
 
 ```bash
-scripts/dev.sh        # macOS / Linux — backend 8788 + frontend 5198
+scripts/dev.sh        # Windows (Git Bash) / macOS / Linux — backend 8788 + frontend 5198
 start.bat             # Windows
 ```
 
@@ -92,14 +92,14 @@ A fresh database starts empty with chat-style onboarding; everything works witho
 | Frontend | React 19 + Vite + Tailwind 4 · ECharts · TanStack Table · PWA |
 | Backend | FastAPI + LangGraph multi-agent orchestration + deterministic engine |
 | Data | SQLite (aiosqlite + WAL) · encrypted backups (PBKDF2 + Fernet) |
-| AI | LiteLLM unified access · mem0 long-term memory · fastmcp |
+| AI | LiteLLM unified access · local BM25 long-term memory · fastmcp |
 | Quotes | Eastmoney → Sina → local snapshot, 3-level fallback |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    FE[React frontend, 5 tabs] --> API[FastAPI REST + SSE + static hosting]
+    FE[React SPA] --> API[FastAPI REST + SSE + static hosting]
     API --> G[LangGraph orchestration, supervisor pipeline]
     API --> D[Finance department mode, parallel tickets]
     G --> T[Tool layer, 17 deterministic tools]
@@ -108,7 +108,7 @@ flowchart LR
     T --> DB[(Local SQLite)]
     T --> Q[3-level quote fallback]
     G --> L[LiteLLM model access]
-    G --> M[mem0 long-term memory]
+    G --> M[local BM25 memory]
 ```
 
 Principle: **the framework orchestrates; the engine computes**. The model only appears at classification and finalization; any failure degrades to the deterministic path. Full architecture with diagrams: [docs/architecture.md](docs/architecture.md).
@@ -129,7 +129,7 @@ backend/app/
   quotes.py          Quotes: Eastmoney → Sina → snapshot fallback + cache
   nlparse.py         One-sentence bookkeeping: rule engine + AI fallback
   llm.py             LiteLLM unified model access
-  mem.py             mem0 long-term memory wrapper
+  mem.py             long-term memory (local BM25, no network)
   mcp_server.py      MCP Server exposing finance tools
   backup.py          Local encrypted backup, passphrase never stored
 frontend/src/
@@ -159,7 +159,7 @@ docs/                Deploy / config / workflow / architecture / planning
 ## Tests
 
 ```bash
-# Backend: 546 tests (engine / quote fallback / agent loop / LangGraph / API / backup / MCP ...)
+# Backend: 685 tests (engine / quote fallback / agent loop / LangGraph / API / backup / MCP ...)
 cd backend && .venv/bin/python -m pytest tests -q
 cd backend && .venv/bin/python -m ruff check app tests
 

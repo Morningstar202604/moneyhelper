@@ -39,7 +39,11 @@ die()  { printf '\033[1;31m错误:\033[0m %s\n' "$*" >&2; exit 1; }
 [ -f backend/app/version.py ] || die "找不到 backend/app/version.py（版本单一真源）"
 
 if [ -n "$(git status --porcelain)" ]; then
-  die "工作区有未提交改动，先提交或 stash 再发版"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    warn "工作区有未提交改动；--dry-run 只做预演，不会改动任何文件"
+  else
+    die "工作区有未提交改动，先提交或 stash 再发版"
+  fi
 fi
 
 CURRENT=$(grep -m1 '^__version__' backend/app/version.py | sed -E 's/.*"([^"]+)".*/\1/')

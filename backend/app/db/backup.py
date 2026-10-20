@@ -47,7 +47,7 @@ async def export_data() -> dict[str, Any]:
     if settings.get("ai_api_key"):
         settings["ai_api_key"] = "********"
     return {
-        "version": 2,
+        "version": 3,
         "exported_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "positions": await list_positions(),
         "transactions": await list_transactions(),
@@ -59,6 +59,13 @@ async def export_data() -> dict[str, Any]:
         "settings": settings,
         "sessions": await list_sessions(),
         "runs": runs,
+        # 家庭/协作数据：漏掉这些表会导致恢复后"成员消失、流水失去归属"
+        "members": await fetch_all("SELECT * FROM members ORDER BY id"),
+        "member_loans": await fetch_all("SELECT * FROM member_loans ORDER BY id"),
+        "watchlist": await fetch_all("SELECT * FROM watchlist ORDER BY symbol"),
+        # 审计与溯源链：备份要能支撑"恢复后仍可追责"
+        "provenance": await fetch_all("SELECT * FROM provenance_log ORDER BY id"),
+        "audit": await fetch_all("SELECT * FROM audit_logs ORDER BY id"),
     }
 
 
@@ -109,6 +116,11 @@ async def _import_backup_locked(
             "user_memory",
             "runs",
             "sessions",
+            "member_loans",
+            "members",
+            "watchlist",
+            "provenance_log",
+            "audit_logs",
         ):
             await conn.execute(f"DELETE FROM {t}")
 
@@ -119,11 +131,14 @@ async def _import_backup_locked(
             "INSERT INTO positions(symbol,name,kind,industry,shares,cost,last,buy_date,fee)"
             " VALUES(:symbol,:name,:kind,:industry,:shares,:cost,:last,:buy_date,:fee)",
         )
+        # 还原完整流水字段：只写 date/item/category/amount 会丢成员归属与共享标记，
+        # 恢复后家庭视图与按成员统计全部失真。
         counts["transactions"] = await _restore_table(
             conn,
             "transactions",
             data.get("transactions"),
-            "INSERT INTO transactions(date,item,category,amount) VALUES(:date,:item,:category,:amount)",
+            "INSERT INTO transactions(date,item,category,amount,owner_id,is_shared)"
+            " VALUES(:date,:item,:category,:amount,:owner_id,:is_shared)",
         )
         counts["subscriptions"] = await _restore_table(
             conn,
@@ -156,6 +171,43 @@ async def _import_backup_locked(
             data.get("memory"),
             "INSERT INTO user_memory(content,kind,created_at,updated_at)"
             " VALUES(:content,:kind,:created_at,:updated_at)",
+        )
+
+        # 家庭成员与借贷：必须先 members 后 member_loans（外键方向）。
+        # 保留原 id，否则流水的 owner_id 会指向不存在的成员。
+        counts["members"] = await _restore_table(
+            conn,
+            "members",
+            data.get("members"),
+            "INSERT INTO members(id,username,display_name,role,avatar_color,created_at)"
+            " VALUES(:id,:username,:display_name,:role,:avatar_color,:created_at)",
+        )
+        counts["member_loans"] = await _restore_table(
+            conn,
+            "member_loans",
+            data.get("member_loans"),
+            "INSERT INTO member_loans(id,from_member_id,to_member_id,amount,currency,note,settled,created_at,settled_at)"
+            " VALUES(:id,:from_member_id,:to_member_id,:amount,:currency,:note,:settled,:created_at,:settled_at)",
+        )
+        counts["watchlist"] = await _restore_table(
+            conn,
+            "watchlist",
+            data.get("watchlist"),
+            "INSERT INTO watchlist(symbol,name,kind,created_at) VALUES(:symbol,:name,:kind,:created_at)",
+        )
+        counts["provenance"] = await _restore_table(
+            conn,
+            "provenance_log",
+            data.get("provenance"),
+            "INSERT INTO provenance_log(id,timestamp,action,entity_type,entity_id,before_json,after_json,source,username,metadata_json)"
+            " VALUES(:id,:timestamp,:action,:entity_type,:entity_id,:before_json,:after_json,:source,:username,:metadata_json)",
+        )
+        counts["audit"] = await _restore_table(
+            conn,
+            "audit_logs",
+            data.get("audit"),
+            "INSERT INTO audit_logs(ts,action,method,path,status,actor,detail,duration_ms)"
+            " VALUES(:ts,:action,:method,:path,:status,:actor,:detail,:duration_ms)",
         )
 
         # 设置：整表覆盖，但 AI Key 永不恢复（明文 Key 不进备份/恢复链路）

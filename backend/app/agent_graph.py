@@ -49,7 +49,6 @@ from . import (
     mem,
     nlparse,
     quotes,
-    react_agent,
     service,
     tools,
 )
@@ -309,8 +308,7 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
         # claim 失败（已被并发回执消费）或原句不可解析：落回常规路由，不重复入账
 
     # 长记忆 recall：把用户历史相关记忆注入 state，供后续节点参考
-    # （mem0 不可用——如无 embedding 凭据——自动降级为旧 user_memory 表检索；
-    #  技能开关关闭时不召回，隐私与开关口径一致）
+    # （纯本地 BM25 检索，零网络；技能关闭时不召回，隐私与开关口径一致）
     from . import agent_config
 
     long_mem_on = await agent_config.is_skill_enabled("long_memory")
@@ -338,13 +336,9 @@ async def supervisor(state: AgentState) -> dict[str, Any]:
 
     # 记忆指令其次（先于记账）：「记住/记得 …」明确是记忆意图，
     # 否则「记住我下个月要交房租 5000」会被一句话记账当成支出入账。
+    # 写入只由 memory 节点做一次（它负责剥离「记住」前缀、去重与技能开关回执）；
+    # 路由层不再重复写，避免同一句话存两条。
     if service._looks_like_memory(q):
-        # 真正写入 mem0 长记忆（不是只返回路由，而是真存）；技能关闭时跳过写入，
-        # 由 memory 节点产出「已关闭」的明确回执（见 service._try_save_memory）
-        if long_mem_on:
-            await asyncio.to_thread(
-                mem.remember, q
-            )  # mem0 内部含网络调用，避免阻塞事件循环
         reason_mem = (
             "Recognized as a memory instruction — saving to long-term memory"
             if state.get("lang") == "en"
@@ -581,46 +575,62 @@ async def action(state: AgentState) -> dict[str, Any]:
             }
         )
         if isinstance(decision, dict) and decision.get("decision") == "confirm":
-            pending = await db.get_pending_action(token)
-            if pending:
-                impl = tools.TOOL_IMPL.get(pending["tool_name"])
-                if impl is not None:
-                    try:
-                        ans = await impl(pending["args"])
-                        await db.mark_pending_action(token, "consumed")
-                        result = {
-                            "answer": ans,
-                            "level": "已执行",
-                            "route": "action",
-                            "route_reason": (
-                                "Write action confirmed by human (LangGraph interrupt/resume)"
-                                if en
-                                else "写操作已人工确认（LangGraph interrupt/resume）"
-                            ),
-                            "metrics": {},
-                            "flags": [],
-                            "llm": "tool",
-                            "tools": [pending["tool_name"]],
-                            "actions": [{"tab": "holdings"}],
-                        }
-                    except Exception as exc:  # noqa: BLE001 — 执行失败给可读回执
-                        await db.mark_pending_action(token, "cancelled")
-                        result = {
-                            "answer": (
-                                f"Execution failed: {type(exc).__name__}: {exc}"
-                                if en
-                                else f"执行失败：{type(exc).__name__}: {exc}"
-                            ),
-                            "level": "失败",
-                            "route": "action",
-                            "route_reason": (
-                                "Write action failed" if en else "写操作执行异常"
-                            ),
-                            "metrics": {},
-                            "flags": [],
-                            "llm": "tool",
-                            "tools": [pending["tool_name"]],
-                        }
+            # 原子抢占：抢占失败说明这条 token 已被别的请求消费（并发/重放），
+            # 直接返回"已失效"，绝不重复执行写操作。
+            pending = await db.claim_pending_action(token)
+            if pending is None:
+                result = {
+                    "answer": (
+                        "This action was already executed or has expired — nothing was run again."
+                        if en
+                        else "该操作已执行或已失效，未重复执行。"
+                    ),
+                    "level": "已失效",
+                    "route": "action",
+                    "route_reason": "Pending action already consumed" if en else "待确认动作已被消费",
+                    "metrics": {},
+                    "flags": [],
+                    "llm": "tool",
+                    "tools": [],
+                }
+                return {"result": result}
+            impl = tools.TOOL_IMPL.get(pending["tool_name"])
+            if impl is not None:
+                try:
+                    ans = await impl(pending["args"])
+                    result = {
+                        "answer": ans,
+                        "level": "已执行",
+                        "route": "action",
+                        "route_reason": (
+                            "Write action confirmed by human (LangGraph interrupt/resume)"
+                            if en
+                            else "写操作已人工确认（LangGraph interrupt/resume）"
+                        ),
+                        "metrics": {},
+                        "flags": [],
+                        "llm": "tool",
+                        "tools": [pending["tool_name"]],
+                        "actions": [{"tab": "holdings"}],
+                    }
+                except Exception as exc:  # noqa: BLE001 — 执行失败给可读回执
+                    await db.mark_pending_action(token, "failed")
+                    result = {
+                        "answer": (
+                            f"Execution failed: {type(exc).__name__}: {exc}"
+                            if en
+                            else f"执行失败：{type(exc).__name__}: {exc}"
+                        ),
+                        "level": "失败",
+                        "route": "action",
+                        "route_reason": (
+                            "Write action failed" if en else "写操作执行异常"
+                        ),
+                        "metrics": {},
+                        "flags": [],
+                        "llm": "tool",
+                        "tools": [pending["tool_name"]],
+                    }
         else:
             await db.mark_pending_action(token, "cancelled")
             result = {
@@ -890,16 +900,9 @@ async def finalize(state: AgentState) -> dict[str, Any]:
         # 模型不可用/调用失败抛 AgentUnavailable → 图内降级确定性模板成文（不中断、不冒充）。
         try:
             history = await service._build_history(tid)
-            # 优先用 LangGraph 官方 create_react_agent；失败降级手写 loop
-            try:
-                result = await react_agent.run_react_agent(
-                    q, agent.AGENT_SYSTEM, state.get("lang", "zh")
-                )
-            except Exception as react_err:
-                log.warning("react_agent.fallback: %s — 降级手写 run_agent", react_err)
-                result = await agent.run_agent(
-                    q, _emit, history, state.get("lang", "zh")
-                )
+            result = await agent.run_agent(
+                q, _emit, history, state.get("lang", "zh")
+            )
             live = state.get("live")
             if live is None:
                 live = await quotes.live_quotes(positions)

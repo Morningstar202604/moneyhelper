@@ -400,11 +400,45 @@ async def get_pending_action(token: str) -> dict[str, Any] | None:
     }
 
 
+async def claim_pending_action(token: str) -> dict[str, Any] | None:
+    """原子地把 pending 动作置为 consumed 并返回其内容；已被占用/失效返回 None。
+
+    为什么需要：确认流程是"取出来 → 执行 → 标记"，三步之间如果有第二条请求
+    进来，就会重复执行同一笔买入/记账（不可逆）。这里用带条件的 UPDATE 抢占，
+    只有 rowcount==1 的调用者拿到执行权，天然互斥（进程内锁 + 多进程都成立）。
+    """
+    rows = await fetch_all(
+        "SELECT * FROM pending_actions WHERE token=? AND status='pending'", (token,)
+    )
+    if not rows:
+        return None
+    row = rows[0]
+    if str(row["expires_at"] or "") < _now_iso():
+        await mark_pending_action(token, "expired")
+        return None
+    conn = await _conn()
+    cur = await conn.execute(
+        "UPDATE pending_actions SET status='consumed' WHERE token=? AND status='pending'",
+        (token,),
+    )
+    await conn.commit()
+    if cur.rowcount != 1:
+        return None
+    return {
+        "token": row["token"],
+        "tool_name": row["tool_name"],
+        "args": json.loads(row["args"] or "{}"),
+        "summary": row["summary"],
+        "lang": row.get("lang") or "zh",
+        "expires_at": row["expires_at"],
+    }
+
+
 async def mark_pending_action(token: str, status: str) -> dict[str, Any]:
     conn = await _conn()
-    await conn.execute(
+    cur = await conn.execute(
         "UPDATE pending_actions SET status=? WHERE token=? AND status='pending'",
         (status, token),
     )
     await conn.commit()
-    return {"ok": True}
+    return {"ok": True, "changed": cur.rowcount}

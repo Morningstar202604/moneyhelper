@@ -407,7 +407,7 @@ function BubbleInner({
                           <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
                             <div className="text-[11px] text-muted-foreground">总市值</div>
                             <div className="text-sm font-semibold tabular-nums">
-                              {market.total_value ? `¥${(market.total_value / 10000).toFixed(1)}万` : "—"}
+                              {market.total_market_value ? `¥${(market.total_market_value / 10000).toFixed(1)}万` : "—"}
                             </div>
                           </div>
                           <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
@@ -425,7 +425,8 @@ function BubbleInner({
                           <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
                             <div className="text-[11px] text-muted-foreground">储蓄率</div>
                             <div className="text-sm font-semibold tabular-nums">
-                              {ledger.savings_rate != null ? `${(ledger.savings_rate * 100).toFixed(0)}%` : "—"}
+                              {/* savings_rate 后端已是百分数（32.5 表示 32.5%），不再乘 100 */}
+                              {ledger.savings_rate != null ? `${Number(ledger.savings_rate).toFixed(0)}%` : "—"}
                             </div>
                           </div>
                         </div>

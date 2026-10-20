@@ -16,14 +16,22 @@ import { useToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { useIsDesktop } from "@/lib/use-media-query";
+import { useResizableWidth } from "@/lib/use-resizable-width";
 import { TopBar } from "@/components/TopBar";
-import { DataModal } from "@/components/DataModal";
 import { MobileDrawer } from "@/components/MobileDrawer";
-import { ScheduledOutputsPanel } from "@/components/ScheduledOutputsPanel";
-import { DepartmentPanel } from "@/components/DepartmentPanel";
+import { MobileTabBar } from "@/components/MobileTabBar";
 
+// 首屏只需要 TopBar + 会话栏 + 对话区。以下面板都是"点开才用"，
+// 静态引入会把它们的依赖（Dashboard 的图表、部门看板、设置表单）压进主包。
 const ChatView = lazy(() => import("@/components/ChatView").then((m) => ({ default: m.ChatView })));
 const SettingsView = lazy(() => import("@/components/SettingsView").then((m) => ({ default: m.SettingsView })));
+const DataModal = lazy(() => import("@/components/DataModal").then((m) => ({ default: m.DataModal })));
+const ScheduledOutputsPanel = lazy(() =>
+  import("@/components/ScheduledOutputsPanel").then((m) => ({ default: m.ScheduledOutputsPanel })),
+);
+const DepartmentPanel = lazy(() =>
+  import("@/components/DepartmentPanel").then((m) => ({ default: m.DepartmentPanel })),
+);
 
 export type DataKind = "overview" | "holdings" | "market" | "ledger" | "health";
 
@@ -48,6 +56,13 @@ export default function App() {
   // 桌面侧栏按视口条件渲染（而非 CSS 隐藏）：避免同一入口在移动端出现两份
   // 可访问 DOM（屏幕阅读器与自动化工具都会读到）
   const isDesktop = useIsDesktop();
+  // 桌面侧栏宽度可拖拽（持久化）；最小 200 保证会话标题可读，最大 420 不挤压对话
+  const navWidth = useResizableWidth({
+    storageKey: "wo.navWidth",
+    defaultWidth: 240,
+    min: 200,
+    max: 420,
+  });
   const [locateRunId, setLocateRunId] = useState<number | null>(null);
 
   const [userCount, setUserCount] = useState<number | null>(null);
@@ -59,14 +74,6 @@ export default function App() {
       .then((r) => setUserCount(r.count ?? 0))
       .catch(() => setUserCount(0));
   }, []);
-
-  if (userCount !== null && userCount > 0 && !authed) {
-    return (
-      <MotionConfig reducedMotion="user">
-        <LoginView onAuthed={() => setAuthed(true)} />
-      </MotionConfig>
-    );
-  }
 
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try {
@@ -190,6 +197,17 @@ export default function App() {
     setDataModal({ open: true, kind: k });
   }, []);
 
+  // 需要登录但还没登录：渲染登录页。
+  // 必须放在**所有 hooks 之后**——hooks 数量在多次渲染间必须一致，
+  // 提前 return 会触发 "Rendered fewer hooks than expected" 白屏。
+  if (userCount !== null && userCount > 0 && !authed) {
+    return (
+      <MotionConfig reducedMotion="user">
+        <LoginView onAuthed={() => setAuthed(true)} />
+      </MotionConfig>
+    );
+  }
+
   return (
     <MotionConfig reducedMotion="user">
       <TooltipProvider>
@@ -200,9 +218,10 @@ export default function App() {
             {isDesktop && (
             <aside
               className={cn(
-                "flex shrink-0 flex-col border-r border-border bg-card/40 transition-[width] duration-200",
-                sidebarOpen ? "w-60" : "w-12",
+                "relative flex shrink-0 flex-col border-r border-border bg-card/40 transition-[width] duration-200",
+                sidebarOpen ? "" : "w-12",
               )}
+              style={sidebarOpen ? { width: navWidth.width } : undefined}
             >
               {sidebarOpen ? (
                 <SessionSidebar
@@ -229,14 +248,29 @@ export default function App() {
                   </button>
                 </div>
               )}
+              {sidebarOpen && (
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label={t("sidebar.resize")}
+                  aria-valuenow={navWidth.width}
+                  className={cn(
+                    "absolute -right-1 top-0 z-10 h-full w-2 cursor-col-resize transition-colors hover:bg-primary/30",
+                    navWidth.dragging && "bg-primary/40",
+                  )}
+                  {...navWidth.handleProps}
+                />
+              )}
             </aside>
             )}
 
-            {/* 中间对话区：占满，绝对主角；数据面板展开时（lg+）让位而不被遮挡 */}
+            {/* 中间对话区：占满，绝对主角；数据面板在 lg+ 展开时按面板宽度让位。
+                变量 --xm-panel-w 由 SidePanel 写入，断点必须与 SidePanel 的
+                "模态 vs 并排"分界一致（lg），否则会出现"面板盖住对话但不让位"。 */}
             <div
               className={cn(
                 "flex flex-1 min-w-0 flex-col transition-[margin] duration-200",
-                dataModal.open && "lg:mr-[440px]",
+                dataModal.open && "lg:mr-[var(--xm-panel-w,440px)]",
               )}
             >
               <TopBar
@@ -244,7 +278,7 @@ export default function App() {
                 onOpenNav={() => setMobileNavOpen(true)}
               />
 
-              <main className="flex-1 min-h-0">
+              <main className="flex-1 min-h-0 pb-[calc(3.25rem+env(safe-area-inset-bottom))] md:pb-0">
                 <div className="mx-auto w-full max-w-3xl h-full flex flex-col view-enter">
                   <Suspense
                     fallback={
@@ -312,16 +346,31 @@ export default function App() {
           )}
 
           {/* 侧栏面板：桌面与移动端共用同一份状态（避免两端各挂一份导致重复请求） */}
-          <ScheduledOutputsPanel open={inboxOpen} onClose={() => setInboxOpen(false)} />
-          <DepartmentPanel open={deptOpen} onClose={() => setDeptOpen(false)} />
+          <Suspense fallback={null}>
+            {inboxOpen && <ScheduledOutputsPanel open onClose={() => setInboxOpen(false)} />}
+            {deptOpen && <DepartmentPanel open onClose={() => setDeptOpen(false)} />}
+          </Suspense>
+
+          {/* 手机端底部导航：高频入口常驻拇指区，其余功能走抽屉 */}
+          {!isDesktop && (
+            <MobileTabBar
+              active={dataModal.open ? dataModal.kind : "chat"}
+              onChat={() => setDataModal((d) => ({ ...d, open: false }))}
+              onData={(k) => setDataModal({ open: true, kind: k })}
+              onInbox={() => setInboxOpen(true)}
+              onSettings={() => setSettingsOpen(true)}
+            />
+          )}
 
           {/* 数据工具侧面板：按需从右侧滑出，不遮挡对话（自管理开合动画） */}
-          <DataModal
-            open={dataModal.open}
-            kind={dataModal.kind}
-            onKindChange={(k) => setDataModal({ open: true, kind: k })}
-            onClose={() => setDataModal({ ...dataModal, open: false })}
-          />
+          <Suspense fallback={null}>
+            <DataModal
+              open={dataModal.open}
+              kind={dataModal.kind}
+              onKindChange={(k) => setDataModal({ open: true, kind: k })}
+              onClose={() => setDataModal({ ...dataModal, open: false })}
+            />
+          </Suspense>
 
           {/* 设置页：全屏 overlay */}
           {settingsOpen && (
