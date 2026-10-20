@@ -13,7 +13,7 @@ export const BATCH_KEYS = [
   "report_time",
 ] as const;
 
-type SectionId = "prefs" | "rules" | "budget" | "ai" | "agent" | "report" | "memory" | "data" | "token" | "logs" | "audit";
+type SectionId = "prefs" | "rules" | "budget" | "ai" | "agent" | "report" | "memory" | "data" | "token" | "logs" | "audit" | "provenance";
 
 export function useSettingsForm() {
   const { t } = useI18n();

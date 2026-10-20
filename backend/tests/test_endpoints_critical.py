@@ -141,3 +141,34 @@ async def test_logs_list(client: AsyncClient) -> None:
     r = await client.get("/api/logs?limit=20")
     assert r.status_code == 200
     assert "lines" in r.json() or isinstance(r.json(), list)
+
+
+# ---------------------------------------------------------------------------
+# /api/provenance：溯源链（前端「设置 → 溯源链」的数据源）
+# ---------------------------------------------------------------------------
+
+
+async def test_provenance_records_write_and_filters(client: AsyncClient) -> None:
+    """写一笔流水应产生溯源记录，且能按实体类型/ID 过滤。"""
+    r = await client.post(
+        "/api/transactions",
+        json={"date": "2026-10-05", "item": "溯源用例", "category": "其他", "amount": -3},
+    )
+    assert r.status_code == 200
+
+    listed = await client.get("/api/provenance?limit=20")
+    assert listed.status_code == 200
+    body = listed.json()
+    assert body["count"] >= 1
+    assert all("entity_type" in p and "action" in p for p in body["provenances"])
+
+    filtered = await client.get("/api/provenance?entity_type=transaction&limit=20")
+    assert filtered.status_code == 200
+    assert all(
+        p["entity_type"] == "transaction" for p in filtered.json()["provenances"]
+    )
+
+
+async def test_provenance_detail_404(client: AsyncClient) -> None:
+    r = await client.get("/api/provenance/does-not-exist")
+    assert r.status_code == 404

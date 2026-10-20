@@ -425,6 +425,37 @@ export const clearAudit = () =>
   api<{ ok: boolean; deleted: number }>("/api/audit/clear", { method: "POST" })
 
 // ---------------------------------------------------------------------------
+// 溯源链（provenance）：每个数字的来龙去脉
+// ---------------------------------------------------------------------------
+
+export interface ProvenanceItem {
+  id: string;
+  timestamp: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  before_json: string | null;
+  after_json: string | null;
+  source: string;
+  username: string;
+  metadata_json: string | null;
+}
+
+export const listProvenance = (params: {
+  entityType?: string;
+  entityId?: string;
+  limit?: number;
+} = {}) => {
+  const q = new URLSearchParams();
+  if (params.entityType) q.set("entity_type", params.entityType);
+  if (params.entityId) q.set("entity_id", params.entityId);
+  q.set("limit", String(params.limit ?? 50));
+  return api<{ count: number; provenances: ProvenanceItem[] }>(
+    `/api/provenance?${q.toString()}`,
+  ).then((r) => r.provenances);
+};
+
+// ---------------------------------------------------------------------------
 // 附件（P2 能力扩展）：@提及引用文件
 // ---------------------------------------------------------------------------
 
