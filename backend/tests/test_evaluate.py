@@ -347,8 +347,23 @@ async def test_get_evaluate_returns_200(client):
 
 
 async def test_get_evaluate_with_valid_month(client):
+    """合法月份必须返回可用的评估结构，而不是空壳。"""
     r = await client.get("/api/evaluate?month=2026-01")
     assert r.status_code == 200
+    body = r.json()
+    # 结构必须完整（该月无数据时 items 允许为空，但字段不能缺）
+    assert body["month"] == "2026-01"
+    assert "refreshed_at" in body and "summary" in body
+    assert isinstance(body["items"], list)
+    assert set(body["summary"]) >= {"todo", "warn", "info", "goal", "max_priority"}
+    for item in body["items"]:
+        # 字段真源见 EvalItem：kind/priority/code 必备，priority 是 0..3 的整数
+        assert {"kind", "priority", "code"} <= set(item)
+        assert isinstance(item["priority"], int) and 0 <= item["priority"] <= 3
+        assert item["kind"] in ("todo", "warn", "info", "goal")
+        # action 至少要给出可跳转路径（label 由前端按 code 生成，可缺省）
+        if item.get("action"):
+            assert item["action"].get("path")
 
 
 async def test_get_evaluate_rejects_invalid_month(client):

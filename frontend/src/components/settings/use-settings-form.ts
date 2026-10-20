@@ -80,8 +80,12 @@ export function useSettingsForm() {
   const resetForm = useCallback(() => setForm({ ...saved }), [saved]);
 
   /** 开关类即改即生效（与外观一致，无需点保存按钮）。 */
-  const toggle = (k: string) => {
-    const v = form[k] === "on" ? "off" : "on";
+  /**
+   * 开关类即改即存。传 value 时按给定值写（用于字号这类非布尔档位），
+   * 不传则按当前值取反（开关语义）。
+   */
+  const toggle = (k: string, value?: string) => {
+    const v = value ?? (form[k] === "on" ? "off" : "on");
     set(k, v);
     void toggleMutate.mutate({ k, v });
   };

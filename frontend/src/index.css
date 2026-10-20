@@ -145,6 +145,31 @@
       font-size: 16px;
     }
   }
+
+  /* 适老化：整页字号缩放。用 rem 基准而非逐组件改字号——
+     组件里绝大多数尺寸都是 rem/Tailwind 比例，改根源即可整体放大。
+     large=112.5%、xlarge=125%，仍在 320px 布局内不溢出。 */
+  :root[data-text-scale="large"] {
+    font-size: 18px;
+  }
+  :root[data-text-scale="xlarge"] {
+    font-size: 20px;
+  }
+  /* 适老化：高对比度。提高文字与边框对比、减弱半透明背景，
+     让弱视/老花用户能看清分区边界（不改配色语义，只提对比）。 */
+  :root[data-contrast="high"] {
+    --border: 0 0% 42%;
+    --muted-foreground: 0 0% 28%;
+  }
+  :root[data-contrast="high"].dark {
+    --border: 0 0% 62%;
+    --muted-foreground: 0 0% 82%;
+  }
+  :root[data-contrast="high"] .glass {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: hsl(var(--card));
+  }
   /* 系统级「减弱动效」：替代已砍的手动动效开关 */
   @media (prefers-reduced-motion: reduce) {
     *,

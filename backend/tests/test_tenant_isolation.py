@@ -98,6 +98,7 @@ async def test_default_tenant_sees_nothing_from_others(two_users) -> None:
     assert await db.list_transactions() == []
 
 
+@pytest.mark.xdist_group("migration")
 async def test_migration_creates_pre_migration_backup(tmp_path, monkeypatch) -> None:
     """多租户迁移在动结构前必须留一份整库备份。
 
@@ -137,6 +138,7 @@ async def test_migration_creates_pre_migration_backup(tmp_path, monkeypatch) -> 
         await db.close_db()
 
 
+@pytest.mark.xdist_group("migration")
 async def test_migration_not_repeated_on_second_start(tmp_path, monkeypatch) -> None:
     """已迁移的库再次启动不应该再产生备份（说明没有重复迁移）。"""
     monkeypatch.setattr(db._core, "DB_PATH", tmp_path / "fresh.db")

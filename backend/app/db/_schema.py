@@ -104,6 +104,9 @@ SEED_SETTINGS = {
     "report_time": "08:00",
     # ---- 功能开关（设置中心可自定义）----
     "voice_input": "off",  # 问答语音输入（浏览器支持时）
+    # 适老化：正文缩放（normal/large/xlarge）与高对比度（on/off）
+    "text_scale": "normal",
+    "high_contrast": "off",
     "show_export": "on",  # 回答导出/复制按钮
     "expand_process": "off",  # 分析过程默认展开
     "show_suggestions": "off",  # 问答页建议入口（R4 起输入区常驻快捷指令 chips，空态建议默认关）

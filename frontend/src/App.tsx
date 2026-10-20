@@ -95,6 +95,15 @@ export default function App() {
     document.documentElement.dataset.scheme = colorScheme === "us" ? "us" : "cn";
   }, [colorScheme]);
 
+  // 适老化：字号档位与高对比度写进根元素，由 index.css 的 data-* 规则统一放大
+  const textScale = bootstrap?.settings.text_scale ?? "normal";
+  const highContrast = bootstrap?.settings.high_contrast ?? "off";
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.textScale = textScale;
+    root.dataset.contrast = highContrast === "on" ? "high" : "normal";
+  }, [textScale, highContrast]);
+
   useEffect(() => {
     if (bootstrap?.settings.data_note !== "empty") return;
     try {

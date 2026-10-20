@@ -37,12 +37,22 @@ pyinstaller xiaoman.spec
 
 ## 数据目录
 
-用户数据存在 `~/.xiaoman/`：
-- SQLite 数据库
-- 加密备份
-- 配置文件
+**双击直接运行时**（不设环境变量）：用户数据存在 `~/.xiaoman/`（Windows 即
+`C:/Users/<你>/.xiaoman`）—— SQLite、备份、LangGraph checkpoint 都在这里。
+EXE 本身不存数据，删掉 EXE 不影响用户数据。
 
-EXE 本身不存数据，删了 EXE 不影响用户数据。
+**从源码或脚本启动时**：数据在 `backend/data/`（可用 `XIAOMAN_DATA_DIR` 覆盖）。
+这一点在 2.4.2 修过一次：此前代码默认写 `backend/app/data`，与 Docker 卷不一致，
+导致容器重建丢账本；现在统一由一个变量控制。
+
+## 已知打包要点
+
+- 必须 `npm run build` 先出前端产物；`xiaoman.spec` 会断言 `frontend/dist` 存在。
+- LiteLLM 有大量**动态导入的子模块**与**非 Python 资源**（模型价格表、tokenizer），
+  PyInstaller 静态分析发现不了。spec 里用文件系统递归收集 `litellm.*` 并把整个
+  `litellm` 目录作为 data 收集——这两步缺一，启动就会 `ModuleNotFoundError` 或
+  `FileNotFoundError`（实测踩过）。
+- 产物约 144MB（含 Python 运行时与全部依赖），首次启动解压需数秒。
 
 ## 注意事项
 

@@ -1,101 +1,132 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller 打包配置：小满 v2 单文件 EXE。
+"""PyInstaller 打包配置：小满单文件可执行程序。
 
-用法：
-    cd backend
-    pyinstaller xiaoman.spec
+用法（在 backend/ 下）：
+    ..\\frontend> npm run build        # 先构建前端
+    cd ..\\backend
+    .venv\\Scripts\\python -m pip install pyinstaller
+    .venv\\Scripts\\pyinstaller xiaoman.spec
 
-产物：
-    dist/xiaoman.exe —— 双击就能跑，自动启动后端 + 打开浏览器
+产物：dist/xiaoman(.exe) —— 双击启动后端并自动打开浏览器。
+
+数据目录：默认 ~/.xiaoman（见 run.py），删掉可执行文件不影响数据。
 """
 
-import os
-import sys
 from pathlib import Path
 
-block_cipher = None
+import litellm  # 用于定位其数据文件与子模块（打包必须带上）
 
-# 前端静态文件目录（build 后的 dist）
-FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+LITELLM_DIR = Path(litellm.__file__).parent
+
+
+def _all_submodules(pkg) -> list[str]:
+    """递归收集包内全部子模块（走文件系统，不依赖 pkgutil 的加载器）。
+
+    LiteLLM 有大量按需导入的子模块（如 litellm_core_utils.tokenizers），
+    PyInstaller 静态分析发现不了；逐个手写 hiddenimports 必然漏。
+    """
+    root = Path(pkg.__file__).parent
+    out: list[str] = []
+    for py in root.rglob("*.py"):
+        rel = py.relative_to(root).with_suffix("")
+        parts = list(rel.parts)
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+        if not parts:
+            continue
+        if any(part.startswith("_") and part not in ("__init__",) for part in parts):
+            continue
+        out.append("litellm." + ".".join(parts))
+    return sorted(set(out))
+
+# 前端静态文件目录（已构建）
+FRONTEND_DIST = Path(SPECPATH).parent / "frontend" / "dist"
+assert FRONTEND_DIST.is_dir(), f"前端未构建：{FRONTEND_DIST}（先 npm run build）"
 
 a = Analysis(
-    ['run.py'],
+    ["run.py"],
     pathex=[],
     binaries=[],
     datas=[
-        # 前端静态文件嵌入 EXE
-        (str(FRONTEND_DIST), 'static'),
-        # agents 配置文件
-        ('app/agents', 'app/agents'),
+        (str(FRONTEND_DIST), "static"),
+        ("app/agents", "app/agents"),
+        # LiteLLM 运行时读取的模型价格表、tokenizer 等非 Python 资源。
+        # 整目录收集比逐个列文件可靠（版本间文件名会变，漏一个就启动失败）。
+        (str(LITELLM_DIR), "litellm"),
     ],
     hiddenimports=[
-        'uvicorn.logging',
-        'uvicorn.loops',
-        'uvicorn.loops.auto',
-        'uvicorn.protocols',
-        'uvicorn.protocols.http',
-        'uvicorn.protocols.http.auto',
-        'uvicorn.protocols.http.h11_impl',
-        'uvicorn.protocols.websockets',
-        'uvicorn.protocols.websockets.auto',
-        'uvicorn.lifespan',
-        'uvicorn.lifespan.on',
-        # LiteLLM
-        'litellm',
-        # LangGraph
-        'langgraph',
-        # mem0
-        'mem0',
-        # chromadb
-        'chromadb',
-        # OpenTelemetry
-        'opentelemetry',
-        'opentelemetry.sdk',
-        'opentelemetry.exporter',
-        'opentelemetry.exporter.otlp',
-        'opentelemetry.exporter.otlp.proto',
-        'opentelemetry.exporter.otlp.proto.http',
-        # FastAPI
-        'fastapi',
-        'sse_starlette',
-        # SQLite
-        'aiosqlite',
-        # APScheduler
-        'apscheduler',
-        # Alembic
-        'alembic',
+        # Web 层
+        "uvicorn.logging",
+        "uvicorn.loops",
+        "uvicorn.loops.auto",
+        "uvicorn.protocols",
+        "uvicorn.protocols.http",
+        "uvicorn.protocols.http.auto",
+        "uvicorn.protocols.http.h11_impl",
+        "uvicorn.protocols.websockets",
+        "uvicorn.protocols.websockets.auto",
+        "uvicorn.lifespan",
+        "uvicorn.lifespan.on",
+        "sse_starlette",
+        # 模型接入
+        *_all_submodules(litellm),
+        "openai",
+        "tiktoken",
+        # 编排
+        "langgraph",
+        "langgraph.checkpoint.sqlite",
+        "langgraph.checkpoint.sqlite.aio",
+        "langgraph.types",
+        # MCP
+        "fastmcp",
+        "mcp",
+        # 数据
+        "aiosqlite",
+        "cryptography",
+        "jwt",
+        "passlib",
+        "bcrypt",
+        # 调度与工具
+        "apscheduler",
+        "apscheduler.triggers.cron",
+        "croniter",
+        "cn2an",
+        "cachetools",
+        "rank_bm25",
+        "duckduckgo_search",
+        "python_multipart",
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
+    excludes=[
+        # 明确排除未使用的重依赖，避免打进无用体积
+        "tkinter",
+        "matplotlib",
+        "pytest",
+    ],
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
     a.scripts,
     a.binaries,
-    a.zipfiles,
     a.datas,
     [],
-    name='xiaoman',
+    name="xiaoman",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    upx_exclude=[],
+    upx=False,
     runtime_tmpdir=None,
-    console=True,  # 设 False 就不显示控制台窗口
+    console=True,  # 保留控制台便于看日志；改 False 则为纯窗口
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # 可以加个 .ico 文件
+    icon=None,
 )

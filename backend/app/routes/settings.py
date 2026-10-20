@@ -41,7 +41,10 @@ ONOFF_KEYS = (
     "ai_enabled",
     "agent_plan",
     "agent_reflect",
+    "high_contrast",
 )
+# 适老化字号档位：只允许三档，避免任意值把布局撑坏
+TEXT_SCALES = ("normal", "large", "xlarge")
 # AI 配置：文本直存（key 仅存本机数据库）。
 # 灵活化：base_url 允许留空走 OpenAI 默认；model 允许留空走模型默认；api_key 可含前缀（sk- 等）。
 AI_TEXT_KEYS = ("ai_base_url", "ai_api_key", "ai_model")
@@ -103,6 +106,11 @@ async def put_settings(payload: dict) -> dict:
         elif key == "default_tab":
             if raw not in DEFAULT_TABS:
                 errors.append(f"默认首页只能是 {'/'.join(DEFAULT_TABS)}")
+                continue
+            applied[key] = raw
+        elif key == "text_scale":
+            if raw not in TEXT_SCALES:
+                errors.append(f"字号只能是 {'/'.join(TEXT_SCALES)}")
                 continue
             applied[key] = raw
         elif key == "report_time":

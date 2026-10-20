@@ -154,7 +154,8 @@ export function useThrottledScroll(listRef: React.RefObject<HTMLDivElement | nul
 
 export function useVoiceInput(setInput: React.Dispatch<React.SetStateAction<string>>) {
   const { toast } = useToast();
-  const { t: tr } = useI18n();
+  // 识别语言跟随界面语言（此前硬编码 zh-CN：英文界面也会用中文识别）
+  const { t: tr, lang } = useI18n();
   const [listening, setListening] = useState(false);
   const listeningRef = useRef(false);
   const recogRef = useRef<{ stop: () => void } | null>(null);
@@ -186,7 +187,7 @@ export function useVoiceInput(setInput: React.Dispatch<React.SetStateAction<stri
         start: () => void;
         stop: () => void;
       })();
-      rec.lang = "zh-CN";
+      rec.lang = lang === "en" ? "en-US" : "zh-CN";
       rec.interimResults = false;
       rec.onresult = (e: unknown) => {
         const ev = e as { results: ArrayLike<ArrayLike<{ transcript: string }>> };

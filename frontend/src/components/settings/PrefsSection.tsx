@@ -17,7 +17,7 @@ export function PrefsSection({
   form: Record<string, string>;
   setColorScheme: (v: string) => void;
   setDefaultTab: (v: string) => void;
-  onToggle: (k: string) => void;
+  onToggle: (k: string, value?: string) => void;
 }) {
   const { t, lang, setLang } = useI18n();
   const { theme: themeMode, setTheme, preset, setPreset } = useTheme();
@@ -61,6 +61,33 @@ export function PrefsSection({
             />
           ))}
         </div>
+      </div>
+      {/* 适老化：字号档位 + 高对比度。两项都即时生效（写根元素 data-*） */}
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-sm">{t("settings.textScale")}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">{t("settings.textScaleHint")}</div>
+        </div>
+        <Segmented
+          value={form.text_scale ?? "normal"}
+          onChange={(v) => onToggle("text_scale", v)}
+          options={[
+            { value: "normal", label: t("settings.textScaleNormal") },
+            { value: "large", label: t("settings.textScaleLarge") },
+            { value: "xlarge", label: t("settings.textScaleXLarge") },
+          ]}
+        />
+      </div>
+      <div className="mt-3 flex items-center justify-between">
+        <div>
+          <div className="text-sm">{t("settings.highContrast")}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">{t("settings.highContrastHint")}</div>
+        </div>
+        <Switch
+          checked={form.high_contrast === "on"}
+          onChange={() => onToggle("high_contrast")}
+          label={t("settings.highContrast")}
+        />
       </div>
       <div className="mt-3 flex items-center justify-between">
         <div>

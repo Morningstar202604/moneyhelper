@@ -13,8 +13,14 @@ import time
 import webbrowser
 from pathlib import Path
 
-# 确保 app 目录在 path 里
-sys.path.insert(0, str(Path(__file__).parent))
+# 数据目录：打包后统一放用户目录，避免写在程序（临时解压）目录里导致重启丢数据
+_DATA_DIR = Path(os.getenv("XIAOMAN_DATA_DIR") or (Path.home() / ".xiaoman"))
+_DATA_DIR.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("XIAOMAN_DATA_DIR", str(_DATA_DIR))
+
+# 确保 app 目录在 path 里（源码运行时需要；打包后已在 sys.path）
+if not getattr(sys, "frozen", False):
+    sys.path.insert(0, str(Path(__file__).parent))
 
 import uvicorn  # noqa: E402
 from app.main import app  # noqa: E402
@@ -36,7 +42,7 @@ def main():
     print("  小满 — 对话优先的个人理财 Agent")
     print("=" * 50)
     print(f"  地址：http://{host}:{port}")
-    print(f"  数据目录：{Path.home() / '.xiaoman'}")
+    print(f"  数据目录：{_DATA_DIR}")
     print("=" * 50)
     print("  按 Ctrl+C 或关掉窗口退出")
     print()

@@ -124,3 +124,66 @@ async def test_no_token_sees_default_tenant_only(client: AsyncClient) -> None:
     assert anon.status_code == 200
     rows = anon.json().get("positions") or []
     assert not any(p.get("name") == "平安A" for p in rows)
+
+
+# ---------------------------------------------------------------------------
+# 管理员边界（方案 B：只读概览，无权看他人明细）
+# ---------------------------------------------------------------------------
+
+
+async def _make_admin(username: str) -> tuple[int, str]:
+    conn = await db._conn()
+    await conn.execute(
+        "INSERT INTO users(username, password_hash, display_name, role, created_at)"
+        " VALUES(?,?,?,?,datetime('now'))",
+        (username, "x", username, "admin"),
+    )
+    await conn.commit()
+    user = await db.user_get_by_username(username)
+    return int(user["id"]), auth._make_jwt(user)  # noqa: SLF001
+
+
+async def test_admin_cannot_read_other_tenant_detail(client: AsyncClient) -> None:
+    """管理员看别人的持仓列表，只能看到自己的（租户隔离优先于角色）。"""
+    _, token_user = await _make_user("normal_user")
+    _, token_admin = await _make_admin("boss")
+
+    await _add_position(client, token_user, "600519", "普通用户持仓", 10)
+
+    admin_rows = await _positions(client, token_admin)
+    assert not any(p.get("name") == "普通用户持仓" for p in admin_rows), (
+        "管理员读到了其他租户的持仓明细"
+    )
+
+
+async def test_admin_overview_shows_counts_not_details(client: AsyncClient) -> None:
+    """管理员概览只给条数，不给金额/名称。"""
+    uid, token_user = await _make_user("member_a")
+    _, token_admin = await _make_admin("boss2")
+    await _add_position(client, token_user, "000001", "平安银行", 3)
+
+    r = await client.get(
+        "/api/auth/tenants-overview",
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+    assert r.status_code == 200
+    tenants = {t["user_id"]: t for t in r.json()["tenants"]}
+    assert uid in tenants
+    assert tenants[uid]["counts"]["positions"] >= 1
+    # 关键：概览里不能出现任何业务明细字段
+    blob = r.text
+    assert "平安银行" not in blob, "概览泄漏了持仓名称"
+    assert "600519" not in blob
+
+
+async def test_non_admin_gets_403_on_admin_endpoints(client: AsyncClient) -> None:
+    _, token_user = await _make_user("plain_joe")
+    for path in ("/api/auth/users", "/api/auth/tenants-overview"):
+        r = await client.get(path, headers={"Authorization": f"Bearer {token_user}"})
+        assert r.status_code == 403, f"{path} 未拒绝普通用户"
+
+
+async def test_anonymous_gets_401_on_admin_endpoints(client: AsyncClient) -> None:
+    for path in ("/api/auth/users", "/api/auth/tenants-overview"):
+        r = await client.get(path)
+        assert r.status_code == 401, f"{path} 未拒绝未登录请求"

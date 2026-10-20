@@ -46,7 +46,23 @@ log = _get_logger(__name__)
 
 APP_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = APP_DIR.parent.parent  # 仓库根目录
-FRONTEND_DIST = PROJECT_DIR / "frontend" / "dist"
+
+
+def _frontend_dist() -> Path:
+    """前端静态目录。
+
+    - 源码运行：仓库根的 frontend/dist
+    - PyInstaller 单文件：解压目录下的 static/（见 xiaoman.spec 的 datas）
+    """
+    import sys
+
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        return Path(bundle) / "static"
+    return PROJECT_DIR / "frontend" / "dist"
+
+
+FRONTEND_DIST = _frontend_dist()
 
 
 async def _maybe_create_admin() -> None:

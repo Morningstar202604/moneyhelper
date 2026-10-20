@@ -159,10 +159,12 @@ from .undo import (
     list_undo_records,
 )
 from .users import (
+    counts_by_tenant,
     user_count,
     user_create,
     user_get,
     user_get_by_username,
+    user_list,
     user_update_last_login,
     user_verify_password,
 )
@@ -210,6 +212,7 @@ __all__ = [
     "clear_memory",
     "clear_reflections",
     "close_db",
+    "counts_by_tenant",
     "create_pending_action",
     "create_session",
     "data_dir",
@@ -298,6 +301,7 @@ __all__ = [
     "user_create",
     "user_get",
     "user_get_by_username",
+    "user_list",
     "user_update_last_login",
     "user_verify_password",
     "uuid_hex",
