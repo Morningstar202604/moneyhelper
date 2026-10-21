@@ -48,10 +48,11 @@ export function MobileTabBar({
     },
     {
       key: "overview",
-      label: t("nav.dashboard"),
+      label: t("nav.finance"),
       icon: LayoutGrid,
       onPress: () => onData("overview"),
-      isActive: active === "overview",
+      // 财务工作区的所有子页（总览/行情/记账/体检）都归在「总览」这一入口下
+      isActive: active === "overview" || active === "market" || active === "ledger" || active === "health",
     },
     {
       key: "holdings",

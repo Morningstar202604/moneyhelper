@@ -25,7 +25,7 @@ import { MobileTabBar } from "@/components/MobileTabBar";
 // 静态引入会把它们的依赖（Dashboard 的图表、部门看板、设置表单）压进主包。
 const ChatView = lazy(() => import("@/components/ChatView").then((m) => ({ default: m.ChatView })));
 const SettingsView = lazy(() => import("@/components/SettingsView").then((m) => ({ default: m.SettingsView })));
-const DataModal = lazy(() => import("@/components/DataModal").then((m) => ({ default: m.DataModal })));
+const FinancePage = lazy(() => import("@/components/FinancePage").then((m) => ({ default: m.FinancePage })));
 const ScheduledOutputsPanel = lazy(() =>
   import("@/components/ScheduledOutputsPanel").then((m) => ({ default: m.ScheduledOutputsPanel })),
 );
@@ -41,8 +41,8 @@ export default function App() {
   const { bootstrap } = useBootstrap();
   const { toast } = useToast();
 
-  // 数据浮层：对话里的卡片点"展开"才弹出，非常驻侧栏
-  const [dataModal, setDataModal] = useState<{ open: boolean; kind: DataKind }>({ open: false, kind: "overview" });
+  // 主区视图：对话 or 财务工作区（整页切换，对标 opencode / codex 的 section 导航）
+  const [view, setView] = useState<DataKind | "chat">("chat");
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [activeThread, setActiveThread] = useState<string | null>(null);
@@ -114,32 +114,14 @@ export default function App() {
     setShowOnboarding(true);
   }, [bootstrap]);
 
-  const newSession = useCallback(async () => {
-    const tmp = `__tmp_${Date.now()}`;
-    // 先切到临时线程，输入框立刻可用；拿到真实 thread_id 后替换。
-    setActiveThread(tmp);
-    try {
-      const r = await api<{ id: number; thread_id: string }>("/api/sessions", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      await store.refreshSessions();
-      if (typeof r.id === "number") {
-        try {
-          await api(`/api/sessions/${r.id}/migrate?from=${encodeURIComponent(tmp)}`, {
-            method: "POST",
-            body: JSON.stringify({}),
-          });
-        } catch {
-          /* ignore */
-        }
-      }
-      // 用户若已手动切到别的会话，尊重其选择；否则落到新会话。
-      setActiveThread((cur) => (cur === tmp ? r.thread_id : cur));
-    } catch (e) {
-      toast(e instanceof Error ? e.message : String(e), "error");
-    }
-  }, [toast]);
+  /**
+   * 新对话：只切到一个本地临时线程，不落库。
+   * 对标 ChatGPT：点「新对话」不该在侧栏留下一条空会话；只有发出第一条消息后
+   * 后端 upsert_session 才会真正建会话（标题也由首个问题决定）。
+   */
+  const newSession = useCallback(() => {
+    setActiveThread(`__new_${Date.now()}`);
+  }, []);
 
   const openChat = useCallback(
     (threadId: string | null) => {
@@ -197,7 +179,7 @@ export default function App() {
     else void newSession();
   }, [activeThread, sessions, sessionsLoading, newSession]);
 
-  // 对话里的"跳转意图"：弹数据浮层，不切页面、不占常驻侧栏
+  // 对话里的"跳转意图"：切到对应财务页
   const openData = useCallback((kind: string) => {
     if (kind === "settings") {
       setSettingsOpen(true);
@@ -205,7 +187,7 @@ export default function App() {
     }
     const valid: DataKind[] = ["overview", "holdings", "market", "ledger", "health"];
     const k = (valid as string[]).includes(kind) ? (kind as DataKind) : "overview";
-    setDataModal({ open: true, kind: k });
+    setView(k);
   }, []);
 
   // 需要登录但还没登录：渲染登录页。
@@ -237,9 +219,11 @@ export default function App() {
               {sidebarOpen ? (
                 <SessionSidebar
                   activeThread={activeThread}
-                  onHome={() => setDataModal({ open: true, kind: "overview" })}
-                  onSelect={openChat}
-                  onNew={() => void newSession()}
+                  onHome={() => setView("chat")}
+                  onOpenOverview={() => setView("overview")}
+                  activeView={view}
+                  onSelect={(tid) => { setView("chat"); openChat(tid); }}
+                  onNew={() => { setView("chat"); void newSession(); }}
                   onDelete={(id, threadId) => setPendingDelete({ id, threadId })}
                   onRename={renameSession}
                   onOpenSettings={() => setSettingsOpen(true)}
@@ -275,18 +259,12 @@ export default function App() {
             </aside>
             )}
 
-            {/* 中间对话区：占满，绝对主角；数据面板在 lg+ 展开时按面板宽度让位。
-                变量 --xm-panel-w 由 SidePanel 写入，断点必须与 SidePanel 的
-                "模态 vs 并排"分界一致（lg），否则会出现"面板盖住对话但不让位"。 */}
-            <div
-              className={cn(
-                "flex flex-1 min-w-0 flex-col transition-[margin] duration-200",
-                dataModal.open && "lg:mr-[var(--xm-panel-w,440px)]",
-              )}
-            >
+            {/* 主区：对话与财务工作区整页切换（对标 opencode / codex 的 section 导航） */}
+            <div className="flex min-w-0 flex-1 flex-col">
               <TopBar
                 onOpenSettings={() => setSettingsOpen(true)}
                 onOpenNav={() => setMobileNavOpen(true)}
+                onBackToChat={view !== "chat" ? () => setView("chat") : undefined}
               />
 
               <main className="flex min-h-0 flex-1 pb-[calc(3.25rem+env(safe-area-inset-bottom))] md:pb-0">
@@ -298,13 +276,15 @@ export default function App() {
                       </div>
                     }
                   >
-                    {activeThread ? (
+                    {view !== "chat" ? (
+                      <FinancePage kind={view} onKindChange={(k) => setView(k)} />
+                    ) : activeThread ? (
                       <ChatView
                         key={activeThread}
                         threadId={activeThread}
                         locateRunId={locateRunId}
                         onLocateDone={() => setLocateRunId(null)}
-                        onNewSession={() => void newSession()}
+                        onNewSession={() => { void newSession(); }}
                         onOpenSettings={() => setSettingsOpen(true)}
                         onNavigate={openData}
                       />
@@ -326,14 +306,21 @@ export default function App() {
               activeThread={activeThread}
               onHome={() => {
                 setMobileNavOpen(false);
-                setDataModal({ open: true, kind: "overview" });
+                setView("chat");
               }}
+              onOpenOverview={() => {
+                setMobileNavOpen(false);
+                setView("overview");
+              }}
+              activeView={view}
               onSelect={(tid) => {
                 setMobileNavOpen(false);
+                setView("chat");
                 openChat(tid);
               }}
               onNew={() => {
                 setMobileNavOpen(false);
+                setView("chat");
                 void newSession();
               }}
               onDelete={(id, threadId) => setPendingDelete({ id, threadId })}
@@ -364,23 +351,13 @@ export default function App() {
           {/* 手机端底部导航：高频入口常驻拇指区，其余功能走抽屉 */}
           {!isDesktop && (
             <MobileTabBar
-              active={dataModal.open ? dataModal.kind : "chat"}
-              onChat={() => setDataModal((d) => ({ ...d, open: false }))}
-              onData={(k) => setDataModal({ open: true, kind: k })}
+              active={view}
+              onChat={() => setView("chat")}
+              onData={(k) => setView(k)}
               onInbox={() => setInboxOpen(true)}
               onSettings={() => setSettingsOpen(true)}
             />
           )}
-
-          {/* 数据工具侧面板：按需从右侧滑出，不遮挡对话（自管理开合动画） */}
-          <Suspense fallback={null}>
-            <DataModal
-              open={dataModal.open}
-              kind={dataModal.kind}
-              onKindChange={(k) => setDataModal({ open: true, kind: k })}
-              onClose={() => setDataModal({ ...dataModal, open: false })}
-            />
-          </Suspense>
 
           {/* 设置页：全屏 overlay（ChatGPT 式：左侧栏收起，顶栏只有标题与关闭） */}
           {settingsOpen && (

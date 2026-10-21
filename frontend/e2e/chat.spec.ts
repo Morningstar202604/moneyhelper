@@ -26,8 +26,10 @@ test.describe("问答流程", () => {
 
     // 回执带「去记账页」跳转 chip → 打开记账浮层
     await page.getByRole("button", { name: "去记账页" }).first().click();
-    await expect(page.getByText("记账").first()).toBeVisible({ timeout: 10_000 });
-    await page.getByRole("button", { name: "关闭" }).first().click();
+    await expect(page.getByRole("tab", { name: "记账" })).toHaveAttribute("aria-selected", "true", {
+      timeout: 10_000,
+    });
+    await page.getByRole("button", { name: "返回问答" }).first().click();
   });
 
   test("大额待确认：回复「确认」后入账", async ({ page }) => {

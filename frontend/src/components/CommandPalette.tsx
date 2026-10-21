@@ -62,12 +62,18 @@ export function CommandPalette({
     };
   }, [open]);
 
-  // 全局快捷键 Cmd/Ctrl+K
+  // 全局快捷键：Cmd/Ctrl+K 开关，Esc 关闭（此前只有开关没有 Esc，面板会卡住不关）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         onOpenChange(!open);
+        return;
+      }
+      if (open && e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onOpenChange(false);
       }
     };
     window.addEventListener("keydown", onKey);

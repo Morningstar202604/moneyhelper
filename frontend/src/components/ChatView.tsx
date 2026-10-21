@@ -2,7 +2,6 @@ import { useRef } from "react";
 import { ArrowDown, BarChart3, CreditCard, Sparkles, Wallet, type LucideIcon } from "lucide-react";
 import { useBootstrap, store } from "@/lib/store";
 import { useI18n } from "@/lib/i18n";
-import { BRAND } from "@/lib/brand";
 import { api } from "@/lib/api";
 import type { AgentToolStep, AgentPlanStep } from "@/lib/types";
 import type { ChatMessage, StepInfo } from "@/components/ChatMessageBubble";
@@ -34,7 +33,7 @@ export function ChatView({
   onOpenSettings: () => void;
   onNavigate: (tab: string) => void;
 }) {
-  const { t: tr, lang } = useI18n();
+  const { t: tr } = useI18n();
   const { bootstrap } = useBootstrap();
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -72,10 +71,10 @@ export function ChatView({
                     <Sparkles className="h-6 w-6 text-primary" />
                   </div>
                   <h1 className="text-balance text-[26px] font-semibold leading-tight tracking-tight sm:text-[30px]">
-                    {hasData ? tr("chat.heroQuestion") : tr("chat.heroTitle", { name: lang === "en" ? BRAND.en : BRAND.name })}
+                    {tr("chat.heroQuestion")}
                   </h1>
                   <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                    {tr("chat.heroMotto")}
+                    {hasData ? tr("chat.heroMotto") : tr("chat.heroEmptyHint")}
                   </p>
 
                   <div className="mt-8 grid w-full max-w-lg grid-cols-1 gap-1 sm:grid-cols-2">

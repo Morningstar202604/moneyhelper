@@ -795,29 +795,35 @@ export function EntryView() {
                       const dayTotal = g.rows.reduce((s, t) => s + t.amount, 0);
                       return (
                         <div key={g.date}>
-                          <div className="sticky top-0 flex items-center justify-between border-b border-border/60 bg-card py-1 text-[11px] text-muted-foreground">
+                          <div className="sticky top-0 flex items-center justify-between border-b border-border/60 bg-card py-1.5 text-[11px] text-muted-foreground">
                             <span className="tabular-nums">{g.date}</span>
-                            <span className="tabular-nums">{dayTotal > 0 ? "+" : ""}{fmtMoney(dayTotal, true)}</span>
+                            {g.rows.length > 1 && (
+                              <span className="tabular-nums">{dayTotal > 0 ? "+" : ""}{fmtMoney(dayTotal, true)}</span>
+                            )}
                           </div>
                           {g.rows.map((t) => (
-                            <div key={t.id} className="flex items-center justify-between py-1.5 text-sm">
-                              <span className="min-w-0">
-                                <span className="truncate">{t.item}</span>
-                                <span className="text-muted-foreground text-xs ml-2">{t.category}</span>
+                            <div
+                              key={t.id}
+                              className="group/tx flex items-center gap-2 border-b border-border/40 py-2.5 text-sm transition-colors last:border-0 hover:bg-accent/40 sm:grid sm:grid-cols-[minmax(0,1fr)_8rem_7rem_5rem] sm:gap-3 sm:px-1"
+                            >
+                              <span className="min-w-0 flex-1 truncate">
+                                {t.item}
+                                <span className="ml-2 text-xs text-muted-foreground sm:hidden">{t.category}</span>
                               </span>
-                              <span className="flex items-center gap-2">
-                                <span className={`tabular-nums ${t.amount > 0 ? "text-up" : "text-down"}`}>
-                                  {fmtMoney(t.amount, true)}
-                                </span>
+                              <span className="hidden truncate text-xs text-muted-foreground sm:block">{t.category}</span>
+                              <span className={`shrink-0 text-right tabular-nums ${t.amount > 0 ? "text-up" : "text-down"}`}>
+                                {fmtMoney(t.amount, true)}
+                              </span>
+                              <span className="flex shrink-0 items-center justify-end gap-0.5 sm:opacity-0 sm:transition-opacity sm:group-hover/tx:opacity-100">
                                 <button
-                                  className="text-muted-foreground hover:text-primary"
+                                  className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-primary"
                                   onClick={() => setEditingTx({ id: t.id, date: t.date, item: t.item, category: t.category, amount: t.amount })}
                                   aria-label={tt("entry.editTx", { item: t.item })}
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
                                 </button>
                                 <button
-                                  className="text-muted-foreground hover:text-red-600"
+                                  className="rounded p-1 text-muted-foreground hover:bg-red-500/10 hover:text-red-600"
                                   onClick={() => setPendingDelete({ type: "tx", id: t.id, name: t.item })}
                                   aria-label={tt("entry.deleteItem", { name: t.item })}
                                 >

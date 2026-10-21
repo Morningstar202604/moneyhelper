@@ -17,6 +17,70 @@ export interface KlinePoint {
 
 /** K 线侧面板：近 60 日收盘价走势（A股/ETF；其他标的会提示不可用）。
  *  持仓表与行情页自选共用；右侧滑出，不遮挡对话。 */
+
+/**
+ * K 线图本体：**必须在面板打开后才挂载**。
+ * useEChart 的初始化副作用只跑一次且要求 ref 已有 DOM；若图表组件与 SidePanel 同时挂载，
+ * 面板关闭时 ref 为 null，初始化会被跳过，之后再打开就是一片空白（此前正是这个 bug）。
+ */
+function KlineChart({
+  points,
+  resolved,
+  colorTick,
+}: {
+  points: KlinePoint[];
+  resolved: "light" | "dark";
+  colorTick: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const option = useMemo(() => {
+    const first = points[0]?.close;
+    const last = points[points.length - 1]?.close;
+    const up = first != null && last != null && last >= first;
+    const rootStyle = getComputedStyle(document.documentElement);
+    const lineColor = up
+      ? rootStyle.getPropertyValue("--color-up").trim() || "#dc2626"
+      : rootStyle.getPropertyValue("--color-down").trim() || "#059669";
+    return {
+      tooltip: { trigger: "axis", triggerOn: "click", renderMode: "richText", confine: true },
+      grid: { left: 8, right: 8, top: 20, bottom: 4, containLabel: true },
+      xAxis: {
+        type: "category",
+        data: points.map((p) => p.date),
+        axisLabel: { fontSize: 10, color: axisLabelColor(resolved) },
+      },
+      yAxis: {
+        type: "value",
+        scale: true,
+        axisLabel: { fontSize: 10, color: axisLabelColor(resolved) },
+        splitLine: { lineStyle: { type: "dashed", color: "hsl(var(--border))" } },
+      },
+      series: [
+        {
+          type: "line",
+          data: points.map((p) => p.close),
+          symbol: "none",
+          lineStyle: { width: 2, color: lineColor },
+          itemStyle: { color: lineColor },
+          areaStyle: { opacity: 0.08, color: lineColor },
+          markLine:
+            first != null
+              ? {
+                  silent: true,
+                  symbol: "none",
+                  label: { show: false },
+                  lineStyle: { type: "dashed", color: "hsl(var(--muted-foreground) / 0.4)" },
+                  data: [{ yAxis: first }],
+                }
+              : undefined,
+        },
+      ],
+    };
+  }, [points, resolved, colorTick]);
+  useEChart(ref, option, [points, resolved, colorTick]);
+  return <div ref={ref} className="h-56 w-full" />;
+}
+
 export function KlineDialog({
   symbol,
   name,
@@ -29,7 +93,6 @@ export function KlineDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { t: tr } = useI18n();
-  const ref = useRef<HTMLDivElement>(null);
   const { resolved } = useTheme();
   const klineQuery = useQuery({
     queryKey: ["/api/kline", symbol],
@@ -61,48 +124,6 @@ export function KlineDialog({
       : String(klineQuery.error)
     : undefined;
 
-  const option = useMemo(() => {
-    const first = points[0]?.close;
-    const last = points[points.length - 1]?.close;
-    const up = first != null && last != null && last >= first;
-    const rootStyle = getComputedStyle(document.documentElement);
-    const lineColor = up
-      ? rootStyle.getPropertyValue("--color-up").trim() || "#dc2626"
-      : rootStyle.getPropertyValue("--color-down").trim() || "#059669";
-    return {
-      tooltip: { trigger: "axis", triggerOn: "click", renderMode: "richText", confine: true },
-      grid: { left: 8, right: 8, top: 20, bottom: 4, containLabel: true },
-      xAxis: { type: "category", data: points.map((p) => p.date), axisLabel: { fontSize: 10, color: axisLabelColor(resolved) } },
-      yAxis: {
-        type: "value",
-        scale: true,
-        axisLabel: { fontSize: 10, color: axisLabelColor(resolved) },
-        splitLine: { lineStyle: { type: "dashed", color: "hsl(var(--border))" } },
-      },
-      series: [
-        {
-          type: "line",
-          data: points.map((p) => p.close),
-          symbol: "none",
-          lineStyle: { width: 2, color: lineColor },
-          itemStyle: { color: lineColor },
-          areaStyle: { opacity: 0.08, color: lineColor },
-          markLine:
-            first != null
-              ? {
-                  silent: true,
-                  symbol: "none",
-                  label: { show: false },
-                  lineStyle: { type: "dashed", color: "hsl(var(--muted-foreground) / 0.4)" },
-                  data: [{ yAxis: first }],
-                }
-              : undefined,
-        },
-      ],
-    };
-  }, [points, resolved, colorTick]);
-  useEChart(ref, points.length ? option : null, [points, resolved, colorTick]);
-
   return (
     <SidePanel
       open={open}
@@ -121,7 +142,7 @@ export function KlineDialog({
           </div>
         ) : (
           <>
-            <div ref={ref} className="h-56 w-full" />
+            <KlineChart points={points} resolved={resolved} colorTick={colorTick} />
             <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
               <span>
                 {tr("pos.klineInfo", { n: points.length })} · {source === "snapshot" ? tr("pos.snapshot") : tr("pos.realtime")}

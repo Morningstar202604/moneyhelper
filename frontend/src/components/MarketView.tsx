@@ -163,7 +163,7 @@ export function MarketView() {
                 onChange={(e) => setQ(e.target.value)}
                 placeholder={t("market.searchPh")}
                 aria-label={t("market.searchPh")}
-                className="w-full rounded-lg border border-input bg-background pl-8 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-lg border border-input bg-background pl-8 pr-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring [&::-webkit-search-cancel-button]:appearance-none"
                 maxLength={20}
               />
               {q && (
@@ -196,41 +196,56 @@ export function MarketView() {
 
             {/* 自选列表 */}
             {watch.length === 0 ? (
-              <EmptyState mode="card" illustration="search" title={t("market.emptyWatch")}/>
+              <EmptyState mode="card" illustration="search" title={t("market.emptyWatch")} />
             ) : (
-              <ul className="divide-y divide-border/60">
-                {watch.map((w) => (
-                  <li key={w.symbol} className="flex items-center justify-between gap-2 py-2 text-sm">
-                    <button
-                      type="button"
-                      className="min-w-0 text-left group"
-                      onClick={() => setKline({ symbol: w.symbol, name: w.name })}
-                      aria-label={t("pos.viewK", { name: w.name })}
+              <div className="overflow-hidden rounded-lg border border-border">
+                <div className="hidden grid-cols-[minmax(0,1fr)_8rem_7rem_3rem] gap-3 border-b border-border bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground sm:grid">
+                  <span>{t("pos.symbol")}</span>
+                  <span className="text-right">{t("pos.price")}</span>
+                  <span className="text-right">{t("pos.pnlPct")}</span>
+                  <span />
+                </div>
+                <ul className="divide-y divide-border/60">
+                  {watch.map((w) => (
+                    <li
+                      key={w.symbol}
+                      className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-2.5 text-sm transition-colors hover:bg-accent/40 sm:grid-cols-[minmax(0,1fr)_8rem_7rem_3rem] sm:gap-3"
                     >
-                      <span className="truncate font-medium group-hover:text-primary">{w.name}</span>
-                      <span className="ml-1.5 text-xs text-muted-foreground">{w.kind} · {w.symbol}</span>
-                      <LineChart className="ml-1 inline w-3 h-3 text-muted-foreground/50 group-hover:text-primary" />
-                    </button>
-                    <span className="flex shrink-0 items-center gap-3 tabular-nums">
-                      <span className="w-16 text-right">{w.price != null ? fmtMoney(w.price, false, true) : "—"}</span>
-                      {(w as { quote_source?: string }).quote_source === "snapshot" && (
-                        <span className="rounded bg-muted px-1 py-0.5 text-[11px] font-medium leading-none text-muted-foreground">
-                          {t("market.offline")}
-                        </span>
-                      )}
-                      <span className={cn("w-16 text-right", pnlClass(w.change_pct ?? 0))}>{w.change_pct != null ? fmtPct(w.change_pct, true) : "—"}</span>
                       <button
                         type="button"
-                        className="p-0.5 text-muted-foreground hover:text-red-600"
-                        aria-label={t("market.remove", { name: w.name })}
-                        onClick={() => setRemoving(w)}
+                        className="group/name min-w-0 text-left"
+                        onClick={() => setKline({ symbol: w.symbol, name: w.name })}
+                        aria-label={t("pos.viewK", { name: w.name })}
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <span className="truncate font-medium group-hover/name:text-primary">{w.name}</span>
+                        <span className="ml-1.5 text-xs text-muted-foreground">{w.kind} · {w.symbol}</span>
+                        <LineChart className="ml-1 inline h-3 w-3 text-muted-foreground/50 group-hover/name:text-primary" />
                       </button>
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                      <span className="text-right tabular-nums max-sm:row-start-2 max-sm:text-left max-sm:text-xs max-sm:text-muted-foreground">
+                        {w.price != null ? fmtMoney(w.price, false, true) : "—"}
+                        {(w as { quote_source?: string }).quote_source === "snapshot" && (
+                          <span className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[10px] font-medium leading-none text-muted-foreground">
+                            {t("market.offline")}
+                          </span>
+                        )}
+                      </span>
+                      <span className={cn("text-right tabular-nums", pnlClass(w.change_pct ?? 0))}>
+                        {w.change_pct != null ? fmtPct(w.change_pct, true) : "—"}
+                      </span>
+                      <span className="flex justify-end">
+                        <button
+                          type="button"
+                          className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-600 group-hover:opacity-100 max-sm:opacity-100"
+                          aria-label={t("market.remove", { name: w.name })}
+                          onClick={() => setRemoving(w)}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
             {watch.length > 0 && (
               <p className="mt-2 text-[11px] text-muted-foreground">
@@ -244,29 +259,40 @@ export function MarketView() {
           <EmptyState mode="compact" text={t("holdings.empty")} />
         ) : (
           <>
-            <ul className="divide-y divide-border/60">
-              {holdings.map((p) => {
-                const day = dashboard?.today_pnl.items[p.symbol];
-                return (
-                  <li key={p.symbol} className="flex items-center justify-between gap-2 py-2 text-sm">
-                    <button
-                      type="button"
-                      className="min-w-0 text-left group"
-                      onClick={() => setKline({ symbol: p.symbol, name: p.name })}
-                      aria-label={t("pos.viewK", { name: p.name })}
+            <div className="overflow-hidden rounded-lg border border-border">
+              <div className="hidden grid-cols-[minmax(0,1fr)_8rem_7rem_8rem] gap-3 border-b border-border bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground sm:grid">
+                <span>{t("pos.symbol")}</span>
+                <span className="text-right">{t("pos.price")}</span>
+                <span className="text-right">{t("dash.todayPnl")}</span>
+                <span className="text-right">{t("dash.totalPnl")}</span>
+              </div>
+              <ul className="divide-y divide-border/60">
+                {holdings.map((p) => {
+                  const day = dashboard?.today_pnl.items[p.symbol];
+                  return (
+                    <li
+                      key={p.symbol}
+                      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-2.5 text-sm transition-colors hover:bg-accent/40 sm:grid-cols-[minmax(0,1fr)_8rem_7rem_8rem] sm:gap-3"
                     >
-                      <span className="truncate font-medium group-hover:text-primary">{p.name}</span>
-                      <span className="ml-1.5 text-xs text-muted-foreground">{p.kind} · {p.symbol}</span>
-                    </button>
-                    <span className="flex shrink-0 items-center gap-3 tabular-nums">
-                      <span className="w-16 text-right">{fmtMoney(p.last, false, true)}</span>
-                      <span className={cn("w-16 text-right", pnlClass(day))}>{day != null ? fmtPct((day / Math.max(1, p.market_value)) * 100, true) : "—"}</span>
-                      <span className={cn("w-20 text-right", pnlClass(p.pnl))}>{fmtMoney(p.pnl, true, true)}</span>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
+                      <button
+                        type="button"
+                        className="group/name min-w-0 text-left"
+                        onClick={() => setKline({ symbol: p.symbol, name: p.name })}
+                        aria-label={t("pos.viewK", { name: p.name })}
+                      >
+                        <span className="truncate font-medium group-hover/name:text-primary">{p.name}</span>
+                        <span className="ml-1.5 text-xs text-muted-foreground">{p.kind} · {p.symbol}</span>
+                      </button>
+                      <span className="text-right tabular-nums">{fmtMoney(p.last, false, true)}</span>
+                      <span className={cn("text-right tabular-nums", pnlClass(day))}>
+                        {day != null ? fmtPct((day / Math.max(1, p.market_value)) * 100, true) : "—"}
+                      </span>
+                      <span className={cn("text-right tabular-nums", pnlClass(p.pnl))}>{fmtMoney(p.pnl, true, true)}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
             <p className="mt-2 text-[11px] text-muted-foreground">
               {t("market.holdingSrc", { src: dashboard?.source.quotes ?? "" })} · {t("notAdvice")}
             </p>

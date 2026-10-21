@@ -74,11 +74,16 @@ def _configure_root() -> None:
         "mcp",
         "sse_starlette",
         "chromadb",
+        # asyncio 的 Proactor 实现每建一个事件循环就打一行 DEBUG，
+        # 在 Windows 上能把日志刷满整屏、把真正的告警挤没。
+        "asyncio",
     ):
         logging.getLogger(noisy).setLevel(logging.WARNING)
     # LiteLLM：成本表查询/模型映射的 DEBUG 行带 traceback，看着像报错但不是；
     # 压到 ERROR（真实调用错误仍会输出）。
     logging.getLogger("LiteLLM").setLevel(logging.ERROR)
+    # 平台事件循环内部实现（IocpProactor / selector）同样只保留告警以上
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
 
     _configured = True
 

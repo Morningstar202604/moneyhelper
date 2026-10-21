@@ -1,4 +1,4 @@
-import { ChevronDown, Languages, Menu, Moon, Settings, SquarePen, Sun } from "lucide-react";
+import { ArrowLeft, ChevronDown, Languages, Menu, Moon, Settings, SquarePen, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { BrandLogo, BRAND } from "@/lib/brand";
@@ -15,6 +15,7 @@ export function TopBar({
   onOpenSettings,
   onOpenNav,
   onNewSession,
+  onBackToChat,
   modelName,
   modelCatalog,
   enabledModels,
@@ -24,6 +25,8 @@ export function TopBar({
   /** 移动端：打开左侧导航抽屉（会话列表/新建/部门/收件箱） */
   onOpenNav?: () => void;
   onNewSession?: () => void;
+  /** 非对话页时显示返回问答的入口 */
+  onBackToChat?: () => void;
   modelName?: string;
   modelCatalog?: BootstrapData["model_catalog"];
   enabledModels?: string[];
@@ -35,6 +38,7 @@ export function TopBar({
   return (
     <header className="flex h-12 shrink-0 items-center justify-between gap-2 px-2 pt-[env(safe-area-inset-top)] sm:px-3">
       <div className="flex min-w-0 items-center gap-1">
+        {/* 移动端菜单：始终可用——财务页里也要能打开会话抽屉 */}
         <button
           type="button"
           aria-label={t("sidebar.sessions")}
@@ -43,6 +47,17 @@ export function TopBar({
         >
           <Menu className="h-5 w-5" />
         </button>
+        {onBackToChat && (
+          <button
+            type="button"
+            aria-label={t("app.backToChat")}
+            onClick={onBackToChat}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-sm text-foreground/75 transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">{t("app.backToChat")}</span>
+          </button>
+        )}
         <span className="flex min-w-0 items-center gap-2 md:hidden">
           <BrandLogo size={22} />
           <span className="truncate text-sm font-semibold">{BRAND.name}</span>

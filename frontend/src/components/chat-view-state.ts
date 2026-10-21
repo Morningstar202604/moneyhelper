@@ -65,6 +65,8 @@ export function useChatView({
     run: (payload, onEvent, signal) =>
       apiStream("/api/ask", { ...payload, thread_id: threadId }, onEvent, signal),
     onSettled: (_payload, _aborted, err) => {
+      // 首条消息发出后会话才真正落库（标题也会被首个问题覆盖），此时刷新侧栏
+      void store.refreshSessions();
       if (err) {
         setMessages((prev) => {
           const out = [...prev];

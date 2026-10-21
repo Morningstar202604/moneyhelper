@@ -199,6 +199,44 @@
     border-radius: var(--radius);
   }
 
+  /* 命令面板（cmdk）：组件里只写了 .cmd-item 类名，此前没有任何样式定义，
+     导致所有命令退化成逐行堆叠的裸文本。这里补齐与主流命令面板一致的排布。 */
+  .cmd-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.625rem;
+    border-radius: calc(var(--radius) - 4px);
+    font-size: 0.875rem;
+    color: hsl(var(--foreground) / 0.85);
+    cursor: pointer;
+    user-select: none;
+  }
+  .cmd-item[data-selected="true"] {
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+  }
+  .cmd-item svg {
+    flex-shrink: 0;
+    color: hsl(var(--muted-foreground));
+  }
+  .cmd-item[data-selected="true"] svg {
+    color: currentColor;
+  }
+  /* 分组标题：小号灰字，与条目左对齐 */
+  [cmdk-group-heading] {
+    padding: 0.5rem 0.625rem 0.25rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: hsl(var(--muted-foreground));
+  }
+  [cmdk-group] + [cmdk-group] {
+    margin-top: 0.25rem;
+    border-top: 1px solid hsl(var(--border) / 0.7);
+    padding-top: 0.25rem;
+  }
+
   /* 回答正文排版：对标 ChatGPT 的阅读密度（16px / 1.75 行高、段间 0.9em），
      标题克制、列表有缩进、表格与引用块自带边界。 */
   .md-body {

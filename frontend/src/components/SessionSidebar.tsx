@@ -38,6 +38,8 @@ function timeBucket(iso: string): Bucket {
 export function SessionSidebar({
   activeThread,
   onHome,
+  onOpenOverview,
+  activeView,
   onSelect,
   onNew,
   onDelete,
@@ -48,7 +50,12 @@ export function SessionSidebar({
   onOpenInbox,
 }: {
   activeThread: string | null;
+  /** 品牌点击：回到问答 */
   onHome: () => void;
+  /** 底部「总览」入口 */
+  onOpenOverview: () => void;
+  /** 当前主区视图：chat 或某个财务页 */
+  activeView: string;
   onSelect: (threadId: string | null) => void;
   onNew: () => void;
   onDelete: (id: number, threadId: string) => void;
@@ -273,7 +280,12 @@ export function SessionSidebar({
       </div>
 
       <div className="border-t border-border/70 p-2">
-        <button type="button" onClick={onHome} className={navRow}>
+        <button
+          type="button"
+          onClick={onOpenOverview}
+          aria-current={activeView === "overview" ? "page" : undefined}
+          className={cn(navRow, activeView === "overview" && "bg-foreground/[0.06] font-medium text-foreground")}
+        >
           <LayoutGrid className="h-4 w-4 shrink-0" />
           {t("nav.dashboard")}
         </button>

@@ -6,10 +6,12 @@ import { test, expect } from "@playwright/test";
  */
 
 test.describe("数据浮层", () => {
-  test("总览浮层包含资产相关文案（种子数据）", async ({ page }) => {
+  test("总览页包含资产相关文案（种子数据）", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: /小满/ }).first().click();
-    await expect(page.getByRole("heading", { name: "总览" })).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: "总览" }).first().click();
+    await expect(page.getByRole("tab", { name: "总览" })).toHaveAttribute("aria-selected", "true", {
+      timeout: 10_000,
+    });
     await expect(page.getByText("资产分布").first()).toBeVisible();
     // 净值卡：负债明细可见（dict 契约的前端消费回归）
     await expect(page.getByText("信用卡分期").first()).toBeVisible({ timeout: 10_000 });
@@ -24,6 +26,9 @@ test.describe("数据浮层", () => {
     await field.press("Enter");
     // 确定性/模型回答都带「去持仓页」chip
     await page.getByRole("button", { name: "去持仓页" }).first().click({ timeout: 45_000 });
+    await expect(page.getByRole("tab", { name: "持仓" })).toHaveAttribute("aria-selected", "true", {
+      timeout: 15_000,
+    });
     await expect(page.getByText(/贵州茅台/).first()).toBeVisible({ timeout: 15_000 });
   });
 });

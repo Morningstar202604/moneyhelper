@@ -15,13 +15,16 @@ test.describe("应用启动 & 冒烟", () => {
     await expect(page.getByPlaceholder(/问点什么/)).toBeVisible();
   });
 
-  test("侧栏品牌按钮打开总览浮层，可关闭", async ({ page }) => {
+  test("侧栏总览入口打开财务工作区，可返回问答", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: /小满/ }).first().click();
-    // 总览浮层：标题 + 关闭按钮
-    await expect(page.getByRole("heading", { name: "总览" })).toBeVisible({ timeout: 10_000 });
-    await page.getByRole("button", { name: "关闭" }).first().click();
-    await expect(page.getByRole("button", { name: "关闭" })).toHaveCount(0);
+    // 品牌负责回到问答；财务入口在侧栏底部
+    await page.getByRole("button", { name: "总览" }).first().click();
+    await expect(page.getByRole("tab", { name: "总览" })).toHaveAttribute("aria-selected", "true", {
+      timeout: 10_000,
+    });
+    await page.getByRole("button", { name: "返回问答" }).first().click();
+    await expect(page.getByPlaceholder(/问点什么/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("tab", { name: "总览" })).toHaveCount(0);
   });
 
   test("打开应用不会新建垃圾会话（会话列表加载竞态回归）", async ({ page, request }) => {

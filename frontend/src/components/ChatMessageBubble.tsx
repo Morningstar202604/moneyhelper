@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { SummaryBlock } from "@/components/SummaryBlock";
 import { BRAND, BrandLogo } from "@/lib/brand";
 import { useI18n } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import type { AgentToolStep, AgentPlanStep, AnswerMeta } from "@/lib/types";
 
@@ -366,48 +367,54 @@ function BubbleInner({
               <div className="mt-3 space-y-2">
                 {m.cards.map((c, i) => {
                   const d = (c.data || {}) as Record<string, any>;
-                  const market = (d.market || {}) as Record<string, any>;
-                  const ledger = (d.ledger || {}) as Record<string, any>;
+                  const market = (d.market || null) as Record<string, any> | null;
+                  const ledger = (d.ledger || null) as Record<string, any> | null;
+                  // 后端按命中的路由收集数据：问持仓只有 market，问开销只有 ledger。
+                  // 只渲染真实存在的部分，避免把没查询的指标显示成「—」（看起来像数据缺失）。
+                  const cells = [
+                    market && {
+                      label: tr("summary.marketValue"),
+                      value:
+                        market.total_market_value != null
+                          ? `¥${(market.total_market_value / 10000).toFixed(1)}万`
+                          : "—",
+                    },
+                    ledger && {
+                      label: tr("dash.monthExpense"),
+                      value: ledger.expense != null ? `¥${Number(ledger.expense).toLocaleString()}` : "—",
+                    },
+                    ledger && {
+                      label: tr("summary.monthlyNet"),
+                      value: ledger.net != null ? `¥${Number(ledger.net).toLocaleString()}` : "—",
+                    },
+                    ledger && {
+                      label: tr("summary.savingsRate"),
+                      value: ledger.savings_rate != null ? `${Number(ledger.savings_rate).toFixed(0)}%` : "—",
+                    },
+                  ].filter(Boolean) as { label: string; value: string }[];
+                  if (cells.length === 0) return null;
                   return (
                     <div key={i} className="rounded-2xl border border-border bg-card p-3.5">
                       <div className="mb-2.5 flex items-center justify-between">
                         <span className="flex items-center gap-1.5 text-xs font-medium text-foreground/70">
                           <BarChart3 className="h-3.5 w-3.5 text-primary" />
-                          财务快照
+                          {tr("chat.snapshot")}
                         </span>
                         <button
                           type="button"
-                          onClick={() => onNavigate("overview")}
+                          onClick={() => onNavigate(ledger ? "ledger" : "holdings")}
                           className="text-[11px] text-primary hover:underline"
                         >
-                          展开 →
+                          {tr("chat.expand")} →
                         </button>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="rounded-xl bg-muted/60 px-3 py-2">
-                          <div className="text-[11px] text-muted-foreground">总市值</div>
-                          <div className="text-sm font-semibold tabular-nums">
-                            {market.total_market_value ? `¥${(market.total_market_value / 10000).toFixed(1)}万` : "—"}
+                      <div className={cn("grid gap-2", cells.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+                        {cells.map((cell) => (
+                          <div key={cell.label} className="rounded-xl bg-muted/60 px-3 py-2">
+                            <div className="text-[11px] text-muted-foreground">{cell.label}</div>
+                            <div className="text-sm font-semibold tabular-nums">{cell.value}</div>
                           </div>
-                        </div>
-                        <div className="rounded-xl bg-muted/60 px-3 py-2">
-                          <div className="text-[11px] text-muted-foreground">本月支出</div>
-                          <div className="text-sm font-semibold tabular-nums">
-                            {ledger.expense ? `¥${ledger.expense.toLocaleString()}` : "—"}
-                          </div>
-                        </div>
-                        <div className="rounded-xl bg-muted/60 px-3 py-2">
-                          <div className="text-[11px] text-muted-foreground">本月结余</div>
-                          <div className="text-sm font-semibold tabular-nums">
-                            {ledger.net ? `¥${ledger.net.toLocaleString()}` : "—"}
-                          </div>
-                        </div>
-                        <div className="rounded-xl bg-muted/60 px-3 py-2">
-                          <div className="text-[11px] text-muted-foreground">储蓄率</div>
-                          <div className="text-sm font-semibold tabular-nums">
-                            {ledger.savings_rate != null ? `${Number(ledger.savings_rate).toFixed(0)}%` : "—"}
-                          </div>
-                        </div>
+                        ))}
                       </div>
                     </div>
                   );

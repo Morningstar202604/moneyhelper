@@ -182,6 +182,25 @@ async def test_route_goal_words() -> None:
     assert r == "general"
 
 
+async def test_route_ledger_colloquialisms() -> None:
+    """口语化的收支说法必须路由到账本（而非被判成普通闲聊）。
+
+    回归：此前 LEDGER_WORDS 只收「支出」，「这个月的开销怎么样」被判 general，
+    回答变成"未接入模型"的兜底文案，用户看起来像功能坏了。
+    """
+    from app import service
+
+    for q in (
+        "这个月的开销怎么样",
+        "本月开支多少",
+        "最近花费大吗",
+        "我这个月花了多少",
+        "每月消费多少",
+    ):
+        r, _ = service.route_question(q)
+        assert r == "ledger", f"{q} → {r}"
+
+
 async def test_route_reason_follows_language() -> None:
     """route_reason（推理轨迹展示文本）按 lang 本地化：en 界面不再出现中文路由描述。"""
     from app import service

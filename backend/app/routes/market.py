@@ -71,34 +71,37 @@ async def get_quote(symbol: str) -> dict:
     return q
 
 
-@router.get("/api/search")
-async def search(q: str, limit: int = 8) -> dict:
-    """东财 suggest：搜股票/基金/指数（仅东财源；失败返回空列表）。"""
+async def _fetch_suggest(kw: str) -> dict:
+    """向东财 suggest 拉原始响应。单独抽出便于测试替换（也便于以后换源）。"""
     import os
 
     import httpx
-    kw = q.strip()
-    if not kw or len(kw) > 20:
-        return {"items": []}
+
     token = os.getenv("EASTMONEY_SEARCH_TOKEN", "D43BF722C8E33BDC906FB84D85E326E8")
     params = {"input": kw, "type": "14", "token": token}
     headers = {
         "User-Agent": "Mozilla/5.0 (xiaoman)",
         "Referer": "https://quote.eastmoney.com/",
     }
-    try:
-        async with httpx.AsyncClient(timeout=4.0) as client:
-            resp = await client.get(
-                "https://searchapi.eastmoney.com/api/suggest/get",
-                params=params,
-                headers=headers,
-            )
-            resp.raise_for_status()
-            data = (resp.json() or {}).get("data") or {}
-        rows = (data.get("QuotationCodeTable") or {}).get("Data") or []
-    except Exception:  # noqa: BLE001 — 搜索失败返回空，前端提示网络不可用
-        return {"items": []}
-    out = []
+    async with httpx.AsyncClient(timeout=4.0) as client:
+        resp = await client.get(
+            "https://searchapi.eastmoney.com/api/suggest/get",
+            params=params,
+            headers=headers,
+        )
+        resp.raise_for_status()
+        return resp.json() or {}
+
+
+def _parse_suggest(body: dict, limit: int) -> list[dict]:
+    """解析 suggest 响应。
+
+    真实返回是顶层 {"QuotationCodeTable": {...}}；早期代码按 {"data": {...}} 取值，
+    导致搜索永远返回空列表。这里两种形态都接受。
+    """
+    table = body.get("QuotationCodeTable") or (body.get("data") or {}).get("QuotationCodeTable") or {}
+    rows = table.get("Data") or []
+    out: list[dict] = []
     for r in rows[: max(1, min(limit, 20))]:
         code = str(r.get("Code") or "").strip()
         name = str(r.get("Name") or "").strip()
@@ -107,7 +110,20 @@ async def search(q: str, limit: int = 8) -> dict:
         stype = str(r.get("SecurityTypeName") or "")
         kind = "基金" if "基金" in stype else ("指数" if "指" in stype else "股票")
         out.append({"symbol": code, "name": name, "kind": kind})
-    return {"items": out}
+    return out
+
+
+@router.get("/api/search")
+async def search(q: str, limit: int = 8) -> dict:
+    """东财 suggest：搜股票/基金/指数（仅东财源；失败返回空列表）。"""
+    kw = q.strip()
+    if not kw or len(kw) > 20:
+        return {"items": []}
+    try:
+        body = await _fetch_suggest(kw)
+    except Exception:  # noqa: BLE001 — 搜索失败返回空，前端提示网络不可用
+        return {"items": []}
+    return {"items": _parse_suggest(body, limit)}
 
 
 @router.get("/api/subscriptions")
