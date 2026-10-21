@@ -72,14 +72,14 @@ export function SettingsView() {
         // 不在这里收起分组：同组切换是高频操作，收起会让用户每次都要重新展开
         onClick={() => setActive(s.id)}
         className={cn(
-          "flex flex-row items-center gap-1.5 rounded-lg px-2 py-2 text-xs transition-colors",
+          "flex flex-row items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           on
             ? "bg-accent text-accent-foreground font-medium"
             : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
         )}
       >
-        <Icon className="w-4 h-4 shrink-0" />
+        <Icon className="h-4 w-4 shrink-0" />
         <span className="truncate">{t(s.labelKey)}</span>
       </button>
     );
@@ -125,7 +125,7 @@ export function SettingsView() {
       {isDesktop && (
         <nav
           aria-label={t("nav.main")}
-          className="w-48 shrink-0 sticky top-4 grid grid-cols-1 gap-1.5"
+          className="sticky top-0 grid w-52 shrink-0 grid-cols-1 gap-0.5"
         >
           {SECTIONS.map((s) => sectionButton(s))}
         </nav>
@@ -136,7 +136,7 @@ export function SettingsView() {
         initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.15, ease: "easeOut" }}
-        className="flex-1 min-w-0 space-y-3"
+        className="min-w-0 flex-1 space-y-3"
       >
         {active === "prefs" && (
           <PrefsSection

@@ -16,14 +16,14 @@ import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
 import sql from "react-syntax-highlighter/dist/esm/languages/prism/sql";
 import yaml from "react-syntax-highlighter/dist/esm/languages/prism/yaml";
 import {
-  ChevronDown, ChevronUp, Copy, Download, Loader2, RotateCcw, Sparkles, Wrench,
+  BarChart3, ChevronDown, ChevronUp, Copy, Download, Loader2, RotateCcw, Sparkles, Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SummaryBlock } from "@/components/SummaryBlock";
+import { BRAND, BrandLogo } from "@/lib/brand";
 import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
-import { fmtDate } from "@/lib/format";
 import type { AgentToolStep, AgentPlanStep, AnswerMeta } from "@/lib/types";
 
 // 注册常用语言（PrismLight 按需，控制包体积）
@@ -280,258 +280,268 @@ function BubbleInner({
   onExport,
   onDecidePending,
 }: BubbleProps) {
-  const { t: tr } = useI18n();
+  const { t: tr, lang } = useI18n();
+  const assistantName = lang === "en" ? BRAND.en : BRAND.name;
 
   if (m.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%]">
-          <div className="inline-block rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-2 text-[15px] leading-relaxed shadow-xs">
-            {m.text}
-          </div>
+        <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-muted px-4 py-2.5 text-[15.5px] leading-relaxed text-foreground whitespace-pre-wrap break-words">
+          {m.text}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex justify-start">
-      <div className="max-w-full w-full">
-        {/* 账本的行：左侧一条竖线标来源，正文直接落在页面上，不再套白卡 */}
-        <div className="group border-l-2 border-border pl-3.5 sm:pl-4">
-          {m.error && !m.text ? (
-            <div className="text-sm text-red-600 dark:text-red-400">{tr("chat.error")}: {m.error}</div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between gap-2 mb-1.5">
-                <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {m.meta?.llm === "llm" && <Badge variant="default">{tr("chat.badgeAi")}</Badge>}
-                  {m.meta?.llm === "template" && <Badge variant="muted">{tr("chat.badgeRule")}</Badge>}
-                  {m.agentStatus === "running" && (
-                    <span className="inline-flex items-center gap-1 text-primary">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      {tr("chat.badgeThinking")}
-                    </span>
-                  )}
-                  <span>{m.created_at ? fmtDate(m.created_at) : tr("chat.justNow")}</span>
+    <div className="group/msg flex gap-3">
+      {/* 助手头像：品牌标记，尺寸克制，不抢正文 */}
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-card">
+        <BrandLogo size={18} />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        {m.error && !m.text ? (
+          <div className="text-sm text-red-600 dark:text-red-400">
+            {tr("chat.error")}: {m.error}
+          </div>
+        ) : (
+          <>
+            <div className="mb-1 flex items-center gap-2 text-[12px] text-muted-foreground">
+              <span className="font-medium text-foreground/80">{assistantName}</span>
+              {m.meta?.llm === "template" && <Badge variant="muted">{tr("chat.badgeRule")}</Badge>}
+              {m.agentStatus === "running" && (
+                <span className="inline-flex items-center gap-1 text-primary">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  {tr("chat.badgeThinking")}
                 </span>
-                {/* 操作按钮：移动端常显（无悬停），桌面端悬停/聚焦才出现 */}
-                <span className="flex items-center gap-1 opacity-70 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-                  <button
-                    type="button"
-                    className="p-2 -m-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
-                    aria-label={tr("chat.regenerate")}
-                    title={tr("chat.regenerate")}
-                    disabled={busy}
-                    onClick={() => onRegenerate(m)}
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </button>
-                  {exportOn && (
-                    <>
-                      <button
-                        type="button"
-                        className="p-2 -m-1 text-muted-foreground hover:text-foreground"
-                        aria-label={tr("chat.copyMd")}
-                        onClick={() => onExport(m, "copy")}
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        className="p-2 -m-1 text-muted-foreground hover:text-foreground"
-                        aria-label={tr("chat.downloadMd")}
-                        onClick={() => onExport(m, "download")}
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </button>
-                    </>
-                  )}
-                </span>
-              </div>
-              {m.plan && <PlanCard plan={m.plan} />}
-              {m.thinking && m.thinking.length > 0 && <Thinking items={m.thinking} running={m.agentStatus === "running"} />}
-              {m.text === "" && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" /> {tr("chat.analyzing")}
-                </div>
               )}
-              <div className="max-w-none text-[15px] leading-relaxed text-foreground">
+            </div>
+
+            {m.plan && <PlanCard plan={m.plan} />}
+            {m.thinking && m.thinking.length > 0 && (
+              <Thinking items={m.thinking} running={m.agentStatus === "running"} />
+            )}
+
+            {m.text === "" ? (
+              <div className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> {tr("chat.analyzing")}
+              </div>
+            ) : (
+              <div className="md-body text-foreground">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
-                  // AI 生成内容不可信：sanitize 过滤危险节点/协议（script/iframe/on* 事件、javascript: 等）；
-                  // 保留 class（代码高亮与样式类需要），其余属性白名单默认即可。
                   rehypePlugins={[
                     [
                       rehypeSanitize,
-                      { ...defaultSchema, attributes: { ...defaultSchema.attributes, "*": [...(defaultSchema.attributes?.["*"] ?? []), "className"] } },
+                      {
+                        ...defaultSchema,
+                        attributes: {
+                          ...defaultSchema.attributes,
+                          "*": [...(defaultSchema.attributes?.["*"] ?? []), "className"],
+                        },
+                      },
                     ],
                   ]}
                   components={MD_COMPONENTS}
                 >
                   {m.text}
                 </ReactMarkdown>
-                {streaming && m.text && <span className="stream-caret" aria-hidden="true" />}
+                {streaming && <span className="stream-caret" aria-hidden="true" />}
                 {streaming && !m.text && (
                   <span className="thinking-dots" aria-label="思考中">
                     <span /><span /><span />
                   </span>
                 )}
               </div>
-              {/* 已有正文但流被中断：保留内容，另起一行说明不完整 */}
-              {m.error && m.text ? (
-                <div className="mt-1.5 text-xs text-red-600 dark:text-red-400">
-                  {tr("chat.streamInterrupted")}: {m.error}
-                </div>
-              ) : null}
-              {/* 结构化数据卡：对话内嵌小卡，点"展开"唤起 DataModal */}
-              {m.cards && m.cards.length > 0 && (
-                <div className="mt-2.5 space-y-2">
-                  {m.cards.map((c, i) => {
-                    const d = (c.data || {}) as Record<string, any>;
-                    const market = (d.market || {}) as Record<string, any>;
-                    const ledger = (d.ledger || {}) as Record<string, any>;
-                    return (
-                      <div
-                        key={i}
-                        className="rounded-lg border border-border bg-card p-3 shadow-soft"
-                      >
-                        <div className="mb-2 flex items-center justify-between">
-                          <span className="text-xs font-medium text-foreground/80 flex items-center gap-1.5">
-                            <span className="text-primary">📊</span>
-                            财务快照
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => onNavigate("overview")}
-                            className="text-[11px] text-primary hover:underline"
-                          >
-                            展开 →
-                          </button>
+            )}
+
+            {m.error && m.text ? (
+              <div className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+                {tr("chat.streamInterrupted")}: {m.error}
+              </div>
+            ) : null}
+
+            {m.cards && m.cards.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {m.cards.map((c, i) => {
+                  const d = (c.data || {}) as Record<string, any>;
+                  const market = (d.market || {}) as Record<string, any>;
+                  const ledger = (d.ledger || {}) as Record<string, any>;
+                  return (
+                    <div key={i} className="rounded-2xl border border-border bg-card p-3.5">
+                      <div className="mb-2.5 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-xs font-medium text-foreground/70">
+                          <BarChart3 className="h-3.5 w-3.5 text-primary" />
+                          财务快照
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onNavigate("overview")}
+                          className="text-[11px] text-primary hover:underline"
+                        >
+                          展开 →
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-xl bg-muted/60 px-3 py-2">
+                          <div className="text-[11px] text-muted-foreground">总市值</div>
+                          <div className="text-sm font-semibold tabular-nums">
+                            {market.total_market_value ? `¥${(market.total_market_value / 10000).toFixed(1)}万` : "—"}
+                          </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
-                            <div className="text-[11px] text-muted-foreground">总市值</div>
-                            <div className="text-sm font-semibold tabular-nums">
-                              {market.total_market_value ? `¥${(market.total_market_value / 10000).toFixed(1)}万` : "—"}
-                            </div>
+                        <div className="rounded-xl bg-muted/60 px-3 py-2">
+                          <div className="text-[11px] text-muted-foreground">本月支出</div>
+                          <div className="text-sm font-semibold tabular-nums">
+                            {ledger.expense ? `¥${ledger.expense.toLocaleString()}` : "—"}
                           </div>
-                          <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
-                            <div className="text-[11px] text-muted-foreground">本月支出</div>
-                            <div className="text-sm font-semibold tabular-nums">
-                              {ledger.expense ? `¥${ledger.expense.toLocaleString()}` : "—"}
-                            </div>
+                        </div>
+                        <div className="rounded-xl bg-muted/60 px-3 py-2">
+                          <div className="text-[11px] text-muted-foreground">本月结余</div>
+                          <div className="text-sm font-semibold tabular-nums">
+                            {ledger.net ? `¥${ledger.net.toLocaleString()}` : "—"}
                           </div>
-                          <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
-                            <div className="text-[11px] text-muted-foreground">本月结余</div>
-                            <div className="text-sm font-semibold tabular-nums">
-                              {ledger.net ? `¥${ledger.net.toLocaleString()}` : "—"}
-                            </div>
-                          </div>
-                          <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
-                            <div className="text-[11px] text-muted-foreground">储蓄率</div>
-                            <div className="text-sm font-semibold tabular-nums">
-                              {/* savings_rate 后端已是百分数（32.5 表示 32.5%），不再乘 100 */}
-                              {ledger.savings_rate != null ? `${Number(ledger.savings_rate).toFixed(0)}%` : "—"}
-                            </div>
+                        </div>
+                        <div className="rounded-xl bg-muted/60 px-3 py-2">
+                          <div className="text-[11px] text-muted-foreground">储蓄率</div>
+                          <div className="text-sm font-semibold tabular-nums">
+                            {ledger.savings_rate != null ? `${Number(ledger.savings_rate).toFixed(0)}%` : "—"}
                           </div>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-              {m.meta && m.meta.route !== "general" && m.meta.route !== "nl_add" && (
-                <SummaryBlock meta={m.meta} />
-              )}
-              {m.actions && m.actions.length > 0 && (
-                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                  {/* filter(Boolean)：旧版本后端可能落库 null 项，防御性兜底 */}
-                  {m.actions.filter(Boolean).map((a, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => onNavigate(a.tab)}
-                      className="rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-[11px] text-primary transition-colors hover:bg-primary/10"
-                    >
-                      {tr(TAB_ACTION_KEYS[a.tab] ?? "chat.goOverview")}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {m.tools && m.tools.length > 0 && <ToolSteps tools={m.tools} />}
-              {m.pending && (
-                <div className="mt-2.5 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5">
-                  <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="text-amber-700 dark:text-amber-400 font-medium">
-                      {tr("chat.confirmTitle")}
-                    </span>
-                    <span className="text-amber-700/70 dark:text-amber-400/70">
-                      {m.pendingResult
-                        ? m.pendingResult === "executed"
-                          ? tr("chat.confirmDone")
-                          : m.pendingResult === "cancelled"
-                            ? tr("chat.confirmCancelled")
-                            : tr("chat.confirmExpired")
-                        : tr("chat.confirmPending")}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-xs text-foreground/80">{m.pending.summary}</div>
-                  {!m.pendingResult && (
-                    <div className="mt-2 flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="h-7 px-3 text-xs"
-                        onClick={() => onDecidePending(m, "confirm")}
-                      >
-                        {tr("chat.confirmBtn")}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-3 text-xs"
-                        onClick={() => onDecidePending(m, "cancel")}
-                      >
-                        {tr("chat.cancelBtn")}
-                      </Button>
                     </div>
-                  )}
-                  {m.pendingResult === "expired" && (
-                    <div className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
-                      {tr("chat.confirmExpired")}
-                    </div>
-                  )}
-                </div>
-              )}
-              {m.steps.length > 0 && (
-                <div className="mt-3">
+                  );
+                })}
+              </div>
+            )}
+
+            {m.meta && m.meta.route !== "general" && m.meta.route !== "nl_add" && (
+              <SummaryBlock meta={m.meta} />
+            )}
+
+            {m.actions && m.actions.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                {m.actions.filter(Boolean).map((a, i) => (
                   <button
+                    key={i}
                     type="button"
-                    className="text-xs text-muted-foreground inline-flex items-center gap-1 py-2 -my-1 hover:text-foreground"
-                    onClick={onToggleSteps}
+                    onClick={() => onNavigate(a.tab)}
+                    className="rounded-full border border-border bg-background px-3 py-1.5 text-[12px] text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
                   >
-                    {tr("chat.viewSteps")}
-                    {showSteps ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    {tr(TAB_ACTION_KEYS[a.tab] ?? "chat.goOverview")}
                   </button>
-                  {showSteps && (
-                    <ul className="mt-2 space-y-1.5">
-                      {m.steps.map((s, i) => (
-                        <li key={i} className="text-xs text-muted-foreground flex gap-1.5">
-                          <span className="text-primary shrink-0">✓</span>
-                          <span>
-                            <b className="text-foreground/80">{s.label}</b>
-                            <span className="ml-1">{s.detail}</span>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                ))}
+              </div>
+            )}
+
+            {m.tools && m.tools.length > 0 && <ToolSteps tools={m.tools} />}
+
+            {m.pending && (
+              <div className="mt-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] p-3">
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="font-medium text-amber-700 dark:text-amber-400">
+                    {tr("chat.confirmTitle")}
+                  </span>
+                  <span className="text-amber-700/70 dark:text-amber-400/70">
+                    {m.pendingResult
+                      ? m.pendingResult === "executed"
+                        ? tr("chat.confirmDone")
+                        : m.pendingResult === "cancelled"
+                          ? tr("chat.confirmCancelled")
+                          : tr("chat.confirmExpired")
+                      : tr("chat.confirmPending")}
+                  </span>
                 </div>
+                <div className="mt-1 text-xs text-foreground/80">{m.pending.summary}</div>
+                {!m.pendingResult && (
+                  <div className="mt-2.5 flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="h-8 rounded-full px-3.5 text-xs"
+                      onClick={() => onDecidePending(m, "confirm")}
+                    >
+                      {tr("chat.confirmBtn")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 rounded-full px-3.5 text-xs"
+                      onClick={() => onDecidePending(m, "cancel")}
+                    >
+                      {tr("chat.cancelBtn")}
+                    </Button>
+                  </div>
+                )}
+                {m.pendingResult === "expired" && (
+                  <div className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+                    {tr("chat.confirmExpired")}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {m.steps.length > 0 && (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 py-2 -my-1 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={onToggleSteps}
+                >
+                  {tr("chat.viewSteps")}
+                  {showSteps ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </button>
+                {showSteps && (
+                  <ul className="mt-2 space-y-1.5">
+                    {m.steps.map((s, i) => (
+                      <li key={i} className="flex gap-1.5 text-xs text-muted-foreground">
+                        <span className="shrink-0 text-primary">✓</span>
+                        <span>
+                          <b className="text-foreground/80">{s.label}</b>
+                          <span className="ml-1">{s.detail}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {/* 操作条：对齐 ChatGPT——放在回答下方，默认半透明，悬停/聚焦变清晰 */}
+            <div className="mt-1.5 flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/msg:opacity-100 max-sm:opacity-100">
+              <button
+                type="button"
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+                aria-label={tr("chat.copyMd")}
+                title={tr("chat.copyMd")}
+                onClick={() => onExport(m, "copy")}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+                aria-label={tr("chat.regenerate")}
+                title={tr("chat.regenerate")}
+                disabled={busy}
+                onClick={() => onRegenerate(m)}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </button>
+              {exportOn && (
+                <button
+                  type="button"
+                  className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  aria-label={tr("chat.downloadMd")}
+                  title={tr("chat.downloadMd")}
+                  onClick={() => onExport(m, "download")}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </button>
               )}
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

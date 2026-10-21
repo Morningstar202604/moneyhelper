@@ -65,7 +65,7 @@ export function MobileDrawer({
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ type: "spring", stiffness: 420, damping: 42 }}
-            className="absolute left-0 top-0 flex h-full flex-col border-r border-border bg-card shadow-lift"
+            className="absolute left-0 top-0 flex h-full flex-col bg-sidebar shadow-lift"
             style={{
               width: "min(85vw, 320px)",
               paddingTop: "env(safe-area-inset-top)",

@@ -26,6 +26,7 @@
   --color-ring: hsl(var(--ring));
   --color-brand: hsl(var(--brand));
   --color-brand-gold: hsl(var(--brand-gold));
+  --color-sidebar: hsl(var(--sidebar));
   --color-up: #dc2626;   /* 涨/盈 = 红（中国市场惯例） */
   --color-down: #059669; /* 跌/亏 = 绿 */
   --color-success: #059669; /* 状态语义（达标/完成/健康），与涨跌色分离 */
@@ -55,28 +56,31 @@
 @layer base {
   :root {
     /* 语义令牌：ChatGPT 式中性灰底 + 单一墨绿主色（小满节气的青绿色）。
-       告别米黄/橙双色混搭，回到干净的对话工具感。 */
-    --background: 0 0% 97.6%;      /* #f7f7f8 */
-    --foreground: 0 0% 13%;        /* #212121 */
+       主区纯白、侧栏浅灰、交互态一律中性灰；品牌绿只出现在发送键/焦点等点睛处，
+       避免整屏泛绿导致的廉价感。 */
+    --background: 0 0% 100%;       /* #ffffff 主对话区 */
+    --foreground: 0 0% 5.5%;       /* #0e0e0e 近黑正文 */
 
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 13%;
+    --card-foreground: 0 0% 5.5%;
+    --sidebar: 0 0% 97.6%;         /* #f9f9f9 左侧栏 */
 
     --primary: 168 76% 24%;         /* 墨绿 teal-800 */
     --primary-foreground: 0 0% 100%;
 
     --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 20%;
+    --secondary-foreground: 0 0% 13%;
 
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 42%;
 
-    --accent: 168 40% 95%;
-    --accent-foreground: 168 76% 20%;
+    /* 悬停态用中性灰而非浅绿：绿色底纹会让整个侧栏显脏 */
+    --accent: 0 0% 95%;
+    --accent-foreground: 0 0% 9%;
 
-    --border: 0 0% 90%;
+    --border: 0 0% 92%;
     --input: 0 0% 88%;
-    --ring: 168 76% 35%;
+    --ring: 168 76% 30%;
 
     --radius: 0.75rem;
     --card-pad: 1rem;
@@ -87,28 +91,29 @@
   }
 
   .dark {
-    /* 暗色：ChatGPT 式中性深灰（#171717 底，#212121 卡片） */
-    --background: 0 0% 9%;
-    --foreground: 0 0% 92%;
+    /* 暗色：ChatGPT 式中性深灰（#212121 主区 / #171717 侧栏） */
+    --background: 0 0% 13%;
+    --foreground: 0 0% 95%;
 
-    --card: 0 0% 13%;
-    --card-foreground: 0 0% 92%;
+    --card: 0 0% 15%;
+    --card-foreground: 0 0% 95%;
+    --sidebar: 0 0% 9%;
 
     --primary: 168 70% 45%;
     /* 深色下主色是亮墨绿：前景改深色文字，白字对比度仅 2.23:1（低于 WCAG AA 4.5:1） */
     --primary-foreground: 168 70% 12%;
 
-    --secondary: 0 0% 17%;
-    --secondary-foreground: 0 0% 90%;
+    --secondary: 0 0% 20%;
+    --secondary-foreground: 0 0% 92%;
 
-    --muted: 0 0% 17%;
-    --muted-foreground: 0 0% 55%;
+    --muted: 0 0% 20%;
+    --muted-foreground: 0 0% 65%;
 
-    --accent: 168 30% 20%;
-    --accent-foreground: 168 70% 70%;
+    --accent: 0 0% 22%;
+    --accent-foreground: 0 0% 96%;
 
-    --border: 0 0% 22%;
-    --input: 0 0% 22%;
+    --border: 0 0% 24%;
+    --input: 0 0% 28%;
     --ring: 168 70% 45%;
 
     --brand: 168 70% 50%;
@@ -192,6 +197,94 @@
     background: hsl(var(--card));
     border: 1px solid hsl(var(--border));
     border-radius: var(--radius);
+  }
+
+  /* 回答正文排版：对标 ChatGPT 的阅读密度（16px / 1.75 行高、段间 0.9em），
+     标题克制、列表有缩进、表格与引用块自带边界。 */
+  .md-body {
+    font-size: 1rem;
+    line-height: 1.75;
+    overflow-wrap: anywhere;
+  }
+  .md-body > :first-child {
+    margin-top: 0;
+  }
+  .md-body > :last-child {
+    margin-bottom: 0;
+  }
+  .md-body p,
+  .md-body ul,
+  .md-body ol,
+  .md-body blockquote,
+  .md-body table,
+  .md-body pre {
+    margin: 0.9em 0;
+  }
+  .md-body h1,
+  .md-body h2,
+  .md-body h3,
+  .md-body h4 {
+    margin: 1.5em 0 0.6em;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .md-body h1 { font-size: 1.35em; }
+  .md-body h2 { font-size: 1.2em; }
+  .md-body h3 { font-size: 1.05em; }
+  .md-body h4 { font-size: 1em; }
+  .md-body ul,
+  .md-body ol {
+    padding-left: 1.5em;
+  }
+  .md-body ul { list-style: disc; }
+  .md-body ol { list-style: decimal; }
+  .md-body li {
+    margin: 0.35em 0;
+  }
+  .md-body li > p {
+    margin: 0.35em 0;
+  }
+  .md-body a {
+    color: hsl(var(--primary));
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .md-body strong { font-weight: 600; }
+  .md-body code {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    background: hsl(var(--muted));
+    border-radius: 5px;
+    padding: 0.15em 0.4em;
+  }
+  .md-body pre code {
+    background: transparent;
+    padding: 0;
+    font-size: 1em;
+  }
+  .md-body blockquote {
+    border-left: 3px solid hsl(var(--border));
+    padding-left: 0.9em;
+    color: hsl(var(--muted-foreground));
+  }
+  .md-body hr {
+    margin: 1.4em 0;
+    border-color: hsl(var(--border));
+  }
+  .md-body table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9375em;
+  }
+  .md-body th,
+  .md-body td {
+    border: 1px solid hsl(var(--border));
+    padding: 0.45em 0.7em;
+    text-align: left;
+  }
+  .md-body th {
+    background: hsl(var(--muted));
+    font-weight: 600;
   }
 }
 

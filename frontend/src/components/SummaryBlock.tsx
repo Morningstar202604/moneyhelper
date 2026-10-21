@@ -72,7 +72,7 @@ export function SummaryBlock({ meta }: { meta: AnswerMeta }) {
   if (!levelText && !hasChips && bars.length === 0) return null;
 
   return (
-    <div className="mt-3 border-t border-border/70 pt-2.5">
+    <div className="mt-4">
       {/* 意图识别显性化：小满把这句话读成什么（差异化「懂钱」的特征，前端直接亮给用户看） */}
       {meta.route && meta.route_reason && meta.route !== "general" && meta.route !== "nl_add" && (
         <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[11px] text-primary">

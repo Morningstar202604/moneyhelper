@@ -116,7 +116,8 @@ export default function App() {
 
   const newSession = useCallback(async () => {
     const tmp = `__tmp_${Date.now()}`;
-    setActiveThread((cur) => (cur === null ? tmp : cur));
+    // 先切到临时线程，输入框立刻可用；拿到真实 thread_id 后替换。
+    setActiveThread(tmp);
     try {
       const r = await api<{ id: number; thread_id: string }>("/api/sessions", {
         method: "POST",
@@ -133,6 +134,7 @@ export default function App() {
           /* ignore */
         }
       }
+      // 用户若已手动切到别的会话，尊重其选择；否则落到新会话。
       setActiveThread((cur) => (cur === tmp ? r.thread_id : cur));
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), "error");
@@ -227,7 +229,7 @@ export default function App() {
             {isDesktop && (
             <aside
               className={cn(
-                "relative flex shrink-0 flex-col border-r border-border bg-card/40 transition-[width] duration-200",
+                "relative flex shrink-0 flex-col transition-[width] duration-200",
                 sidebarOpen ? "" : "w-12",
               )}
               style={sidebarOpen ? { width: navWidth.width } : undefined}
@@ -246,12 +248,12 @@ export default function App() {
                   onOpenInbox={() => setInboxOpen(true)}
                 />
               ) : (
-                <div className="flex h-full w-12 flex-col items-center pt-2">
+                <div className="flex h-full w-12 flex-col items-center bg-sidebar pt-3">
                   <button
                     type="button"
                     aria-label={t("sidebar.expand")}
                     onClick={() => setSidebarOpen(true)}
-                    className="p-2 text-muted-foreground hover:text-primary transition-colors"
+                    className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
                   >
                     <PanelLeftOpen className="w-4 h-4" />
                   </button>
@@ -287,8 +289,8 @@ export default function App() {
                 onOpenNav={() => setMobileNavOpen(true)}
               />
 
-              <main className="flex-1 min-h-0 pb-[calc(3.25rem+env(safe-area-inset-bottom))] md:pb-0">
-                <div className="mx-auto w-full max-w-3xl h-full flex flex-col view-enter">
+              <main className="flex min-h-0 flex-1 pb-[calc(3.25rem+env(safe-area-inset-bottom))] md:pb-0">
+                <div className="flex h-full w-full flex-col view-enter">
                   <Suspense
                     fallback={
                       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -303,7 +305,6 @@ export default function App() {
                         locateRunId={locateRunId}
                         onLocateDone={() => setLocateRunId(null)}
                         onNewSession={() => void newSession()}
-                        onSwitch={openChat}
                         onOpenSettings={() => setSettingsOpen(true)}
                         onNavigate={openData}
                       />
@@ -381,25 +382,30 @@ export default function App() {
             />
           </Suspense>
 
-          {/* 设置页：全屏 overlay */}
+          {/* 设置页：全屏 overlay（ChatGPT 式：左侧栏收起，顶栏只有标题与关闭） */}
           {settingsOpen && (
-            <div className="fixed inset-0 z-40 overflow-y-auto bg-background">
-              <div className="sticky top-0 z-10 flex justify-end border-b border-border bg-background/90 backdrop-blur px-4 py-2">
+            <div className="fixed inset-0 z-40 flex flex-col bg-background">
+              <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/70 px-4">
+                <span className="text-[15px] font-medium">{t("topbar.settings")}</span>
                 <button
                   type="button"
                   onClick={() => setSettingsOpen(false)}
-                  className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
                   <X className="w-4 h-4" /> {t("app.close")}
                 </button>
               </div>
-              <Suspense
-                fallback={
-                  <div className="py-12 text-center text-sm text-muted-foreground">{t("app.preparing")}</div>
-                }
-              >
-                <SettingsView />
-              </Suspense>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6">
+                  <Suspense
+                    fallback={
+                      <div className="py-12 text-center text-sm text-muted-foreground">{t("app.preparing")}</div>
+                    }
+                  >
+                    <SettingsView />
+                  </Suspense>
+                </div>
+              </div>
             </div>
           )}
 
