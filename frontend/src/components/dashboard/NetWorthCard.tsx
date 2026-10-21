@@ -5,8 +5,7 @@ import { Landmark, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useEChart, usePalette, axisLabelColor } from "@/lib/charts";
-import { useTheme } from "@/lib/theme";
+import { useEChart, usePalette } from "@/lib/charts";
 import { useI18n } from "@/lib/i18n";
 import { fmtMoney } from "@/lib/format";
 import { useNetWorth, type NetWorthBreakdown } from "@/lib/use-calculations";
@@ -15,7 +14,6 @@ import type { EChartsCoreOption } from "echarts/core";
 function NetWorthPie({ breakdown }: { breakdown: NetWorthBreakdown["asset_breakdown"] }) {
   const ref = useRef<HTMLDivElement>(null);
   const palette = usePalette();
-  const { resolved } = useTheme();
   const option = useMemo<EChartsCoreOption | null>(() => {
     const items = Object.entries(breakdown)
       .filter(([, value]) => value > 0)
@@ -23,7 +21,6 @@ function NetWorthPie({ breakdown }: { breakdown: NetWorthBreakdown["asset_breakd
     if (items.length === 0) return null;
     return {
       tooltip: { trigger: "item", triggerOn: "click", renderMode: "richText", confine: true, formatter: `{b}\n¥{c}` },
-      legend: { bottom: 0, textStyle: { fontSize: 10, color: axisLabelColor(resolved) }, icon: "circle", itemWidth: 8, itemHeight: 8 },
       series: [{
         type: "pie", radius: ["0%", "64%"], center: ["50%", "50%"],
         avoidLabelOverlap: true, itemStyle: { borderRadius: 4, borderColor: "transparent", borderWidth: 2 },
@@ -31,9 +28,9 @@ function NetWorthPie({ breakdown }: { breakdown: NetWorthBreakdown["asset_breakd
         data: items.map((d, i) => ({ name: d.label, value: d.value, itemStyle: { color: palette[i % 3] } })),
       }],
     };
-  }, [breakdown, palette, resolved]);
+  }, [breakdown, palette]);
   useEChart(ref, option, [option]);
-  return <div ref={ref} className="h-36 w-full" />;
+  return <div ref={ref} className="h-44 w-full" />;
 }
 
 function StatRow({ label, value, tone }: { label: string; value: number; tone?: "up" | "down" }) {
@@ -49,6 +46,7 @@ function StatRow({ label, value, tone }: { label: string; value: number; tone?: 
 
 export function NetWorthCard() {
   const { t: tr } = useI18n();
+  const palette = usePalette();
   const { data, isLoading, isError } = useNetWorth();
 
   if (isLoading) {
@@ -90,12 +88,29 @@ export function NetWorthCard() {
         <span className="text-xs text-muted-foreground">{tr("netWorth.total")}</span>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-3 items-center">
-        {hasPieData && <NetWorthPie breakdown={assets} />}
-        <div className={`space-y-1.5 ${hasPieData ? "" : "col-span-2 grid grid-cols-2 gap-x-4"}`}>
+      <div className="grid items-center gap-6 sm:grid-cols-[13rem_minmax(0,24rem)]">
+        {hasPieData ? (
+          <div className="relative">
+            <NetWorthPie breakdown={assets} />
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-[10px] text-muted-foreground">{tr("netWorth.assets")}</span>
+              <span className="text-[13px] font-semibold tabular-nums">{fmtMoney(data.total_assets, false, true)}</span>
+            </div>
+          </div>
+        ) : null}
+        <div className={hasPieData ? "w-full max-w-md space-y-2" : "grid grid-cols-2 gap-x-6 gap-y-1.5"}>
           <StatRow label={tr("netWorth.assets")} value={data.total_assets} tone="up" />
-          {Object.entries(assets).map(([label, value]) => (
-            <StatRow key={label} label={label} value={value} />
+          {Object.entries(assets).map(([label, value], i) => (
+            <div key={label} className="flex items-center justify-between gap-2 text-xs">
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ background: palette[i % 3] }}
+                />
+                <span className="truncate text-muted-foreground">{label}</span>
+              </span>
+              <span className="shrink-0 tabular-nums text-foreground">{fmtMoney(value)}</span>
+            </div>
           ))}
           <StatRow label={tr("netWorth.liability")} value={data.total_liabilities} tone="down" />
         </div>

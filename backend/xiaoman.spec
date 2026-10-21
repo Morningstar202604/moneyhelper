@@ -39,9 +39,10 @@ def _all_submodules(pkg) -> list[str]:
         out.append("litellm." + ".".join(parts))
     return sorted(set(out))
 
-# 前端静态文件目录（已构建）
+# 前端静态文件目录（已构建）。
+# SPECPATH 是 spec 所在目录（backend/），其父目录即仓库根，前端产物在根下的 frontend/dist。
 FRONTEND_DIST = Path(SPECPATH).parent / "frontend" / "dist"
-assert FRONTEND_DIST.is_dir(), f"前端未构建：{FRONTEND_DIST}（先 npm run build）"
+assert FRONTEND_DIST.is_dir(), f"前端未构建：{FRONTEND_DIST}（先 cd frontend && npm run build）"
 
 a = Analysis(
     ["run.py"],

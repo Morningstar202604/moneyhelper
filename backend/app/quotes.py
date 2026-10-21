@@ -479,6 +479,9 @@ async def quote_now(symbol: str) -> dict[str, Any] | None:
 
 KLT = {"daily": 101, "weekly": 102, "monthly": 103}
 KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+# 回退：部分网络对 push2his 的 HTTPS 握手会被中间设备重置（实测 curl 正常、
+# httpx TLS 被断），同一路径的 HTTP 端点仍可用。K 线是公开只读行情，HTTP 无泄密风险。
+KLINE_URL_HTTP = "http://push2his.eastmoney.com/api/qt/stock/kline/get"
 _kline_cache = TTLCache[tuple[str, str, int], dict[str, Any]](maxsize=64, ttl=300.0)
 
 # f51..f61 固定顺序：日期,开,收,高,低,成交量,成交额,振幅,涨跌幅,涨跌额,换手率
@@ -541,12 +544,18 @@ async def _fetch_kline(secid: str, klt: int, limit: int) -> list[str]:
         "ut": "fa5fd1943c7b386f172d6893dbfba10b",
     }
     headers = {"User-Agent": "Mozilla/5.0 (xiaoman)"}
-    async with httpx.AsyncClient(timeout=6.0) as client:
-        resp = await client.get(KLINE_URL, params=params, headers=headers)
-        resp.raise_for_status()
-        data = (resp.json() or {}).get("data") or {}
-    rows = data.get("klines") or []
-    return [r for r in rows if isinstance(r, str)]
+    last_exc: Exception | None = None
+    for url in (KLINE_URL, KLINE_URL_HTTP):
+        try:
+            async with httpx.AsyncClient(timeout=6.0) as client:
+                resp = await client.get(url, params=params, headers=headers)
+                resp.raise_for_status()
+                data = (resp.json() or {}).get("data") or {}
+            rows = data.get("klines") or []
+            return [r for r in rows if isinstance(r, str)]
+        except Exception as exc:  # noqa: BLE001 — 换下一个端点重试
+            last_exc = exc
+    raise last_exc if last_exc else RuntimeError("kline fetch failed")
 
 
 async def kline(

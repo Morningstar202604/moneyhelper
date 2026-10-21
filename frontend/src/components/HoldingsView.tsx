@@ -10,8 +10,10 @@ import { LineChart, Combine } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { store, useDashboard, useBootstrap } from "@/lib/store";
 import { fmtMoney, pnlClass } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { PositionsTable, type PositionOps } from "@/components/PositionsTable";
 import { PositionEditDialog } from "@/components/PositionEditDialog";
+import { PositionContributionCard } from "@/components/dashboard/PositionContributionCard";
 import { api } from "@/lib/api";
 import { useMutate } from "@/lib/use-mutate";
 import type { Position } from "@/lib/types";
@@ -118,89 +120,121 @@ export function HoldingsView({ onGoMarket }: { onGoMarket?: () => void } = {}) {
   const byAsset = [...dashboard.concentration.by_asset].sort((a, b) => b.pct - a.pct).slice(0, 3);
   const byIndustry = [...dashboard.concentration.by_industry].sort((a, b) => b.pct - a.pct).slice(0, 4);
 
+  // 资产/行业集中度：找出超过阈值的项，用于"风险提示"条（股票软件常见的红黄标记）
+  // 标的与行业分开列：两者是不同维度的超限，合并展示会出现同名项重复
+  const breaches = [
+    ...dashboard.concentration.asset_breaches.map((b) => ({ label: b.name, pct: b.pct, kind: t("holdings.breachAsset") })),
+    ...dashboard.concentration.industry_breaches.map((b) => ({ label: b.industry, pct: b.pct, kind: t("holdings.breachIndustry") })),
+  ];
+  const topWeight = byAsset[0]?.pct ?? 0;
+
   return (
     <div className="space-y-3">
-      {/* 摘要行：市值 / 今日盈亏 / 累计盈亏 / 现金 */}
-      <div className="grid grid-cols-2 gap-y-3 rounded-[var(--radius)] border border-border bg-card px-3 py-1 sm:grid-cols-4 sm:divide-x sm:divide-border/70">
+      {/* 摘要条：股票软件式关键指标，一行读完 */}
+      <div className="grid grid-cols-2 gap-y-3 rounded-2xl border border-border bg-card px-3 py-2 sm:grid-cols-4 sm:divide-x sm:divide-border/70">
         <StatCell label={t("dash.holdingsValue")} value={fmtMoney(totalMV, false, compact)} />
         <StatCell label={t("dash.todayPnl")} value={fmtMoney(todayTotal, true, compact)} valueClass={pnlClass(todayTotal)} />
         <StatCell label={t("dash.totalPnl")} value={fmtMoney(totalPnl, true, compact)} valueClass={pnlClass(totalPnl)} />
         <StatCell label={t("dash.cashAvailable")} value={fmtMoney(cash, false, compact)} />
       </div>
 
-      {/* 操作工具栏：编辑 / 删除走明细行；这里放「合并重复」入口 */}
-      <div className="flex flex-wrap items-center gap-2">
-        {dupeNames.length > 0 && (
-          <Button size="sm" variant="outline" onClick={() => void doMerge()} disabled={merge.isPending}>
-            <Combine className="w-3.5 h-3.5" /> {t("pos.mergeBtn")}
-            <span className="ml-1 text-muted-foreground">({dupeNames.length})</span>
-          </Button>
-        )}
-      </div>
-
-      {/* 风险概览 */}
-      <div className="grid sm:grid-cols-2 gap-3">
-        <Card className="p-[var(--card-pad)]">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-medium">{t("holdings.concentration")}</span>
-            <Badge variant={dashboard.concentration.threshold_pct > 40 ? "warn" : "muted"}>
-              {t("holdings.threshold", { n: dashboard.concentration.threshold_pct })}
-            </Badge>
-          </div>
-          {byAsset.length === 0 ? (
-            <EmptyState mode="compact" text={t("holdings.empty")} className="py-4" />
-          ) : (
-            <ul className="space-y-1.5 text-sm">
-              {byAsset.map((a) => (
-                <li key={a.name} className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate">{a.name}</span>
-                  <span className="flex items-center gap-2 shrink-0">
-                    <span className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
-                      <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.min(100, a.pct)}%` }} />
-                    </span>
-                    <span className="w-10 text-right tabular-nums text-muted-foreground">{a.pct}%</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-        <Card className="p-[var(--card-pad)]">
-          <div className="mb-2 text-sm font-medium">{t("holdings.industry")}</div>
-          {byIndustry.length === 0 ? (
-            <EmptyState mode="compact" text={t("holdings.empty")} className="py-4" />
-          ) : (
-            <ul className="space-y-1.5 text-sm">
-              {byIndustry.map((x) => (
-                <li key={x.industry} className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate">{x.industry}</span>
-                  <span className="w-10 text-right tabular-nums text-muted-foreground">{x.pct}%</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
-
-      {/* 明细：按 kind 分组，行内可编辑 / 删除 / 追加 */}
-      <Card className="p-[var(--card-pad)]">
-        <div className="mb-2 flex flex-wrap items-center gap-1.5">
-          <PillTabs
-            value={kind}
-            onChange={setKind}
-            size="sm"
-            options={kinds.map((k) => ({ value: k, label: k === "all" ? t("holdings.all") : k }))}
-          />
-          <span className="ml-auto text-xs text-muted-foreground">
-            {filtered.length} {t("holdings.items")}
+      {breaches.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-[12px]">
+          <span className="font-medium text-amber-700 dark:text-amber-400">
+            {t("holdings.breachTitle", { n: breaches.length })}
           </span>
+          {breaches.slice(0, 4).map((b) => (
+            <span key={`${b.kind}-${b.label}`} className="text-foreground/70">
+              <span className="mr-1 text-[11px] text-muted-foreground">{b.kind}</span>
+              {b.label} <b className="tabular-nums">{b.pct}%</b>
+            </span>
+          ))}
+          <span className="text-muted-foreground">{t("holdings.breachHint", { n: dashboard.concentration.threshold_pct })}</span>
         </div>
-        {filtered.length === 0 ? (
-          <EmptyState mode="compact" text={t("holdings.empty")} />
-        ) : (
-          <PositionsTable rows={filtered} compact={compact} ops={ops} />
-        )}
-      </Card>
+      )}
+
+      {/* 主体：左表格（主）+ 右分析栏（辅），股票软件的经典分栏 */}
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem]">
+        <Card className="min-w-0 p-[var(--card-pad)]">
+          <div className="mb-2 flex flex-wrap items-center gap-1.5">
+            <PillTabs
+              value={kind}
+              onChange={setKind}
+              size="sm"
+              options={kinds.map((k) => ({ value: k, label: k === "all" ? t("holdings.all") : k }))}
+            />
+            <span className="ml-auto text-xs text-muted-foreground">
+              {filtered.length} {t("holdings.items")}
+            </span>
+            {dupeNames.length > 0 && (
+              <Button size="sm" variant="outline" onClick={() => void doMerge()} disabled={merge.isPending}>
+                <Combine className="h-3.5 w-3.5" /> {t("pos.mergeBtn")}
+                <span className="ml-1 text-muted-foreground">({dupeNames.length})</span>
+              </Button>
+            )}
+          </div>
+          {filtered.length === 0 ? (
+            <EmptyState mode="compact" text={t("holdings.empty")} />
+          ) : (
+            <>
+              <PositionsTable rows={filtered} compact={compact} ops={ops} />
+              <PositionContributionCard positions={positions} compact={compact} />
+            </>
+          )}
+        </Card>
+
+        <div className="space-y-3">
+          <Card className="p-[var(--card-pad)]">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-medium">{t("holdings.concentration")}</span>
+              <Badge variant={topWeight > dashboard.concentration.threshold_pct ? "warn" : "muted"}>
+                {t("holdings.threshold", { n: dashboard.concentration.threshold_pct })}
+              </Badge>
+            </div>
+            {byAsset.length === 0 ? (
+              <EmptyState mode="compact" text={t("holdings.empty")} className="py-4" />
+            ) : (
+              <ul className="space-y-2">
+                {byAsset.map((a) => {
+                  const over = a.pct > dashboard.concentration.threshold_pct;
+                  return (
+                    <li key={a.name} className="text-[13px]">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="min-w-0 truncate">{a.name}</span>
+                        <span className={cn("shrink-0 tabular-nums", over ? "font-medium text-amber-600" : "text-muted-foreground")}>
+                          {a.pct}%
+                        </span>
+                      </div>
+                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={cn("h-full rounded-full", over ? "bg-amber-500" : "bg-primary")}
+                          style={{ width: `${Math.min(100, a.pct)}%` }}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
+
+          <Card className="p-[var(--card-pad)]">
+            <div className="mb-2 text-sm font-medium">{t("holdings.industry")}</div>
+            {byIndustry.length === 0 ? (
+              <EmptyState mode="compact" text={t("holdings.empty")} className="py-4" />
+            ) : (
+              <ul className="space-y-1.5 text-[13px]">
+                {byIndustry.map((x) => (
+                  <li key={x.industry} className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-foreground/80">{x.industry}</span>
+                    <span className="shrink-0 tabular-nums text-muted-foreground">{x.pct}%</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
+      </div>
 
       {/* 编辑弹窗 */}
       <PositionEditDialog

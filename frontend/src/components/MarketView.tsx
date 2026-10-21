@@ -4,6 +4,8 @@ import { LineChart, Plus, RefreshCw, Search, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { IndicesStrip } from "@/components/IndicesStrip";
+import { MarketDetail } from "@/components/MarketDetail";
+import { SparklineCell } from "@/components/SparklineCell";
 import { KlineDialog } from "@/components/KlineDialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PillTabs } from "@/components/ui/pill-tabs";
@@ -43,6 +45,8 @@ export function MarketView() {
   const [searching, setSearching] = useState(false);
   const [kline, setKline] = useState<{ symbol: string; name: string } | null>(null);
   const [removing, setRemoving] = useState<WatchItem | null>(null);
+  // 右侧详情栏当前选中的标的（股票软件式「列表 + 详情」）
+  const [selected, setSelected] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const watchQuery = useQuery({
@@ -98,6 +102,9 @@ export function MarketView() {
 
   const holdings = (dashboard?.positions ?? []).filter((p) => p.kind !== "现金").sort((a, b) => b.market_value - a.market_value);
 
+  const detailWatch = watch.find((w) => w.symbol === selected) ?? watch[0];
+  const detailHolding = holdings.find((h) => h.symbol === selected) ?? holdings[0];
+
   // 骨架屏加载态：首次加载自选列表时展示占位
   if (loading && watch.length === 0) {
     return (
@@ -131,7 +138,8 @@ export function MarketView() {
     <div className="space-y-3">
       <IndicesStrip indices={dashboard?.indices ?? []} />
 
-      <Card className="p-[var(--card-pad)]">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_17rem]">
+      <Card className="min-w-0 p-[var(--card-pad)]">
         <div className="mb-2 flex flex-wrap items-center gap-1.5">
           <PillTabs
             value={tab}
@@ -199,22 +207,26 @@ export function MarketView() {
               <EmptyState mode="card" illustration="search" title={t("market.emptyWatch")} />
             ) : (
               <div className="overflow-hidden rounded-lg border border-border">
-                <div className="hidden grid-cols-[minmax(0,1fr)_8rem_7rem_3rem] gap-3 border-b border-border bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground sm:grid">
+                <div className="hidden grid-cols-[minmax(0,1fr)_7rem_5.5rem_6.5rem_2.5rem] gap-3 border-b border-border bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground sm:grid">
                   <span>{t("pos.symbol")}</span>
                   <span className="text-right">{t("pos.price")}</span>
                   <span className="text-right">{t("pos.pnlPct")}</span>
+                  <span className="text-center">{t("market.trend60")}</span>
                   <span />
                 </div>
                 <ul className="divide-y divide-border/60">
                   {watch.map((w) => (
                     <li
                       key={w.symbol}
-                      className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-2.5 text-sm transition-colors hover:bg-accent/40 sm:grid-cols-[minmax(0,1fr)_8rem_7rem_3rem] sm:gap-3"
+                      onClick={() => setSelected(w.symbol)}
+                      className={cn(
+                        "group grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-2.5 text-sm transition-colors hover:bg-accent/40 sm:grid-cols-[minmax(0,1fr)_7rem_5.5rem_6.5rem_2.5rem] sm:gap-3",
+                        selected === w.symbol && "bg-accent/50",
+                      )}
                     >
                       <button
                         type="button"
                         className="group/name min-w-0 text-left"
-                        onClick={() => setKline({ symbol: w.symbol, name: w.name })}
                         aria-label={t("pos.viewK", { name: w.name })}
                       >
                         <span className="truncate font-medium group-hover/name:text-primary">{w.name}</span>
@@ -232,12 +244,18 @@ export function MarketView() {
                       <span className={cn("text-right tabular-nums", pnlClass(w.change_pct ?? 0))}>
                         {w.change_pct != null ? fmtPct(w.change_pct, true) : "—"}
                       </span>
+                      <span className="hidden justify-center sm:flex">
+                        <SparklineCell symbol={w.symbol} />
+                      </span>
                       <span className="flex justify-end">
                         <button
                           type="button"
                           className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-600 group-hover:opacity-100 max-sm:opacity-100"
                           aria-label={t("market.remove", { name: w.name })}
-                          onClick={() => setRemoving(w)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRemoving(w);
+                          }}
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
@@ -260,11 +278,12 @@ export function MarketView() {
         ) : (
           <>
             <div className="overflow-hidden rounded-lg border border-border">
-              <div className="hidden grid-cols-[minmax(0,1fr)_8rem_7rem_8rem] gap-3 border-b border-border bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground sm:grid">
+              <div className="hidden grid-cols-[minmax(0,1fr)_7rem_6rem_7rem_6.5rem] gap-3 border-b border-border bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground sm:grid">
                 <span>{t("pos.symbol")}</span>
                 <span className="text-right">{t("pos.price")}</span>
                 <span className="text-right">{t("dash.todayPnl")}</span>
                 <span className="text-right">{t("dash.totalPnl")}</span>
+                <span className="text-center">{t("market.trend60")}</span>
               </div>
               <ul className="divide-y divide-border/60">
                 {holdings.map((p) => {
@@ -272,12 +291,15 @@ export function MarketView() {
                   return (
                     <li
                       key={p.symbol}
-                      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-2.5 text-sm transition-colors hover:bg-accent/40 sm:grid-cols-[minmax(0,1fr)_8rem_7rem_8rem] sm:gap-3"
+                      onClick={() => setSelected(p.symbol)}
+                      className={cn(
+                        "grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-2.5 text-sm transition-colors hover:bg-accent/40 sm:grid-cols-[minmax(0,1fr)_7rem_6rem_7rem_6.5rem] sm:gap-3",
+                        selected === p.symbol && "bg-accent/50",
+                      )}
                     >
                       <button
                         type="button"
                         className="group/name min-w-0 text-left"
-                        onClick={() => setKline({ symbol: p.symbol, name: p.name })}
                         aria-label={t("pos.viewK", { name: p.name })}
                       >
                         <span className="truncate font-medium group-hover/name:text-primary">{p.name}</span>
@@ -288,6 +310,9 @@ export function MarketView() {
                         {day != null ? fmtPct((day / Math.max(1, p.market_value)) * 100, true) : "—"}
                       </span>
                       <span className={cn("text-right tabular-nums", pnlClass(p.pnl))}>{fmtMoney(p.pnl, true, true)}</span>
+                      <span className="hidden justify-center sm:flex">
+                        <SparklineCell symbol={p.symbol} />
+                      </span>
                     </li>
                   );
                 })}
@@ -299,6 +324,44 @@ export function MarketView() {
           </>
         )}
       </Card>
+
+      <div className="space-y-3">
+        {tab === "watch" ? (
+          detailWatch ? (
+            <MarketDetail
+              symbol={detailWatch.symbol}
+              name={detailWatch.name}
+              kind={detailWatch.kind}
+              price={detailWatch.price}
+              changePct={detailWatch.change_pct}
+              onOpenKline={() => setKline({ symbol: detailWatch.symbol, name: detailWatch.name })}
+            />
+          ) : null
+        ) : detailHolding ? (
+          <MarketDetail
+            symbol={detailHolding.symbol}
+            name={detailHolding.name}
+            kind={detailHolding.kind}
+            price={detailHolding.last}
+            changePct={
+              dashboard?.today_pnl.items[detailHolding.symbol] != null
+                ? (dashboard.today_pnl.items[detailHolding.symbol] / Math.max(1, detailHolding.market_value)) * 100
+                : null
+            }
+            onOpenKline={() => setKline({ symbol: detailHolding.symbol, name: detailHolding.name })}
+          />
+        ) : null}
+
+        <div className="rounded-2xl border border-border bg-card p-3.5 text-[12px] leading-relaxed text-muted-foreground">
+          <div className="mb-1 font-medium text-foreground/80">{t("market.tipsTitle")}</div>
+          <ul className="list-disc space-y-1 pl-4">
+            <li>{t("market.tip1")}</li>
+            <li>{t("market.tip2")}</li>
+            <li>{t("market.tip3")}</li>
+          </ul>
+        </div>
+      </div>
+      </div>
 
       {/* 删除确认：自选股移除前确认 */}
       <ConfirmDialog

@@ -101,6 +101,10 @@ export interface DashboardData {
     threshold_pct: number;
     by_asset: { name: string; kind: string; pct: number }[];
     by_industry: { industry: string; pct: number }[];
+    /** 超过单一持仓阈值的标的（后端已算好） */
+    asset_breaches: { name: string; pct: number }[];
+    /** 超过行业集中度阈值的行业 */
+    industry_breaches: { industry: string; pct: number }[];
   };
   cashflow: {
     month: string;

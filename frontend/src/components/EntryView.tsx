@@ -782,59 +782,53 @@ export function EntryView() {
                   />
                 </div>
               ) : (
-                <div className="max-h-80 overflow-y-auto scroll-thin">
+                <div className="scroll-thin overflow-x-auto">
+                  {/* 表头：日期 / 条目 / 分类 / 金额，操作列悬停出现。
+                      股票与记账软件的流水都是单行表格——两行式（日期独占一行）会把
+                      11 条流水的页面拉长一倍，扫读成本高。 */}
+                  <div className="hidden grid-cols-[6.5rem_minmax(0,1fr)_7rem_7.5rem_4.5rem] gap-3 border-b border-border bg-muted/50 px-2 py-1.5 text-[11px] font-medium text-muted-foreground sm:grid">
+                    <span>{tt("entry.date")}</span>
+                    <span>{tt("entry.name")}</span>
+                    <span>{tt("entry.category")}</span>
+                    <span className="text-right">{tt("entry.amount")}</span>
+                    <span />
+                  </div>
                   {(() => {
                     const shown = [...txRows].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 200);
-                    const groups: { date: string; rows: typeof shown }[] = [];
-                    for (const t of shown) {
-                      const last = groups[groups.length - 1];
-                      if (last && last.date === t.date) last.rows.push(t);
-                      else groups.push({ date: t.date, rows: [t] });
-                    }
-                    return groups.map((g) => {
-                      const dayTotal = g.rows.reduce((s, t) => s + t.amount, 0);
-                      return (
-                        <div key={g.date}>
-                          <div className="sticky top-0 flex items-center justify-between border-b border-border/60 bg-card py-1.5 text-[11px] text-muted-foreground">
-                            <span className="tabular-nums">{g.date}</span>
-                            {g.rows.length > 1 && (
-                              <span className="tabular-nums">{dayTotal > 0 ? "+" : ""}{fmtMoney(dayTotal, true)}</span>
-                            )}
-                          </div>
-                          {g.rows.map((t) => (
-                            <div
-                              key={t.id}
-                              className="group/tx flex items-center gap-2 border-b border-border/40 py-2.5 text-sm transition-colors last:border-0 hover:bg-accent/40 sm:grid sm:grid-cols-[minmax(0,1fr)_8rem_7rem_5rem] sm:gap-3 sm:px-1"
-                            >
-                              <span className="min-w-0 flex-1 truncate">
-                                {t.item}
-                                <span className="ml-2 text-xs text-muted-foreground sm:hidden">{t.category}</span>
-                              </span>
-                              <span className="hidden truncate text-xs text-muted-foreground sm:block">{t.category}</span>
-                              <span className={`shrink-0 text-right tabular-nums ${t.amount > 0 ? "text-up" : "text-down"}`}>
-                                {fmtMoney(t.amount, true)}
-                              </span>
-                              <span className="flex shrink-0 items-center justify-end gap-0.5 sm:opacity-0 sm:transition-opacity sm:group-hover/tx:opacity-100">
-                                <button
-                                  className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-primary"
-                                  onClick={() => setEditingTx({ id: t.id, date: t.date, item: t.item, category: t.category, amount: t.amount })}
-                                  aria-label={tt("entry.editTx", { item: t.item })}
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  className="rounded p-1 text-muted-foreground hover:bg-red-500/10 hover:text-red-600"
-                                  onClick={() => setPendingDelete({ type: "tx", id: t.id, name: t.item })}
-                                  aria-label={tt("entry.deleteItem", { name: t.item })}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    });
+                    return shown.map((t) => (
+                      <div
+                        key={t.id}
+                        className="group/tx flex items-center gap-2 border-b border-border/40 px-2 py-2 text-[13px] transition-colors last:border-0 hover:bg-accent/40 sm:grid sm:grid-cols-[6.5rem_minmax(0,1fr)_7rem_7.5rem_4.5rem] sm:gap-3"
+                      >
+                        <span className="hidden shrink-0 tabular-nums text-muted-foreground sm:block">{t.date}</span>
+                        <span className="min-w-0 flex-1 truncate">
+                          {t.item}
+                          <span className="ml-2 text-[11px] text-muted-foreground sm:hidden">
+                            {t.date} · {t.category}
+                          </span>
+                        </span>
+                        <span className="hidden truncate text-[11px] text-muted-foreground sm:block">{t.category}</span>
+                        <span className={`shrink-0 text-right tabular-nums ${t.amount > 0 ? "text-up" : "text-down"}`}>
+                          {fmtMoney(t.amount, true)}
+                        </span>
+                        <span className="flex shrink-0 items-center justify-end gap-0.5 sm:opacity-0 sm:transition-opacity sm:group-hover/tx:opacity-100">
+                          <button
+                            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-primary"
+                            onClick={() => setEditingTx({ id: t.id, date: t.date, item: t.item, category: t.category, amount: t.amount })}
+                            aria-label={tt("entry.editTx", { item: t.item })}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            className="rounded p-1 text-muted-foreground hover:bg-red-500/10 hover:text-red-600"
+                            onClick={() => setPendingDelete({ type: "tx", id: t.id, name: t.item })}
+                            aria-label={tt("entry.deleteItem", { name: t.item })}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </span>
+                      </div>
+                    ));
                   })()}
                   {txRows.length === 0 && (
                     <div className="py-4 text-center text-xs text-muted-foreground">{tt("entry.noMatchTx", { q: txQuery })}</div>
