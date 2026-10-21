@@ -1,5 +1,6 @@
 # 镜像同步：主仓(GitHub badhope) → GitCode badhope + Gitee badhope
 # 注意：GitHub Actions 不支持 secrets 动态索引，故用两个显式 job 写死 secret 名。
+# 用户名必须是 oauth2（GitCode/Gitee 均不接受平台用户名 + token 的 Basic 认证）。
 name: mirror-sync
 on:
   push:
@@ -9,26 +10,30 @@ permissions:
   contents: read
 jobs:
   gitcode:
+    # 只在主仓执行：镜像目标固定为 gitcode/gitee 的 badhope 仓库，
+    # 其余镜像/派生仓库没有对应 Secrets，跑起来只会红。
+    if: github.repository == 'badhope/xiaoman'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - name: push to gitcode (with retry)
         run: |
-          git remote add mirror "https://badhope:${{ secrets.GITCODE_TOKEN }}@gitcode.com/badhope/xiaoman.git"
+          git remote add mirror "https://oauth2:${{ secrets.GITCODE_TOKEN }}@gitcode.com/badhope/xiaoman.git"
           for i in 1 2 3; do
             git push mirror main --force && git push mirror --tags --force && exit 0
             echo "retry $i/3 after 20s..."; sleep 20
           done
           exit 1
   gitee:
+    if: github.repository == 'badhope/xiaoman'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - name: push to gitee (with retry)
         run: |
-          git remote add mirror "https://badhope:${{ secrets.GITEE_TOKEN }}@gitee.com/badhope/xiaoman.git"
+          git remote add mirror "https://oauth2:${{ secrets.GITEE_TOKEN }}@gitee.com/badhope/xiaoman.git"
           for i in 1 2 3; do
             git push mirror main --force && git push mirror --tags --force && exit 0
             echo "retry $i/3 after 20s..."; sleep 20
