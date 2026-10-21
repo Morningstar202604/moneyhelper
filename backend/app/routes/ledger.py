@@ -11,10 +11,10 @@ import re
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from .. import analysis, db, evaluate, quotes
+from .. import analysis, auth, db, evaluate, quotes
 from ..quotes import invalidate_quotes_cache
 
 router = APIRouter()
@@ -497,7 +497,18 @@ async def health_check(lang: str = "zh") -> dict:
 
 
 @router.post("/api/portfolio/reset")
-async def reset_portfolio() -> dict:
+async def reset_portfolio(request: Request) -> dict:
+    """恢复示例数据（**只影响当前租户的账本**）。
+
+    鉴权要求（专家评审 P0-5）：这是清空账本的操作。
+    - 启用多用户（已有注册用户）时：必须登录，且只清自己的数据；
+    - 单机模式（没有任何用户）时：允许，仍只清默认租户 0。
+    此前无任何校验，任何能访问端口的人都能抹掉全部数据。
+    """
+    if await db.user_count() > 0:
+        user = await auth.get_current_user(request)
+        if not user:
+            return JSONResponse({"error": "需要登录"}, status_code=401)
     out = await db.reset_to_seed()
     await invalidate_quotes_cache()
     return out

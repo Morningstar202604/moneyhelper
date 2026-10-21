@@ -167,14 +167,17 @@ CREATE TABLE IF NOT EXISTS debts (
     due_day  TEXT NOT NULL DEFAULT ''  -- 每月几号还款（'' 表示未设置）
 );
 CREATE TABLE IF NOT EXISTS settings (
-    key   TEXT PRIMARY KEY,
-    value TEXT NOT NULL
+    user_id INTEGER NOT NULL DEFAULT 0,
+    key   TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (user_id, key)
 );
 CREATE TABLE IF NOT EXISTS budgets (
+    user_id  INTEGER NOT NULL DEFAULT 0,
     month    TEXT NOT NULL,   -- YYYY-MM
     category TEXT NOT NULL,   -- __total 表示总预算，其余为分类预算
     amount   REAL NOT NULL,
-    PRIMARY KEY (month, category)
+    PRIMARY KEY (user_id, month, category)
 );
 CREATE TABLE IF NOT EXISTS runs (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -339,7 +342,8 @@ CREATE TABLE IF NOT EXISTS vault_keys (
 -- 家庭成员表：家庭共享账本的核心实体
 CREATE TABLE IF NOT EXISTS members (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    username     TEXT UNIQUE NOT NULL,
+    user_id      INTEGER NOT NULL DEFAULT 0,
+    username     TEXT NOT NULL,
     display_name TEXT NOT NULL DEFAULT '',
     role         TEXT NOT NULL DEFAULT 'member',  -- owner/admin/member/viewer
     avatar_color TEXT NOT NULL DEFAULT '#b8891f',

@@ -162,10 +162,24 @@ def _seed_date(day: int) -> str:
     return now.replace(day=min(day, now.day)).strftime("%Y-%m-%d")
 
 
+_db_loop: object | None = None
+
+
 async def init_db() -> None:
-    global _db, _inited
-    if _inited:
+    """初始化数据库连接。
+
+    连接与事件循环绑定：若发现连接是在**另一个 loop** 里创建的
+    （CLI 连续调用、pytest 多次 asyncio.run），必须先丢弃旧连接重建，
+    否则所有查询会挂在已关闭 loop 的 worker 线程上（实测无限等待）。
+    """
+    global _db, _inited, _db_loop
+    loop = asyncio.get_running_loop()
+    if _inited and _db is not None and _db_loop is loop:
         return
+    if _db_loop is not None and _db_loop is not loop:
+        # 旧连接属于别的 loop：不能 await 关闭（会挂），直接丢弃引用
+        _db = None
+        _inited = False
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     _db = await aiosqlite.connect(str(DB_PATH))
     _db.row_factory = aiosqlite.Row
@@ -175,6 +189,7 @@ async def init_db() -> None:
     await _db.execute(
         "PRAGMA foreign_keys=ON"
     )  # SQLite 默认关外键；显式打开以启用 FK 约束/级联
+    _db_loop = loop
     await _db.executescript(SCHEMA)
     await _migrate_add_columns()
     await _migrate_multitenant()
@@ -184,13 +199,15 @@ async def init_db() -> None:
     if await _count("positions") == 0:
         conn = await _conn()
         row = await (
-            await conn.execute("SELECT value FROM settings WHERE key='data_note'")
+            await conn.execute(
+                "SELECT value FROM settings WHERE user_id=0 AND key='data_note'"
+            )
         ).fetchone()
         if row and str(row["value"]).startswith("seed"):
             # 若旧库被清空但 data_note 仍是 seed，降级为 empty，避免误标示例
             await conn.execute(
-                "INSERT INTO settings(key,value) VALUES('data_note','empty') "
-                "ON CONFLICT(key) DO UPDATE SET value='empty'"
+                "INSERT INTO settings(user_id,key,value) VALUES(0,'data_note','empty') "
+                "ON CONFLICT(user_id,key) DO UPDATE SET value='empty'"
             )
             await conn.commit()
     await _migrate_sessions_from_runs()
@@ -265,134 +282,241 @@ _COMPOSITE_TABLES = {
     "conversation_summary": ("thread_id", "TEXT PRIMARY KEY"),
 }
 
+# settings/budgets 的主键不是单列（复合），单独处理
+_COMPOSITE_MULTI = {
+    "settings": (("user_id", "key"), "INSERT INTO {tmp} (user_id,key,value) SELECT 0,key,value FROM settings"),
+    "budgets": (("user_id", "month", "category"), "INSERT INTO {tmp} (user_id,month,category,amount) SELECT 0,month,category,amount FROM budgets"),
+}
+
 # 非主键但带 UNIQUE 约束的列：多租户下唯一性要按 (user_id, col) 计算
 _UNIQUE_COLS = {"sessions": "thread_id"}
 
 
-async def _needs_multitenant() -> bool:
-    """是否需要多租户迁移：任一租户表缺 user_id，或复合主键表还没重建。"""
+async def _pk_cols(table: str) -> list[str]:
+    """返回表的主键列（按 pk 序号排序）；表不存在返回空列表。"""
     assert _db is not None
-    for table in (*_TENANT_TABLES, *_COMPOSITE_TABLES):
+    cur = await _db.execute(f"PRAGMA table_info({table})")
+    info = await cur.fetchall()
+    return [r["name"] for r in sorted((x for x in info if x["pk"]), key=lambda x: x["pk"])]
+
+
+async def _needs_multitenant() -> bool:
+    """是否需要多租户迁移。
+
+    判据是**主键形状**而不是"列是否存在"：
+    历史上出现过先加 user_id 列、后重建表，中途失败导致
+    `positions` 有 user_id 但主键仍是单列 symbol 的"半迁移"库；
+    只查列会让这种库永久跳过修复，多租户静默失效（专家评审 P0-3）。
+    """
+    for table, (key_col, _decl) in _COMPOSITE_TABLES.items():
+        pk = await _pk_cols(table)
+        if not pk:
+            continue
+        if pk != ["user_id", key_col]:
+            return True
+    for table, (cols, _sql) in _COMPOSITE_MULTI.items():
+        pk = await _pk_cols(table)
+        if not pk:
+            continue
+        if pk != list(cols):
+            return True
+    # 普通表：缺 user_id 列也需要迁移
+    for table in _TENANT_TABLES:
         cur = await _db.execute(f"PRAGMA table_info({table})")
         info = await cur.fetchall()
         if not info:
-            continue  # 表不存在，无需处理
+            continue
         if "user_id" not in {r["name"] for r in info}:
             return True
     return False
 
 
+async def _backup_db_consistent(target: Path) -> None:
+    """用 SQLite 在线备份 API 生成一致性快照。
+
+    为什么不能 shutil.copy2：WAL 模式下已提交数据可能还在 -wal 文件里，
+    只复制主文件会得到一个"空库"（专家评审 P0-1 实测：备份里 0 张表）。
+    Connection.backup() 由 SQLite 负责 checkpoint 与一致性，是最可靠的做法。
+    """
+    import sqlite3
+
+    src = sqlite3.connect(str(DB_PATH))
+    try:
+        dst = sqlite3.connect(str(target))
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+    finally:
+        src.close()
+
+
+async def _recover_stale_temp_tables() -> None:
+    """清理上次迁移中断留下的临时表。
+
+    重建流程若在 DROP 与 RENAME 之间崩溃，会遗留 `<table>__mt_migrate`，
+    下次启动 CREATE 直接报 "already exists"，服务起不来（专家评审 P0-2）。
+    能恢复就恢复，否则删掉重来——原表若还在，数据未丢。
+    """
+    assert _db is not None
+    cur = await _db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE '%__mt_migrate' OR name LIKE '%__uq_migrate')"
+    )
+    stale = [r["name"] for r in await cur.fetchall()]
+    for name in stale:
+        base = name.split("__")[0]
+        base_pk = await _pk_cols(base)
+        if base_pk:
+            # 原表还在（崩溃在 DROP 之前）：临时表是多余的
+            await _db.execute(f"DROP TABLE IF EXISTS {name}")
+            get_logger("db").info("db.migrate_cleanup_temp=%s", name)
+        else:
+            # 原表已 DROP、只剩临时表：把它改回正式名，保住数据
+            await _db.execute(f"ALTER TABLE {name} RENAME TO {base}")
+            get_logger("db").info("db.migrate_recover_temp=%s -> %s", name, base)
+
+
 async def _migrate_multitenant() -> None:
     """多租户迁移：加 user_id 维度，并把历史数据归到默认租户 0。
 
-    幂等：已经迁移过的库不会重复执行（按列存在性判断）。
-    为什么四张表要重建：它们用业务字段（symbol/name）作主键，多用户下
-    A 的「茅台」会覆盖 B 的「茅台」。改成 (user_id, symbol) 复合主键才能共存。
+    安全性（专家评审 P0-1/P0-2/P0-3 修复）：
+    1. 动结构前用 SQLite backup API 生成**一致性快照**（WAL 下 copy2 会得到空库）；
+       备份失败直接中止迁移——备份是 DROP 的唯一逃生舱。
+    2. 整个迁移包在 BEGIN IMMEDIATE ... COMMIT 里，中途崩溃自动回滚；
+       启动时还会清理/恢复上次遗留的临时表。
+    3. 是否需要迁移按**主键形状**判断（见 _needs_multitenant），
+       半迁移库能被识别并修复。
     """
     assert _db is not None
 
-    # 0) 先判断是否真需要迁移；要动结构就先备份整库。
-    # 重建表是不可逆操作（DROP + RENAME），中途失败没有回滚点，
-    # 因此这里在动任何结构之前复制一份 <db>.pre-mt-<时间戳>，
-    # 最坏情况用户仍能找到升级前的完整数据。
-    needs = await _needs_multitenant()
-    if needs:
-        try:
-            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            backup_path = Path(str(DB_PATH) + f".pre-mt-{stamp}")
-            shutil.copy2(DB_PATH, backup_path)
-            get_logger("db").info("db.migrate_backup=%s", backup_path)
-        except Exception as exc:  # noqa: BLE001 — 备份失败不阻断迁移，但要留痕
-            get_logger("db").warning("db.migrate_backup_failed: %s", exc)
+    await _recover_stale_temp_tables()
+    if not await _needs_multitenant():
+        return
 
-    # 1) 普通表：直接加列（SQLite 支持 ADD COLUMN 带默认值）
-    for table in _TENANT_TABLES:
-        cur = await _db.execute(f"PRAGMA table_info({table})")
-        cols = {row["name"] for row in await cur.fetchall()}
-        if not cols:
-            continue  # 表不存在（老库可能缺表）
-        if "user_id" not in cols:
-            await _db.execute(
-                f"ALTER TABLE {table} ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0"
-            )
-    # 索引：按租户过滤是最高频查询
-    for table in _TENANT_TABLES:
-        try:
-            await _db.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_{table}_user ON {table}(user_id)"
-            )
-        except Exception:  # noqa: BLE001 — 表不存在时跳过
-            continue
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_path = Path(str(DB_PATH) + f".pre-mt-{stamp}")
+    try:
+        await _backup_db_consistent(backup_path)
+    except Exception as exc:  # noqa: BLE001
+        # 备份失败不能继续：重建表是不可逆的 DROP
+        get_logger("db").error("db.migrate_backup_failed, abort: %s", exc)
+        raise RuntimeError(f"多租户迁移前备份失败，已中止：{exc}") from exc
+    get_logger("db").info("db.migrate_backup=%s", backup_path)
 
-    # 2) 复合主键表：重建（SQLite 不支持改主键，只能建新表搬数据）
-    for table, (key_col, _decl) in _COMPOSITE_TABLES.items():
-        cur = await _db.execute(f"PRAGMA table_info({table})")
-        info = await cur.fetchall()
-        if not info:
-            continue
-        cols = {row["name"] for row in info}
-        if "user_id" in cols:
-            continue  # 已迁移
-        await _rebuild_with_user_id(table, key_col, [r["name"] for r in info])
-
-    # 3) 仅带 UNIQUE 约束的表（sessions.thread_id）：唯一性改为 (user_id, col)
-    for table, col in _UNIQUE_COLS.items():
-        cur = await _db.execute(f"PRAGMA index_list({table})")
-        idx_rows = await cur.fetchall()
-        # 找到该列上的唯一索引名
-        unique_names: list[str] = []
-        for r in idx_rows:
-            if not r["unique"]:
+    await _db.execute("BEGIN IMMEDIATE")
+    try:
+        # 1) 普通表：加 user_id 列。
+        # 关键：复合主键表（positions 等）也会遍历到这里，但它们的 user_id
+        # 由重建逻辑负责；若这里先 ALTER 加列，重建时的 CREATE 会撞
+        # "duplicate column name: user_id"（专家评审 P0-3 的半迁移场景实测）。
+        for table in _TENANT_TABLES:
+            if table in _COMPOSITE_TABLES or table in _COMPOSITE_MULTI:
                 continue
-            iinfo = await (await _db.execute(f"PRAGMA index_info({r['name']})")).fetchall()
-            if [x["name"] for x in iinfo] == [col]:
-                unique_names.append(str(r["name"]))
-        cur = await _db.execute(f"PRAGMA table_info({table})")
-        info = await cur.fetchall()
-        cols = {row["name"] for row in info}
-        if not info or ("user_id" in cols and not unique_names):
-            continue
-        await _rebuild_unique_as_composite(table, col, [r["name"] for r in info])
-        for name in unique_names:
+            cur = await _db.execute(f"PRAGMA table_info({table})")
+            cols = {row["name"] for row in await cur.fetchall()}
+            if not cols:
+                continue
+            if "user_id" not in cols:
+                await _db.execute(
+                    f"ALTER TABLE {table} ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0"
+                )
+
+        # 2) 单列业务主键表：重建为 (user_id, key)
+        for table, (key_col, _decl) in _COMPOSITE_TABLES.items():
+            if await _pk_cols(table) == ["user_id", key_col]:
+                continue
+            await _rebuild_with_user_id(table, key_col, [])
+
+        # 3) 复合主键表（settings / budgets）
+        for table, (cols, copy_sql) in _COMPOSITE_MULTI.items():
+            if await _pk_cols(table) == list(cols):
+                continue
+            await _rebuild_composite(table, cols, copy_sql)
+
+        # 4) 只带 UNIQUE 约束的表（sessions.thread_id）
+        for table, col in _UNIQUE_COLS.items():
+            await _ensure_unique_by_tenant(table, col)
+
+        # 4.5) 成员用户名：租户内唯一（放在迁移后建，旧库此时才有 user_id 列）
+        try:
+            await _db.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_members_user_username"
+                " ON members(user_id, username)"
+            )
+        except Exception:  # noqa: BLE001 — 旧库可能还没有 members 表
+            pass
+
+        # 5) 索引
+        for table in (*_TENANT_TABLES, *_COMPOSITE_TABLES, *_COMPOSITE_MULTI):
             try:
-                await _db.execute(f"DROP INDEX IF EXISTS {name}")
-            except Exception:  # noqa: BLE001 — 自增唯一索引不可单独删除，重建表时已去掉
-                pass
-        await _db.execute(
-            f"CREATE UNIQUE INDEX IF NOT EXISTS idx_{table}_user_{col}"
-            f" ON {table}(user_id, {col})"
-        )
+                await _db.execute(
+                    f"CREATE INDEX IF NOT EXISTS idx_{table}_user ON {table}(user_id)"
+                )
+            except Exception:  # noqa: BLE001
+                continue
 
-    await _db.commit()
+        await _db.commit()
+    except Exception:
+        await _db.rollback()
+        raise
 
 
-async def _rebuild_unique_as_composite(
-    table: str, col: str, columns: list[str]
-) -> None:
-    """重建表：去掉列级 UNIQUE，保留数据（唯一性由调用方补的复合唯一索引保证）。"""
+async def _rebuild_composite(table: str, cols: tuple[str, ...], copy_sql: str) -> None:
+    """重建带复合主键的表（settings / budgets），保留原有数据到租户 0。"""
     assert _db is not None
-    tmp = f"{table}__uq_migrate"
-    cur = await _db.execute(f"PRAGMA table_info({table})")
-    info = await cur.fetchall()
-    defs: list[str] = ["user_id INTEGER NOT NULL DEFAULT 0"]
-    for r in info:
-        name, decl = r["name"], str(r["type"] or "")
-        if name == "user_id":
-            continue
-        if r["notnull"]:
-            decl += " NOT NULL"
-        if r["dflt_value"] is not None:
-            decl += f" DEFAULT {r['dflt_value']}"
-        if r["pk"]:
-            decl += " PRIMARY KEY"
-        defs.append(f"{name} {decl}".strip())
-    await _db.execute(f"CREATE TABLE {tmp} (\n    {',\n    '.join(defs)}\n)")
-    collist = ", ".join(c for c in columns if c != "user_id")
-    await _db.execute(
-        f"INSERT INTO {tmp} (user_id, {collist}) SELECT 0, {collist} FROM {table}"
-    )
+    tmp = f"{table}__mt_migrate"
+    await _db.execute(f"DROP TABLE IF EXISTS {tmp}")
+    if table == "settings":
+        ddl = (
+            f"CREATE TABLE {tmp} ("
+            " user_id INTEGER NOT NULL DEFAULT 0,"
+            " key TEXT NOT NULL,"
+            " value TEXT NOT NULL,"
+            " PRIMARY KEY (user_id, key))"
+        )
+    elif table == "budgets":
+        ddl = (
+            f"CREATE TABLE {tmp} ("
+            " user_id INTEGER NOT NULL DEFAULT 0,"
+            " month TEXT NOT NULL,"
+            " category TEXT NOT NULL,"
+            " amount REAL NOT NULL,"
+            " PRIMARY KEY (user_id, month, category))"
+        )
+    else:  # pragma: no cover — 目前只有上面两张
+        raise ValueError(f"未定义的重建表：{table}")
+    await _db.execute(ddl)
+    await _db.execute(copy_sql.replace("{tmp}", tmp))
     await _db.execute(f"DROP TABLE {table}")
     await _db.execute(f"ALTER TABLE {tmp} RENAME TO {table}")
+
+
+async def _ensure_unique_by_tenant(table: str, col: str) -> None:
+    """把列级 UNIQUE 改成 (user_id, col) 复合唯一（sessions.thread_id）。
+
+    已经重建过（主键含 user_id 且存在复合唯一索引）则跳过。
+    """
+    assert _db is not None
+    cur = await _db.execute(f"PRAGMA index_list({table})")
+    idx = await cur.fetchall()
+    for r in idx:
+        if not r["unique"]:
+            continue
+        iinfo = await (await _db.execute(f"PRAGMA index_info({r['name']})")).fetchall()
+        if [x["name"] for x in iinfo] == ["user_id", col]:
+            return  # 已是复合唯一
+    # 存在旧的单列唯一 → 重建表
+    for r in idx:
+        if not r["unique"]:
+            continue
+        iinfo = await (await _db.execute(f"PRAGMA index_info({r['name']})")).fetchall()
+        if [x["name"] for x in iinfo] == [col]:
+            await _rebuild_unique_as_composite(table, col, [])
+            await _db.execute(
+                f"CREATE UNIQUE INDEX IF NOT EXISTS idx_{table}_user_{col}"
+                f" ON {table}(user_id, {col})"
+            )
+            return
 
 
 async def _rebuild_with_user_id(table: str, key_col: str, columns: list[str]) -> None:
@@ -409,6 +533,9 @@ async def _rebuild_with_user_id(table: str, key_col: str, columns: list[str]) ->
     defs: list[str] = []
     for r in info:
         name, decl = r["name"], str(r["type"] or "")
+        if name == "user_id":
+            # 半迁移库已有该列：跳过，否则新表会出现两个 user_id
+            continue
         if r["notnull"]:
             decl += " NOT NULL"
         if r["dflt_value"] is not None:
@@ -422,6 +549,8 @@ async def _rebuild_with_user_id(table: str, key_col: str, columns: list[str]) ->
         f"CREATE TABLE {tmp} (\n    user_id INTEGER NOT NULL DEFAULT 0,\n"
         f"    {col_defs},\n    PRIMARY KEY (user_id, {key_col})\n)"
     )
+    if not columns:
+        columns = [r["name"] for r in info if r["name"] != "user_id"]
     collist = ", ".join(columns)
     await _db.execute(
         f"INSERT INTO {tmp} (user_id, {collist}) SELECT 0, {collist} FROM {table}"
@@ -433,17 +562,80 @@ async def _rebuild_with_user_id(table: str, key_col: str, columns: list[str]) ->
     )
 
 
-async def close_db() -> None:
-    global _db, _inited, _read_conns
-    if _db is not None:
-        await _db.close()
-    _db = None
+async def _rebuild_unique_as_composite(
+    table: str, col: str, columns: list[str]
+) -> None:
+    """重建表：去掉列级 UNIQUE，保留数据（唯一性由调用方补的复合唯一索引保证）。"""
+    assert _db is not None
+    tmp = f"{table}__uq_migrate"
+    cur = await _db.execute(f"PRAGMA table_info({table})")
+    info = await cur.fetchall()
+    ddl_row = await (
+        await _db.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        )
+    ).fetchone()
+    orig_ddl = str(ddl_row["sql"] or "") if ddl_row else ""
+    defs: list[str] = ["user_id INTEGER NOT NULL DEFAULT 0"]
+    for r in info:
+        name, decl = r["name"], str(r["type"] or "")
+        if name == "user_id":
+            continue
+        if r["notnull"]:
+            decl += " NOT NULL"
+        if r["dflt_value"] is not None:
+            decl += f" DEFAULT {r['dflt_value']}"
+        if r["pk"]:
+            # AUTOINCREMENT 必须保留，否则 id 会被复用（专家评审 S-8）。
+            # PRAGMA 的 type 不含 AUTOINCREMENT，要回查建表 SQL。
+            if "AUTOINCREMENT" in orig_ddl.upper():
+                decl += " PRIMARY KEY AUTOINCREMENT"
+            else:
+                decl += " PRIMARY KEY"
+        defs.append(f"{name} {decl}".strip())
+    body = ("," + chr(10) + "    ").join(defs)
+    ddl = "CREATE TABLE " + tmp + " (" + chr(10) + "    " + body + chr(10) + ")"
+    await _db.execute(ddl)
+    names = [r["name"] for r in info if r["name"] != "user_id"]
+    collist = ", ".join(names)
+    await _db.execute(
+        f"INSERT INTO {tmp} (user_id, {collist}) SELECT 0, {collist} FROM {table}"
+    )
+    await _db.execute(f"DROP TABLE {table}")
+    await _db.execute(f"ALTER TABLE {tmp} RENAME TO {table}")
+
+
+async def close_db(timeout: float = 5.0) -> None:
+    """关闭连接并清空状态。
+
+    加超时兜底：aiosqlite 的关闭要回到连接所属的**那个事件循环**执行；
+    如果调用方在另一个 loop 里 close（CLI 连续调用、测试里 asyncio.run 多次），
+    会永久等待。这种情况下宁可放弃优雅关闭，也不能卡死进程。
+    """
+    global _db, _inited, _read_conns, _db_loop, _pool_loop
+    conn, _db = _db, None
     _inited = False
-    for c in _read_conns:
-        await c.close()
-    _read_conns = []
+    _db_loop = None
+    if conn is not None:
+        # 先回滚未完成事务，避免 WAL 写锁被悬挂连接长期占住，
+        # 让后续（可能是另一个 loop 的）连接永远等锁。
+        try:
+            await asyncio.wait_for(conn.rollback(), timeout=timeout)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            await asyncio.wait_for(conn.close(), timeout=timeout)
+        except Exception:  # noqa: BLE001
+            pass
+    read_conns, _read_conns = _read_conns, []
+    for c in read_conns:
+        try:
+            await asyncio.wait_for(c.close(), timeout=timeout)
+        except (asyncio.TimeoutError, RuntimeError, Exception):  # noqa: BLE001
+            pass
     _pool_locks.clear()
     _write_locks.clear()
+    _pool_loop = None
 
 
 async def _conn() -> aiosqlite.Connection:
@@ -516,19 +708,22 @@ async def _count(table: str) -> int:
     return int(row["n"]) if row else 0
 
 
-async def _seed_all() -> None:
+async def _seed_all(user_id: int = 0) -> None:
+    """种入示例数据到指定租户。
+
+    默认 0（本机默认账本）；`reset_to_seed` 传入当前租户，避免把示例数据
+    写到别人的账本里。
+    """
     assert _db is not None
-    # 示例数据属于默认租户（0）：显式写 user_id，避免多租户列 NOT NULL 失败，
-    # 也避免示例数据"漏"到某个登录用户的空间里。
     await _db.executemany(
         "INSERT INTO positions(user_id,symbol,name,kind,industry,shares,cost,last,buy_date,fee)"
         " VALUES(:user_id,:symbol,:name,:kind,:industry,:shares,:cost,:last,:buy_date,:fee)",
-        [{**p, "buy_date": None, "fee": 0.0, "user_id": 0} for p in SEED_POSITIONS],
+        [{**p, "buy_date": None, "fee": 0.0, "user_id": user_id} for p in SEED_POSITIONS],
     )
     await _db.executemany(
         "INSERT INTO transactions(user_id,date,item,category,amount) VALUES(?,?,?,?,?)",
         [
-            (0, _seed_date(d), item, cat, amt)
+            (user_id, _seed_date(d), item, cat, amt)
             for d, item, cat, amt in SEED_TRANSACTIONS
         ],
     )
@@ -536,14 +731,14 @@ async def _seed_all() -> None:
         "INSERT INTO subscriptions(user_id,name,monthly,note,due_day)"
         " VALUES(:user_id,:name,:monthly,:note,:due_day)",
         [
-            {**s, "due_day": s.get("due_day", ""), "user_id": 0}
+            {**s, "due_day": s.get("due_day", ""), "user_id": user_id}
             for s in SEED_SUBSCRIPTIONS
         ],
     )
     await _db.executemany(
         "INSERT INTO debts(user_id,name,monthly,balance,rate,due_day)"
         " VALUES(:user_id,:name,:monthly,:balance,:rate,:due_day)",
-        [{**d, "due_day": d.get("due_day", ""), "user_id": 0} for d in SEED_DEBTS],
+        [{**d, "due_day": d.get("due_day", ""), "user_id": user_id} for d in SEED_DEBTS],
     )
     await _db.executemany(
         "INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)",
@@ -552,18 +747,21 @@ async def _seed_all() -> None:
 
 
 async def _ensure_defaults() -> None:
-    """对已有库补齐新增的设置默认键（版本化迁移）。"""
+    """补齐默认设置键。
+
+    注意：默认值要落给**每一个已存在的租户**（否则新用户读不到默认项），
+    而不是只落给当前请求的租户——这个函数在启动时运行，没有请求上下文。
+    """
     conn = await _conn()
+    try:
+        rows = await fetch_all("SELECT DISTINCT user_id FROM settings")
+        uids = {int(r["user_id"]) for r in rows} or {0}
+    except Exception:  # noqa: BLE001 — 旧库可能还没有 user_id 列
+        uids = {0}
+    params = [(uid, k, v) for uid in sorted(uids) for k, v in DEFAULT_SETTINGS.items()]
     await conn.executemany(
-        "INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)",
-        list(DEFAULT_SETTINGS.items()),
+        "INSERT OR IGNORE INTO settings(user_id,key,value) VALUES(?,?,?)", params
     )
-    # 空库标记 data_note=empty：与示例库（seed）区分，前端据此不显示示例数据横幅
-    if await _count("positions") == 0:
-        await conn.execute(
-            "INSERT INTO settings(key,value) VALUES('data_note','empty') "
-            "ON CONFLICT(key) DO UPDATE SET value='empty'"
-        )
 
 
 async def _migrate_sessions_from_runs() -> None:
@@ -611,6 +809,9 @@ async def reset_to_seed() -> dict[str, Any]:
     （AI 端点与密钥、Agent 配置、偏好、账本假设）一律保留——「恢复示例数据」
     不应把用户的模型密钥与个性化配置一起清掉（e2e 复用在跑的研发服务时同理）。
     """
+    from .tenant import current_user_id
+
+    uid = current_user_id()
     conn = await _conn()
     for t in (
         "positions",
@@ -619,13 +820,15 @@ async def reset_to_seed() -> dict[str, Any]:
         "debts",
         "budgets",
     ):
-        await conn.execute(f"DELETE FROM {t}")
+        # 只清当前租户：此前无 WHERE，任何用户调用都会抹掉全实例账本
+        await conn.execute(f"DELETE FROM {t} WHERE user_id=?", (uid,))
     # 数据已换回种子 → data_note 标回 seed；其余 settings 全部保留
     await conn.execute(
-        "INSERT INTO settings(key,value) VALUES('data_note','seed') "
-        "ON CONFLICT(key) DO UPDATE SET value='seed'"
+        "INSERT INTO settings(user_id,key,value) VALUES(?,'data_note','seed') "
+        "ON CONFLICT(user_id,key) DO UPDATE SET value='seed'",
+        (uid,),
     )
-    await _seed_all()
+    await _seed_all(uid)
     await conn.commit()
     return {"ok": True, "reset": True}
 
@@ -639,30 +842,59 @@ async def reset_to_seed() -> dict[str, Any]:
 # 部门模式（M3）多 agent 并行取数的地基。池在首次读取时惰性建连。
 _READ_POOL_SIZE = 3
 _read_conns: list[aiosqlite.Connection] = []
+_pool_loop: object | None = None
+# 读池开关：CLI 这类"短进程、每命令一个事件循环"的场景关掉读池，
+# 避免连接跨 loop 复用（会永久等待）。HTTP 服务保持开启。
+_read_pool_enabled = True
+
+
+def set_read_pool(enabled: bool) -> None:
+    """启用/禁用读连接池（CLI 在启动时禁用）。"""
+    global _read_pool_enabled
+    _read_pool_enabled = enabled
 _rr = 0
 # 锁必须按事件循环各自持有：模块级 asyncio.Lock 会绑定导入时的循环，
 # 换循环（TestClient/多 worker）即 "bound to a different event loop"（CI 实测教训）
-_pool_locks: dict[int, asyncio.Lock] = {}
+_pool_locks: dict[object, asyncio.Lock] = {}
 
 
 def _get_pool_lock() -> asyncio.Lock:
-    lk = _pool_locks.get(id(asyncio.get_running_loop()))
-    if lk is None:
-        lk = asyncio.Lock()
-        _pool_locks[id(asyncio.get_running_loop())] = lk
+    """按**事件循环对象**（而非 id）维护锁。
+
+    用 id(loop) 做 key 有复用风险：旧 loop 被回收后新 loop 可能拿到同一 id，
+    于是复用了绑定在已关闭 loop 上的 Lock（表现为永久等待）。专家项。
+    """
+    loop = asyncio.get_running_loop()
+    for (lp, lk) in list(_pool_locks.items()):
+        if lp is loop:
+            return lk
+    lk = asyncio.Lock()
+    _pool_locks[loop] = lk
     return lk
 
 
 async def _read_conn() -> aiosqlite.Connection:
-    """取一条读连接：池未满则建连（持锁防并发超建），满了轮询复用。仅供只读查询。"""
-    global _rr
+    """取一条读连接：池未满则建连（持锁防并发超建），满了轮询复用。仅供只读查询。
+
+    与 init_db 同理：读连接也绑事件循环。换 loop 时必须丢弃旧池重建，
+    否则查询会挂在已关闭 loop 的 worker 线程上（CLI 连续调用实测）。
+    """
+    global _rr, _pool_loop
+    loop = asyncio.get_running_loop()
     async with _get_pool_lock():
+        if _pool_loop is not None and _pool_loop is not loop:
+            _read_conns.clear()
+            _pool_loop = None
         if _db is None:
             await init_db()
+        _pool_loop = loop
         if len(_read_conns) < _READ_POOL_SIZE:
-            # mode=ro 物理只读：任何写语句打进读池都会立刻报错，而不是
-            # 开启隐式写事务持有 RESERVED 锁把写连接锁死（M1.3 实测教训）
-            c = await aiosqlite.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+            # 用 PRAGMA query_only 实现只读，而不是 URI 的 mode=ro：
+            # mode=ro 在 WAL 模式下需要读 -wal 文件，若写连接尚未 checkpoint，
+            # 只读连接会一直等待（CLI 连续调用实测卡死）。
+            # query_only 复用普通连接语义，只禁止写入，不改变 WAL 打开方式。
+            c = await aiosqlite.connect(str(DB_PATH))
+            await c.execute("PRAGMA query_only=ON")
             c.row_factory = aiosqlite.Row
             await c.execute("PRAGMA busy_timeout=5000")
             _read_conns.append(c)
@@ -673,6 +905,14 @@ async def _read_conn() -> aiosqlite.Connection:
 
 
 async def fetch_all(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
+    if not _read_pool_enabled:
+        # 单连接模式（CLI/测试）：直接用写连接读，避免跨 loop 的连接池
+        c = await _conn()
+        cur = await c.execute(sql, params)
+        try:
+            return [dict(r) for r in await cur.fetchall()]
+        finally:
+            await cur.close()
     conn = await _read_conn()
     cur = await conn.execute(sql, params)
     try:
@@ -751,8 +991,15 @@ async def list_debts() -> list[dict[str, Any]]:
 
 
 async def get_settings() -> dict[str, str]:
-    rows = await fetch_all("SELECT * FROM settings")
-    return {r["key"]: r["value"] for r in rows}
+    """当前租户的设置。缺省键回落到 DEFAULT_SETTINGS，保证接口形状稳定。"""
+    from .tenant import current_user_id
+
+    rows = await fetch_all(
+        "SELECT * FROM settings WHERE user_id=?", (current_user_id(),)
+    )
+    out = dict(DEFAULT_SETTINGS)
+    out.update({r["key"]: r["value"] for r in rows})
+    return out
 
 
 # 预算口径排除项：投资/还款属于储蓄或资金转移，不是消费支出，不计入预算使用
@@ -760,20 +1007,25 @@ NON_CONSUMPTION_CATEGORIES: tuple[str, ...] = ("投资", "还款")
 
 
 async def set_setting(key: str, value: str) -> dict[str, Any]:
+    from .tenant import current_user_id
+
     conn = await _conn()
     await conn.execute(
-        "INSERT INTO settings(key,value) VALUES(?,?) "
-        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-        (str(key), str(value)),
+        "INSERT INTO settings(user_id,key,value) VALUES(?,?,?) "
+        "ON CONFLICT(user_id,key) DO UPDATE SET value=excluded.value",
+        (current_user_id(), str(key), str(value)),
     )
     await conn.commit()
     return {"ok": True}
 
 
 async def _mark_user_data(conn: aiosqlite.Connection) -> None:
+    from .tenant import current_user_id
+
     await conn.execute(
-        "INSERT INTO settings(key,value) VALUES('data_note','user') "
-        "ON CONFLICT(key) DO UPDATE SET value='user'"
+        "INSERT INTO settings(user_id,key,value) VALUES(?,'data_note','user') "
+        "ON CONFLICT(user_id,key) DO UPDATE SET value='user'",
+        (current_user_id(),),
     )
 
 

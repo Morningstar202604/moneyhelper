@@ -38,6 +38,8 @@ async def test_close_db_clears_read_pool(temp_db):
     from app import db
     from app.db import _core
 
+    # CLI 场景会禁用读池；本用例验证池本身，先显式开启
+    db.set_read_pool(True)
     await db.fetch_all("SELECT count(*) AS n FROM transactions")
     assert len(_core._read_conns) > 0
     await db.close_db()

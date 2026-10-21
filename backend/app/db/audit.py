@@ -29,22 +29,33 @@ async def add_audit_log(
     """写一条审计日志。action: WRITE / READ_SENSITIVE / AUTH。"""
     conn = await _conn()
     now = datetime.now().astimezone().isoformat(timespec="seconds")
-    await conn.execute(
-        "INSERT INTO audit_logs(user_id,ts,action,method,path,status,actor,detail,duration_ms)"
-        " VALUES(?,?,?,?,?,?,?,?,?)",
-        (
-            current_user_id(),
-            now,
-            str(action)[:20],
-            str(method)[:8],
-            str(path)[:200],
-            int(status or 0),
-            str(actor)[:64],
-            str(detail)[:500],
-            int(duration_ms or 0),
-        ),
-    )
-    await conn.commit()
+    # SAVEPOINT 隔离：审计是旁路数据，不能把调用方未完成的事务一并 commit
+    # （专家评审 P0-9 实测：批量入账失败时审计的 commit 会把前两条落库）。
+    await conn.execute("SAVEPOINT audit_write")
+    try:
+        await conn.execute(
+            "INSERT INTO audit_logs(user_id,ts,action,method,path,status,actor,detail,duration_ms)"
+            " VALUES(?,?,?,?,?,?,?,?,?)",
+            (
+                current_user_id(),
+                now,
+                str(action)[:20],
+                str(method)[:8],
+                str(path)[:200],
+                int(status or 0),
+                str(actor)[:64],
+                str(detail)[:500],
+                int(duration_ms or 0),
+            ),
+        )
+        await conn.execute("RELEASE audit_write")
+    except Exception:
+        try:
+            await conn.execute("ROLLBACK TO audit_write")
+            await conn.execute("RELEASE audit_write")
+        except Exception:  # noqa: BLE001
+            pass
+        raise
     return {"ok": True}
 
 

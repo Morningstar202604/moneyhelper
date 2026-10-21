@@ -35,6 +35,7 @@ from ._core import (
     list_transactions,
     reset_to_seed,
     set_active_member,
+    set_read_pool,
     set_setting,
     uuid_hex,
 )
@@ -289,6 +290,7 @@ __all__ = [
     "session_thread_id",
     "set_active_member",
     "set_conversation_summary",
+    "set_read_pool",
     "set_setting",
     "stale_memory_count",
     "total_cash",

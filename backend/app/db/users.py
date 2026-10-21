@@ -14,13 +14,36 @@ from ._core import (
 # --------------------------------------------------------------------------
 
 
+def _hash_password(password: str) -> str:
+    """bcrypt 哈希（直接用 bcrypt 库，不经过 passlib）。
+
+    为什么不用 passlib：passlib 1.7.4 读取 `bcrypt.__about__.__version__`，
+    而 bcrypt>=4.1 已移除该属性，导致 `bcrypt.using(...).hash()` 直接抛
+    "password cannot be longer than 72 bytes"（专家评审 P0-4：注册接口 500）。
+    bcrypt 本身 API 稳定，直接调用更可靠。
+    """
+    import bcrypt
+
+    # bcrypt 只接受前 72 字节；超长口令先截断（不改变安全性：72 字节后无意义）
+    raw = password.encode("utf-8")[:72]
+    return bcrypt.hashpw(raw, bcrypt.gensalt(rounds=12)).decode()
+
+
+def _verify_password(password: str, hashed: str) -> bool:
+    """校验口令，兼容 passlib 生成的 $2b$ 旧哈希。"""
+    import bcrypt
+
+    try:
+        return bcrypt.checkpw(password.encode("utf-8")[:72], hashed.encode())
+    except Exception:
+        return False
+
+
 async def user_create(
     username: str, password: str, display_name: str = "", role: str = "user"
 ) -> int:
     """创建用户，返回行 id。username 唯一；密码 bcrypt 哈希。"""
-    from passlib.hash import bcrypt
-
-    pw_hash = bcrypt.using(rounds=12).hash(password)
+    pw_hash = _hash_password(password)
     conn = await _conn()
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     cur = await conn.execute(
@@ -55,12 +78,7 @@ async def user_get(uid: int) -> dict[str, Any] | None:
 
 
 async def user_verify_password(user: dict[str, Any], password: str) -> bool:
-    from passlib.hash import bcrypt
-
-    try:
-        return bcrypt.verify(password, user["password_hash"])
-    except Exception:
-        return False
+    return _verify_password(password, str(user.get("password_hash") or ""))
 
 
 async def user_update_last_login(uid: int) -> None:

@@ -2,6 +2,42 @@
 
 项目版本号与发布历史。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本语义遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [2.7.1] - 2026-10-21（专家评审 9 个 P0 全部修复）
+
+> 独立专家评审给出 19/50 打回，逐条修复后复验。
+
+### P0（数据安全 / 功能不可用）
+
+- **迁移备份在 WAL 下是空文件**：`shutil.copy2` 只复制主文件，已提交数据可能全在 `-wal`。
+  改用 `sqlite3.Connection.backup()` 生成一致性快照；**备份失败直接中止迁移**（不再"留痕继续"）。
+- **迁移非原子**：重建表（DROP+RENAME）无事务，崩溃即永久卡死。整个迁移包进
+  `BEGIN IMMEDIATE ... COMMIT`，并新增 `_recover_stale_temp_tables()` 启动清理/恢复遗留临时表。
+- **半迁移库永远修不好**：判据从"列是否存在"改为**主键形状**（PRAGMA），
+  有 user_id 但主键仍是单列的库能被识别并重建。
+- **注册接口必然 500**：passlib 1.7.4 读 `bcrypt.__about__`（bcrypt 5 已移除）导致哈希抛错。
+  改为直接用 `bcrypt.hashpw/checkpw`；另修 `_ensure_secret()`（未跑 lifespan 时 JWT secret 为空）。
+- **reset 抹掉全实例账本**：`DELETE FROM {t}` 无 WHERE。现在只清当前租户；
+  已有用户时未登录调用返回 401。
+- **settings / budgets / members 未隔离**：settings 主键改 `(user_id,key)`、
+  budgets 改 `(user_id,month,category)`、members 加 `user_id` + `UNIQUE(user_id,username)`；
+  `_COMPOSITE_MULTI` 负责旧库重建。
+- **备份恢复丢流水**：恢复顺序改为 members → member_loans → transactions；
+  `_restore_table` 不再静默 `continue`，失败即抛错整体回滚。
+- **编辑 / 合并流水必报错**：多租户改造时补了 SQL 的 `user_id=?` 却漏传实参（6 处）。
+- **审计写入提交他人事务**：`add_audit_log` 改为 SAVEPOINT 隔离（与 provenance 一致）。
+
+### 其他
+
+- **CLI 跨事件循环卡死**：读连接池与写连接都绑定事件循环，同一进程连续调用 `asyncio.run`
+  会永久等待。读池加 `set_read_pool(False)`（CLI 禁用）、`init_db`/`_read_conn` 检测 loop
+  归属、`close_db` 先回滚再带超时关闭；读池的 `mode=ro` 改 `PRAGMA query_only`（WAL 下
+  mode=ro 会等写连接 checkpoint）。
+
+### 回归测试
+
+- 新增 `backend/tests/test_p0_regressions.py`（14 项），每条 P0 至少一个用例。
+- 全量 737 passed；ruff / tsc / vitest 111 / e2e 21 / mkdocs strict 全绿。
+
 ## [2.7.0] - 2026-10-21（可安装性修复 + 多平台产物 + MCP 定时产出）
 
 ### 修复（可安装性，实测驱动）

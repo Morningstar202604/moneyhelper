@@ -281,7 +281,29 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     _prepare_db(args.db)
-    return asyncio.run(args.func(args))
+    # CLI 是短进程：禁用读连接池，避免 aiosqlite 连接绑定在已关闭的事件循环上
+    from app import db as _db_mod
+
+    _db_mod.set_read_pool(False)
+    return asyncio.run(_run_and_close(args))
+
+
+async def _run_and_close(args) -> int:
+    """跑一次命令并在同一个事件循环里关闭数据库连接。
+
+    为什么必须关：aiosqlite 的连接/线程绑定在创建它的 loop 上。
+    CLI 每次调用都 asyncio.run() 建新 loop，若不关旧连接，
+    同一进程里连续跑两次命令（测试、脚本、REPL）会挂死在新 loop 上。
+    """
+    try:
+        return await args.func(args)
+    finally:
+        try:
+            from app import db
+
+            await db.close_db()
+        except Exception:  # noqa: BLE001 — 关闭失败不改变命令结果
+            pass
 
 
 if __name__ == "__main__":

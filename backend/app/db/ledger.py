@@ -203,7 +203,7 @@ async def update_transaction(
     cur = await conn.execute(
         "SELECT date,item,category,amount,owner_id,is_shared FROM transactions"
         " WHERE user_id=? AND id=?",
-        (int(tx_id),),
+        (current_user_id(), int(tx_id)),
     )
     row = await cur.fetchone()
     if row is None:
@@ -255,7 +255,7 @@ async def update_transaction(
     await conn.execute(
         "UPDATE transactions SET date=?,item=?,category=?,amount=?,owner_id=?,is_shared=?"
         " WHERE user_id=? AND id=?",
-        (d, it, cat, amt, own, shr, int(tx_id)),
+        (d, it, cat, amt, own, shr, current_user_id(), int(tx_id)),
     )
     await _mark_user_data(conn)
     await conn.commit()
@@ -310,7 +310,7 @@ async def merge_transactions(
         cur2 = await conn.execute(
             "SELECT id FROM transactions WHERE user_id=? AND date=? AND item=?"
             " AND category=? LIMIT 1",
-            (d, it, cat_),
+            (current_user_id(), d, it, cat_),
         )
         first_id = (await cur2.fetchone())[0]
         if total == 0 or total != total:
@@ -318,19 +318,19 @@ async def merge_transactions(
             await conn.execute(
                 "DELETE FROM transactions WHERE user_id=? AND date=? AND item=?"
                 " AND category=?",
-                (d, it, cat_),
+                (current_user_id(), d, it, cat_),
             )
             merged += 1
             continue
         await conn.execute(
             "UPDATE transactions SET amount=? WHERE user_id=? AND id=?",
-            (total, first_id),
+            (total, current_user_id(), first_id),
         )
         # 删该组除最早外的其余记录
         cur3 = await conn.execute(
             "DELETE FROM transactions WHERE user_id=? AND date=? AND item=?"
             " AND category=? AND id<>?",
-            (d, it, cat_, first_id),
+            (current_user_id(), d, it, cat_, first_id),
         )
         merged += cur3.rowcount
 

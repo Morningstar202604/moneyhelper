@@ -158,8 +158,23 @@ async def _import_backup_locked(
             "INSERT INTO positions(user_id,symbol,name,kind,industry,shares,cost,last,buy_date,fee)"
             " VALUES(:user_id,:symbol,:name,:kind,:industry,:shares,:cost,:last,:buy_date,:fee)",
         )
-        # 还原完整流水字段：只写 date/item/category/amount 会丢成员归属与共享标记，
-        # 恢复后家庭视图与按成员统计全部失真。
+        # ---- 按外键依赖顺序恢复：members -> member_loans -> transactions ----
+        # 反序会让带 owner_id 的流水在成员还不存在时触发 FOREIGN KEY 失败，
+        # 而 _restore_table 的静默跳过会把它们悄悄丢掉（专家评审 P0-7）。
+        counts["members"] = await _restore_table(
+            conn,
+            "members",
+            data.get("members"),
+            "INSERT INTO members(user_id,id,username,display_name,role,avatar_color,created_at)"
+            " VALUES(:user_id,:id,:username,:display_name,:role,:avatar_color,:created_at)",
+        )
+        counts["member_loans"] = await _restore_table(
+            conn,
+            "member_loans",
+            data.get("member_loans"),
+            "INSERT INTO member_loans(user_id,id,from_member_id,to_member_id,amount,currency,note,settled,created_at,settled_at)"
+            " VALUES(:user_id,:id,:from_member_id,:to_member_id,:amount,:currency,:note,:settled,:created_at,:settled_at)",
+        )
         counts["transactions"] = await _restore_table(
             conn,
             "transactions",
@@ -203,22 +218,6 @@ async def _import_backup_locked(
             " VALUES(:user_id,:content,:kind,:created_at,:updated_at)",
         )
 
-        # 家庭成员与借贷：必须先 members 后 member_loans（外键方向）。
-        # 保留原 id，否则流水的 owner_id 会指向不存在的成员。
-        counts["members"] = await _restore_table(
-            conn,
-            "members",
-            data.get("members"),
-            "INSERT INTO members(user_id,id,username,display_name,role,avatar_color,created_at)"
-            " VALUES(:user_id,:id,:username,:display_name,:role,:avatar_color,:created_at)",
-        )
-        counts["member_loans"] = await _restore_table(
-            conn,
-            "member_loans",
-            data.get("member_loans"),
-            "INSERT INTO member_loans(user_id,id,from_member_id,to_member_id,amount,currency,note,settled,created_at,settled_at)"
-            " VALUES(:user_id,:id,:from_member_id,:to_member_id,:amount,:currency,:note,:settled,:created_at,:settled_at)",
-        )
         counts["watchlist"] = await _restore_table(
             conn,
             "watchlist",
@@ -244,10 +243,14 @@ async def _import_backup_locked(
         # 设置：整表覆盖，但 AI Key 永不恢复（明文 Key 不进备份/恢复链路）
         settings = data.get("settings") or {}
         if isinstance(settings, dict):
-            await conn.execute("DELETE FROM settings")
+            await conn.execute("DELETE FROM settings WHERE user_id=?", (uid,))
             await conn.executemany(
-                "INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)",
-                [(k, str(v)) for k, v in settings.items() if k != "ai_api_key"],
+                "INSERT OR IGNORE INTO settings(user_id,key,value) VALUES(?,?,?)",
+                [
+                    (uid, k, str(v))
+                    for k, v in settings.items()
+                    if k != "ai_api_key"
+                ],
             )
             await _ensure_defaults()
             await _mark_user_data(conn)
@@ -307,21 +310,31 @@ async def _restore_table(
     rows: Any,
     sql: str,
 ) -> int:
-    """把备份列表写回指定表；坏行跳过不影响整体。
+    """把备份列表写回指定表。
 
     统一注入当前租户：备份包本身不带 user_id（也不该带），恢复时一律落到
-    当前登录用户名下，避免把别人的备份还原进自己的账本或反之。
+    当前登录用户名下。
+
+    错误策略（专家评审 P0-7）：**不再静默跳过坏行**。旧实现 `except: continue`
+    会让外键失败/字段不匹配的行悄悄消失，接口却返回 ok，用户以为恢复成功。
+    现在收集失败行并在最后抛错，由调用方整体回滚。
     """
     if not isinstance(rows, list):
         return 0
     uid = current_user_id()
     n = 0
-    for row in rows:
+    failed: list[str] = []
+    for idx, row in enumerate(rows):
         if not isinstance(row, dict):
+            failed.append(f"#{idx}: 非对象")
             continue
         try:
             await conn.execute(sql, {**row, "user_id": uid})
             n += 1
-        except Exception:  # noqa: BLE001 — 单行失败跳过
-            continue
+        except Exception as exc:  # noqa: BLE001
+            failed.append(f"#{idx}: {type(exc).__name__}: {exc}")
+    if failed:
+        raise ValueError(
+            f"恢复 {name} 时有 {len(failed)} 行失败（已回滚）：" + "; ".join(failed[:3])
+        )
     return n

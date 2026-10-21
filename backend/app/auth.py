@@ -69,6 +69,19 @@ class TokenResp(BaseModel):
     user: dict[str, Any]
 
 
+def _ensure_secret() -> str:
+    """确保 JWT secret 已就绪（模块导入后、lifespan 之前也可能签发令牌）。
+
+    check_jwt_secret() 只在 lifespan 里调用；TestClient、CLI、脚本直接调用
+    认证函数时不会经过 lifespan，此时 _JWT_SECRET 为空，
+    jwt.encode 会抛 "HMAC key must not be empty"（专家评审发现的注册 500）。
+    """
+    global _JWT_SECRET
+    if not _JWT_SECRET or _JWT_SECRET.startswith("xiaoman-dev-secret"):
+        check_jwt_secret()
+    return _JWT_SECRET
+
+
 def _make_jwt(user: dict[str, Any]) -> str:
     now = datetime.now(timezone.utc)
     payload = {
@@ -79,12 +92,12 @@ def _make_jwt(user: dict[str, Any]) -> str:
         "iat": now,
         "exp": now + timedelta(hours=_JWT_EXPIRE_HOURS),
     }
-    return jwt.encode(payload, _JWT_SECRET, algorithm=_JWT_ALG)
+    return jwt.encode(payload, _ensure_secret(), algorithm=_JWT_ALG)
 
 
 def _decode_jwt(token: str) -> dict[str, Any]:
     try:
-        return jwt.decode(token, _JWT_SECRET, algorithms=[_JWT_ALG])
+        return jwt.decode(token, _ensure_secret(), algorithms=[_JWT_ALG])
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="令牌已过期，请重新登录") from None
     except jwt.InvalidTokenError:
