@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronDown } from "lucide-react";
 import {
   Bot, Brain, BrainCog, GitCompareArrows, KeyRound, Users, Newspaper, PiggyBank, ScrollText, ShieldCheck, SlidersHorizontal, Wallet,
 } from "lucide-react";
@@ -54,9 +53,6 @@ export function SettingsView() {
 
   // active tab 状态很小，直接放组件内即可
   const [active, setActive] = useState<SectionId>("prefs");
-  // 手机端：分组折叠。桌面端常开侧栏，这个状态不参与渲染。
-  const [openGroup, setOpenGroup] = useState<string | null>("settings.groupGeneral");
-
   if (!bootstrap) {
     return <div className="p-8 text-center text-sm text-muted-foreground">{t("settings.loading")}</div>;
   }
@@ -69,14 +65,13 @@ export function SettingsView() {
         key={s.id}
         type="button"
         aria-current={on ? "page" : undefined}
-        // 不在这里收起分组：同组切换是高频操作，收起会让用户每次都要重新展开
         onClick={() => setActive(s.id)}
         className={cn(
-          "flex flex-row items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors",
+          "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           on
-            ? "bg-accent text-accent-foreground font-medium"
-            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+            ? "bg-foreground/[0.07] font-medium text-foreground"
+            : "text-foreground/75 hover:bg-foreground/[0.05] hover:text-foreground",
         )}
       >
         <Icon className="h-4 w-4 shrink-0" />
@@ -86,48 +81,55 @@ export function SettingsView() {
   };
 
   return (
-    <div className="md:flex md:items-start md:gap-3">
-      {/* 手机/平板：分组折叠。一次只展开一组，避免 11 个入口同时铺满首屏。
-          用条件渲染而不是 md:hidden：隐藏的 DOM 仍会被读屏与自动化工具命中，
-          同一入口出现两份可访问副本（与移动抽屉同一类问题）。 */}
+    <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      {/* 手机：横向分段条（滚动），当前段高亮。一次只显示一段内容，
+          不再把 13 个入口折叠成三层——那需要两次点击才能到达目标页。 */}
       {!isDesktop && (
-        <nav aria-label={t("nav.main")} className="mb-3 space-y-1">
-          {SECTION_GROUPS.map((g) => {
-            const ids = new Set<SectionId>(g.ids);
-            const items = SECTIONS.filter((s) => ids.has(s.id));
-            const expanded = openGroup === g.key;
-            const containsActive = items.some((s) => s.id === active);
-            return (
-              <div key={g.key} className="rounded-lg border border-border">
+        <div className="shrink-0 overflow-x-auto border-b border-border/70 scroll-thin">
+          <div className="flex min-w-max gap-1 px-3 py-2">
+            {SECTIONS.map((s) => {
+              const Icon = s.icon;
+              const on = active === s.id;
+              return (
                 <button
+                  key={s.id}
                   type="button"
-                  aria-expanded={expanded}
-                  onClick={() => setOpenGroup(expanded ? null : g.key)}
-                  className="flex w-full items-center justify-between px-3 py-2 text-sm"
+                  aria-current={on ? "page" : undefined}
+                  onClick={() => setActive(s.id)}
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] transition-colors",
+                    on
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground",
+                  )}
                 >
-                  <span className={cn("font-medium", containsActive && "text-primary")}>{t(g.key)}</span>
-                  <ChevronDown
-                    className={cn("h-4 w-4 text-muted-foreground transition-transform", expanded && "rotate-180")}
-                  />
+                  <Icon className="h-3.5 w-3.5" />
+                  {t(s.labelKey)}
                 </button>
-                {expanded && (
-                  <div className="grid grid-cols-2 gap-1 border-t border-border p-1.5">
-                    {items.map((s) => sectionButton(s))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </nav>
+              );
+            })}
+          </div>
+        </div>
       )}
 
-      {/* 桌面：常驻侧栏 */}
+      {/* 桌面：左侧分组导航（固定，不随内容滚动） */}
       {isDesktop && (
         <nav
           aria-label={t("nav.main")}
-          className="sticky top-0 grid w-52 shrink-0 grid-cols-1 gap-0.5"
+          className="w-56 shrink-0 overflow-y-auto scroll-thin border-r border-border/70 px-2 py-3"
         >
-          {SECTIONS.map((s) => sectionButton(s))}
+          {SECTION_GROUPS.map((g) => {
+            const ids = new Set<SectionId>(g.ids);
+            const items = SECTIONS.filter((s) => ids.has(s.id));
+            return (
+              <div key={g.key} className="mb-2">
+                <div className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t(g.key)}
+                </div>
+                <div className="space-y-0.5">{items.map(sectionButton)}</div>
+              </div>
+            );
+          })}
         </nav>
       )}
 
@@ -136,7 +138,7 @@ export function SettingsView() {
         initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.15, ease: "easeOut" }}
-        className="min-w-0 flex-1 space-y-3"
+        className="min-h-0 min-w-0 flex-1 overflow-y-auto scroll-thin px-4 py-4 sm:px-6 space-y-3"
       >
         {active === "prefs" && (
           <PrefsSection

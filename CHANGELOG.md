@@ -2,6 +2,21 @@
 
 项目版本号与发布历史。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本语义遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [2.8.4] - 2026-10-22（设置页左右分段导航 + EXE 图标/版本信息）
+
+### 界面
+
+- **设置页改为真正的左右分段导航**：桌面左侧固定导航栏（三组：基础设置 / AI 与自动化 /
+  数据与安全），右侧内容区独立滚动；手机端改为顶部横向分段条（一次一段，单次点击到达），
+  替代原先需要两次点击的两层折叠。
+- 分段控件与标签在 390px 下不再被挤压换行。
+
+### 打包
+
+- `xiaoman.exe` 嵌入图标（`backend/app.ico`，7 个尺寸）与版本资源
+  （FileVersion / ProductName / FileDescription 来自 `version.py` 单一真源）。
+- 实测：`FileVersion 2.8.3`、`ProductName Xiaoman`，运行首页 200 / API 正常 / MCP 正常。
+
 ## [2.8.3] - 2026-10-22（安全审计 + 全维度审查修复 + README 重做）
 
 > 一次产品级审查：安全、可靠性、性能、可维护性、测试有效性、竞品对标。

@@ -118,8 +118,8 @@ export function PrefsSection({
         </div>
       </div>
       {/* 涨跌颜色：A股红涨绿跌 / 海外绿涨红跌 */}
-      <div className="mt-3 flex items-center justify-between">
-        <div>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
           <div className="text-sm">{t("settings.colorScheme")}</div>
           <div className="text-xs text-muted-foreground mt-0.5">{t("settings.colorSchemeHint")}</div>
         </div>

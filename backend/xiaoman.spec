@@ -12,9 +12,38 @@
 数据目录：默认 ~/.xiaoman（见 run.py），删掉可执行文件不影响数据。
 """
 
+import re
 from pathlib import Path
 
 import litellm  # 用于定位其数据文件与子模块（打包必须带上）
+
+
+def _app_version() -> str:
+    """版本号单一真源：backend/app/version.py。"""
+    text = (Path(SPECPATH).parent / "backend" / "app" / "version.py").read_text(encoding="utf-8")
+    m = re.search(r'^__version__ = "([^"]+)"', text, re.M)
+    return m.group(1) if m else "0.0.0"
+
+
+APP_VERSION = _app_version()
+
+# PyInstaller 的 version= 需要「版本资源文件」的路径，不是版本号字符串。
+# 这里按版本号生成一个临时文件（Windows 资源编译器用），保证 exe 属性里能看到版本。
+_VERSION_INFO = Path(SPECPATH).parent / "build" / "version_info.txt"
+_VERSION_INFO.parent.mkdir(parents=True, exist_ok=True)
+_v = APP_VERSION.split(".")
+_v += ["0"] * (4 - len(_v))
+_VERSION_INFO.write_text(
+    f"""VSVersionInfo(
+  ffi=FixedFileInfo(filevers=({_v[0]}, {_v[1]}, {_v[2]}, {_v[3]}), prodvers=({_v[0]}, {_v[1]}, {_v[2]}, {_v[3]}), mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
+  kids=[
+    StringFileInfo([StringTable('080404b0', [StringStruct('CompanyName', 'Xiaoman Contributors'), StringStruct('FileDescription', 'Xiaoman - local-first personal finance agent'), StringStruct('FileVersion', '{APP_VERSION}'), StringStruct('InternalName', 'xiaoman'), StringStruct('OriginalFilename', 'xiaoman.exe'), StringStruct('ProductName', 'Xiaoman'), StringStruct('ProductVersion', '{APP_VERSION}')])]),
+    VarFileInfo([VarStruct('Translation', [2052, 1200])])
+  ]
+)
+""",
+    encoding="utf-8",
+)
 
 LITELLM_DIR = Path(litellm.__file__).parent
 
@@ -129,5 +158,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon=str(Path(SPECPATH) / "app.ico"),
+    version=str(_VERSION_INFO),
 )
