@@ -84,7 +84,15 @@ jobs:
             if curl -fsS --max-time 3 http://127.0.0.1:8788/api/health >/dev/null 2>&1; then ok=1; break; fi
             sleep 2
           done
+          # Windows 上 $PID 是 bash 包装进程，PyInstaller 单文件启动的真实进程是子进程，
+          # 只 kill $PID 会让 xiaoman.exe 继续占用文件，后续重命名/上传必然失败。
           kill $PID 2>/dev/null || true
+          if command -v taskkill >/dev/null 2>&1; then
+            taskkill //F //IM "${{ matrix.binary }}" >/dev/null 2>&1 || true
+          else
+            pkill -f "${{ matrix.binary }}" 2>/dev/null || true
+          fi
+          sleep 3
           if [ "$ok" != "1" ]; then
             echo "::error::打包产物未能启动"
             tail -40 run.log
