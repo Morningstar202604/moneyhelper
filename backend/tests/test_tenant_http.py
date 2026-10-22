@@ -115,15 +115,28 @@ async def test_goals_isolated(client: AsyncClient) -> None:
     assert "买房" not in names_b, "B 看到了 A 的目标"
 
 
-async def test_no_token_sees_default_tenant_only(client: AsyncClient) -> None:
-    """未登录（无 JWT）请求落在默认租户，看不到任何登录用户的数据。"""
+async def test_no_token_rejected_once_users_exist(client: AsyncClient) -> None:
+    """已启用账号体系的实例：无令牌一律 401（fail-closed）。
+
+    回归：旧实现对「未设置 API_TOKEN」完全放行，未登录请求会落在默认租户 0，
+    而默认租户里的历史数据可被任意匿名请求读写——注册了用户也绕不过去。
+    """
     _, token_a = await _make_user("grace")
     await _add_position(client, token_a, "000001", "平安A", 7)
 
     anon = await client.get("/api/dashboard")
+    assert anon.status_code == 401
+    assert "登录" in anon.json().get("error", "")
+
+    # 带合法 JWT 仍能正常读取自己的数据
+    rows = await _positions(client, token_a)
+    assert any(p.get("name") == "平安A" for p in rows)
+
+
+async def test_no_token_allowed_when_no_users(client: AsyncClient) -> None:
+    """零账号的本机单用户模式：保持免登录（否则首次使用无法进入）。"""
+    anon = await client.get("/api/dashboard")
     assert anon.status_code == 200
-    rows = anon.json().get("positions") or []
-    assert not any(p.get("name") == "平安A" for p in rows)
 
 
 # ---------------------------------------------------------------------------

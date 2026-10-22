@@ -38,71 +38,53 @@ export function SubscriptionTimelineCard() {
       .sort((a, b) => a.day - b.day);
   }, [data]);
 
+  // 横向条形：一行一个订阅，长度=月费，右侧标出扣款日。
+  // 原先用「散点 + 气泡大小」表达金额：¥2,034 的单点被放大到占半张图，
+  // 而 ¥18 的点小到看不见，读者无法比较——条形长度是更可靠的编码通道。
   const option = useMemo<EChartsCoreOption | null>(() => {
     if (items.length === 0) return null;
-    const total = items.reduce((s, x) => s + x.monthly, 0);
+    const avg = items.reduce((s, x) => s + x.monthly, 0) / items.length;
+    const rows = [...items].sort((a, b) => a.monthly - b.monthly);
     return {
       tooltip: {
         trigger: "item",
         renderMode: "richText",
         confine: true,
-        formatter: (p: { name: string; value: [number, number] }) => {
+        formatter: (p: { name: string; value: number }) => {
           const item = items.find((x) => x.name === p.name);
-          return `${p.name}\n${t("chart.dueDay")} ${item?.day ?? "—"} · ${fmtMoney(Number(p.value?.[1] ?? 0))}`;
+          return `${p.name}
+${t("chart.dueDay")} ${item?.day ?? "—"} · ${fmtMoney(p.value)}`;
         },
       },
-      grid: { left: 8, right: 16, top: 16, bottom: 24, containLabel: true },
-      xAxis: {
-        type: "value",
-        name: t("chart.day"),
-        min: 1,
-        max: 31,
-        splitNumber: 5,
-        axisLabel: { fontSize: 10, color: axisLabelColor(resolved) },
-        nameTextStyle: { fontSize: 10, color: axisLabelColor(resolved) },
-        splitLine: { lineStyle: { opacity: 0.12 } },
-      },
+      grid: { left: 8, right: 56, top: 8, bottom: 8, containLabel: true },
+      xAxis: { type: "value", show: false },
       yAxis: {
-        type: "value",
-        name: t("chart.amount"),
-        axisLabel: {
-          fontSize: 10,
-          color: axisLabelColor(resolved),
-          formatter: (v: number) => `${v}`,
-        },
-        nameTextStyle: { fontSize: 10, color: axisLabelColor(resolved) },
-        splitLine: { lineStyle: { opacity: 0.12 } },
+        type: "category",
+        data: rows.map((x) => `${x.name} · ${x.day}${t("chart.dayShort")}`),
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { fontSize: 11, color: axisLabelColor(resolved), width: 110, overflow: "truncate" },
       },
       series: [
         {
-          type: "graph",
-          layout: "none",
-          coordinateSystem: "cartesian2d",
-          symbolSize: (val: number[]) => Math.max(10, Math.min(40, Number(val[1]) / 20)),
+          type: "bar",
+          data: rows.map((x) => x.monthly),
+          barWidth: 12,
+          itemStyle: { color: palette[3], borderRadius: 3 },
           label: {
             show: true,
-            position: "top",
-            fontSize: 9,
+            position: "right",
+            fontSize: 11,
             color: axisLabelColor(resolved),
-            formatter: (p: { name: string }) => p.name.slice(0, 6),
+            formatter: (p: { value: number }) => fmtMoney(p.value),
           },
-          itemStyle: { color: palette[3] },
-          data: items.map((x) => ({
-            name: x.name,
-            value: [x.day, x.monthly],
-          })),
-        },
-        {
-          // 一条水平参考线：订阅月支出均值，便于判断"哪笔偏大"
-          type: "line",
           markLine: {
             silent: true,
             symbol: "none",
             lineStyle: { type: "dashed", opacity: 0.5, color: palette[0] },
             label: { show: false },
-            data: [{ yAxis: total / items.length }],
+            data: [{ xAxis: avg }],
           },
-          data: [],
         },
       ],
     };

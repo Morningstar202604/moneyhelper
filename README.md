@@ -41,13 +41,62 @@ The other tabs (Overview / Holdings / Market / Ledger) are views of the conversa
 - **3-level quote fallback**: Eastmoney → Sina → local snapshot, clearly labeled when offline.
 - **PWA**: installable on desktop and mobile.
 
+## Interface
+
+Two surfaces, each with a clear job:
+
+- **Chat** is the entry point — record an expense, ask a question.
+- **Finance workspace** follows stock-broker conventions: a list on the left, detail for the selected
+  symbol on the right.
+
+Navigation: a persistent session sidebar (chat) plus five top tabs
+(Overview / Holdings / Market / Ledger / Health). The main area switches pages; "Back to chat"
+returns to the conversation.
+
+| Width | Layout |
+|---|---|
+| ≥1280 | Session sidebar (drag to resize) + main area (chat centred at 48rem, finance pages at 1200px) |
+| 768–1279 | Sidebar kept; finance two-column layouts collapse to one |
+| <768 | Compact top bar + five bottom tabs (Chat / Finance / Holdings / Scheduled / Settings), rest in a drawer |
+
+Highlights:
+- Holdings: summary strip → concentration warnings → table + P&L contribution chart, with
+  concentration / sector / risk columns on the right.
+- Market: watchlist and holdings with 60-day sparklines, plus a detail panel (trend, period change,
+  60-day high/low, full K-line).
+- Ledger: one-sentence entry plus a standard transaction table.
+- Health: score, five-dimension bars, a "fix first" list, and per-dimension advice.
+
+Screenshots: `cd frontend && node scripts/ui-audit.mjs` (every page, into `out/ui-audit/`);
+README images: `node scripts/readme-shots.mjs` (writes `docs/screenshots/`).
+
 ## Screenshots
 
-| Chat hub | Overview |
+| Chat | Answer: plan + snapshot + actions |
 |---|---|
-| ![Chat hub](docs/screenshots/chat-zh.png) | ![Overview](docs/screenshots/overview-en.png) |
+| ![Chat](docs/screenshots/01-chat-home.png) | ![Answer](docs/screenshots/02-chat-answer.png) |
 
-More in [docs/screenshots/](docs/screenshots/) and [docs/demo/](docs/demo/).
+| Overview | Holdings |
+|---|---|
+| ![Overview](docs/screenshots/03-overview.png) | ![Holdings](docs/screenshots/04-holdings.png) |
+
+| Market: list + detail | Ledger |
+|---|---|
+| ![Market](docs/screenshots/05-market.png) | ![Ledger](docs/screenshots/06-ledger.png) |
+
+| Health check | Settings |
+|---|---|
+| ![Health](docs/screenshots/07-health.png) | ![Settings](docs/screenshots/08-settings.png) |
+
+| Command palette (Ctrl+K) | Dark mode |
+|---|---|
+| ![Command palette](docs/screenshots/10-command-palette.png) | ![Dark](docs/screenshots/11-dark-mode.png) |
+
+| Mobile: chat | Mobile: finance |
+|---|---|
+| ![Mobile chat](docs/screenshots/12-mobile-chat.png) | ![Mobile finance](docs/screenshots/13-mobile-finance.png) |
+
+More in [docs/screenshots/](docs/screenshots/).
 
 ## Quick start
 

@@ -105,21 +105,21 @@ export function CommandPalette({
       />
       {/* 面板 */}
       <div
-        className={`absolute left-1/2 top-[16vh] w-[min(92vw,38rem)] -translate-x-1/2 transition-all duration-150 ${
+        className={`absolute left-1/2 top-[7vh] w-[min(92vw,38rem)] -translate-x-1/2 transition-all duration-150 ${
           open ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 pointer-events-none"
         }`}
       >
         <Command
-          className="overflow-hidden rounded-xl border border-border bg-popover shadow-xl"
+          className="flex max-h-[calc(100dvh-16vh)] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-xl"
           label="Command"
         >
           <Command.Input
             value={q}
             onValueChange={setQ}
             placeholder={t("cmd.placeholder")}
-            className="w-full border-b border-border bg-transparent px-4 py-3 text-sm outline-none placeholder:text-muted-foreground"
+            className="w-full shrink-0 border-b border-border bg-transparent px-4 py-3 text-sm outline-none placeholder:text-muted-foreground"
           />
-          <Command.List className="max-h-[60vh] overflow-y-auto scroll-thin p-1.5">
+          <Command.List className="min-h-0 flex-1 overflow-y-auto scroll-thin p-1.5 pb-3">
             <Command.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">
               {t("cmd.empty")}
             </Command.Empty>

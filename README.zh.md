@@ -41,35 +41,61 @@
 - **行情三级降级**：东方财富 → 新浪 → 本地快照，全挂时用快照价并明确标注「离线估值，非实时」。
 - **PWA 可安装**：桌面 / 移动端都能装成独立应用。
 
-## 界面与适配
+## 界面
 
-界面按视口自适应，同一套代码覆盖台式机、笔记本、平板与手机：
+两类界面，各司其职：
+
+- **对话**是主入口——记一笔、问一句都在这里；
+- **财务工作区**按股票/券商软件的方式组织：左侧列表扫一遍，右侧看单只详情。
+
+导航结构：左侧常驻会话栏（对话）↔ 顶部五个页签（总览 / 持仓 / 行情 / 记账 / 财务体检），
+主区整页切换，右上角「返回问答」。
 
 | 宽度 | 布局 |
 |---|---|
-| ≥1280 | 左侧会话栏（可拖拽调宽）+ 居中对话 + 右侧数据面板（可拖拽调宽，挤占而非遮挡） |
-| 768–1279 | 侧栏保留、数据面板覆盖式滑出，对话不被压缩到不可用 |
-| <768 | 顶栏精简 + 底部五项导航（问答/总览/持仓/定时产出/设置），其余入口走抽屉 |
+| ≥1280 | 左侧会话栏（可拖拽调宽）+ 主区（对话居中 48rem / 财务页 1200px 居中） |
+| 768–1279 | 侧栏保留；财务页双栏自动收敛为单栏 |
+| <768 | 顶栏精简 + 底部五项导航（问答 / 财务 / 持仓 / 定时产出 / 设置），其余入口走抽屉 |
 
 细节：
-- 侧栏与数据面板宽度独立记忆（localStorage），双击分隔条复位
-- 设置页在窄屏按「基础/AI 与自动化/数据与安全」三组折叠，避免 11 个入口铺满首屏
-- 面板有焦点陷阱与关闭后焦点归还，Esc 可关闭
-- 首屏只加载对话相关代码，Dashboard/部门看板/收件箱按需懒加载
+- 持仓页：摘要条 → 集中度超限提示 → 左「明细表 + 盈亏贡献条形图」/ 右「集中度 + 行业 + 风险提示」
+- 行情页：「自选/持仓列表（含近 60 日迷你走势）」+「右侧详情（走势、区间涨跌、60 日高低、K 线）」
+- 记账页：一句话记账 + 标准流水表格（日期 / 条目 / 分类 / 金额 / 操作）
+- 体检页：评分 + 五维进度条 + 「优先处理」清单 + 维度明细与建议
+- 设置页在窄屏按「基础 / AI 与自动化 / 数据与安全」三组折叠
+- 侧栏宽度记忆（localStorage），双击分隔条复位；面板有焦点陷阱与焦点归还，Esc 可关闭
+- 首屏只加载对话相关代码，图表/部门看板/收件箱按需懒加载
 
-截图核对：`cd frontend && npm run shots`（需要先启动服务，默认抓 1440/1024/768/390 四档）。
+截图核对：`cd frontend && node scripts/ui-audit.mjs`（逐页拍全部界面到 `out/ui-audit/`）；
+README 展示图：`node scripts/readme-shots.mjs`（写入 `docs/screenshots/`）。
 
 ## 界面速览
 
-| 对话中枢 | 总览 |
+| 对话：记一笔、问一句 | 回答：计划 + 快照 + 跳转 |
 |---|---|
-| ![对话中枢](docs/screenshots/chat-zh.png) | ![总览](docs/screenshots/overview-zh.png) |
+| ![对话](docs/screenshots/01-chat-home.png) | ![回答](docs/screenshots/02-chat-answer.png) |
 
-| 持仓 | 英文界面 |
+| 总览：净资产与收支结构 | 持仓：明细 + 盈亏贡献 |
 |---|---|
-| ![持仓](docs/screenshots/holdings-zh.png) | ![英文界面](docs/screenshots/overview-en.png) |
+| ![总览](docs/screenshots/03-overview.png) | ![持仓](docs/screenshots/04-holdings.png) |
 
-更多截图见 [docs/screenshots/](docs/screenshots/)，功能演示见 [docs/demo/](docs/demo/)。
+| 行情：列表 + 详情 + 迷你走势 | 记账：一句话入账 + 流水表 |
+|---|---|
+| ![行情](docs/screenshots/05-market.png) | ![记账](docs/screenshots/06-ledger.png) |
+
+| 财务体检：评分 + 优先处理 | 设置：13 个分区 |
+|---|---|
+| ![体检](docs/screenshots/07-health.png) | ![设置](docs/screenshots/08-settings.png) |
+
+| 命令面板（Ctrl+K） | 暗色模式 |
+|---|---|
+| ![命令面板](docs/screenshots/10-command-palette.png) | ![暗色](docs/screenshots/11-dark-mode.png) |
+
+| 手机：对话 | 手机：财务 |
+|---|---|
+| ![手机对话](docs/screenshots/12-mobile-chat.png) | ![手机财务](docs/screenshots/13-mobile-finance.png) |
+
+更多截图见 [docs/screenshots/](docs/screenshots/)。
 
 ## 快速开始
 

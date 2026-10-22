@@ -35,9 +35,13 @@ function NetWorthPie({ breakdown }: { breakdown: NetWorthBreakdown["asset_breakd
 
 function StatRow({ label, value, tone }: { label: string; value: number; tone?: "up" | "down" }) {
   return (
-    <div className="flex items-center justify-between text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`tabular-nums ${tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-foreground"}`}>
+    <div className="flex items-baseline gap-3 text-xs">
+      <span className="flex-1 text-muted-foreground">{label}</span>
+      <span
+        className={`w-24 shrink-0 text-right tabular-nums ${
+          tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-foreground"
+        }`}
+      >
         {fmtMoney(value)}
       </span>
     </div>
@@ -88,7 +92,7 @@ export function NetWorthCard() {
         <span className="text-xs text-muted-foreground">{tr("netWorth.total")}</span>
       </div>
 
-      <div className="grid items-center gap-6 sm:grid-cols-[13rem_minmax(0,24rem)]">
+      <div className="grid max-w-3xl items-start gap-6 sm:grid-cols-[13rem_20rem]">
         {hasPieData ? (
           <div className="relative">
             <NetWorthPie breakdown={assets} />
@@ -98,18 +102,18 @@ export function NetWorthCard() {
             </div>
           </div>
         ) : null}
-        <div className={hasPieData ? "w-full max-w-md space-y-2" : "grid grid-cols-2 gap-x-6 gap-y-1.5"}>
+        <div className={hasPieData ? "w-full space-y-2" : "grid grid-cols-2 gap-x-6 gap-y-1.5"}>
           <StatRow label={tr("netWorth.assets")} value={data.total_assets} tone="up" />
           {Object.entries(assets).map(([label, value], i) => (
-            <div key={label} className="flex items-center justify-between gap-2 text-xs">
-              <span className="flex min-w-0 items-center gap-1.5">
+            <div key={label} className="flex items-baseline gap-3 text-xs">
+              <span className="flex min-w-0 flex-1 items-center gap-1.5">
                 <span
                   className="h-2 w-2 shrink-0 rounded-full"
                   style={{ background: palette[i % 3] }}
                 />
                 <span className="truncate text-muted-foreground">{label}</span>
               </span>
-              <span className="shrink-0 tabular-nums text-foreground">{fmtMoney(value)}</span>
+              <span className="w-24 shrink-0 text-right tabular-nums text-foreground">{fmtMoney(value)}</span>
             </div>
           ))}
           <StatRow label={tr("netWorth.liability")} value={data.total_liabilities} tone="down" />

@@ -27,12 +27,19 @@ export function MarketDetail({
   onOpenKline: () => void;
 }) {
   const { t } = useI18n();
+  // 与后端对齐：场外基金/现金没有 K 线，不发请求（否则控制台每次一条 404）
+  const supported = (() => {
+    const s = (symbol || "").trim().toUpperCase();
+    if (!/^\d{6}$/.test(s)) return false;
+    return s[0] === "6" || s[0] === "5" || s[0] === "0" || s[0] === "3" || s.startsWith("15") || s.startsWith("16");
+  })();
   const q = useQuery({
     queryKey: ["/api/kline", symbol, "spark"],
     queryFn: () =>
       api<{ points: KlinePoint[] }>(`/api/kline?symbol=${encodeURIComponent(symbol)}&period=daily&limit=60`),
     staleTime: 5 * 60_000,
     retry: 0,
+    enabled: supported,
   });
 
   const points = q.data?.points ?? [];

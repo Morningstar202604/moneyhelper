@@ -64,7 +64,7 @@ export function ChatView({
             onScroll={handleListScroll}
             className="h-full overflow-y-auto scroll-thin"
           >
-            <div className="mx-auto w-full max-w-[48rem] px-4 pb-6 pt-4 sm:px-6">
+            <div className="mx-auto w-full max-w-[48rem] px-4 pb-10 pt-4 sm:px-6">
               {empty ? (
                 <div className="flex min-h-[calc(100dvh-16rem)] flex-col items-center justify-center py-10 text-center">
                   <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">

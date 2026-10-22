@@ -2,6 +2,51 @@
 
 项目版本号与发布历史。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本语义遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [2.8.3] - 2026-10-22（安全审计 + 全维度审查修复 + README 重做）
+
+> 一次产品级审查：安全、可靠性、性能、可维护性、测试有效性、竞品对标。
+> 所有发现均附复现路径；修复项均有回归测试。
+
+### 安全（Critical / High）
+
+- **认证绕过（Critical）**：`api_auth` 只在设置了 `API_TOKEN` 时校验，未设置就完全放行；
+  租户由 JWT 解析、失败一律归默认租户 0。结果是注册了用户的实例，任何人无令牌即可
+  `GET /api/dashboard`、`GET /api/export` 读到全部账本。已复现（返回 200 + 数据）。
+  修复：库中已有账号时强制 JWT（共享口令除外），无用户时保持本机免登录。fail-closed。
+  回归：`test_no_token_rejected_once_users_exist` + `test_no_token_allowed_when_no_users`。
+- **MCP 工具绕过写保护（High）**：模型可见工具已排除写操作，但 `mcp__` 前缀走
+  `resolve_mcp_tool` 分支，不受 `WRITE_EXCLUDED` 约束——外部 MCP 服务器若暴露
+  记账/下单能力，模型可绕过确定性写分支直接调用。修复：MCP 工具按去前缀后的名字
+  比对禁止清单。回归：`test_agent_mcp_guard.py`（9 项）。
+- **限流可绕过（Medium）**：限流按 `client.host` 原始字符串建桶，双栈监听下
+  `127.0.0.1` 与 `::1` 各拿一份配额。修复：`_normalize_ip` 归一化回环写法。
+  回归：`test_rate_limit_ip.py`（6 项）。
+- **ECharts XSS（Moderate，GHSA-fgmj-fm8m-jvvx）**：`npm audit` 实测存在，
+  升级 echarts 5.5 → 6.1.0，复测 0 vulnerabilities，页面渲染回归通过。
+
+### 界面缺陷（实测发现并修复）
+
+- **图表整块空白（High）**：`useEChart` 的初始化副作用在组件提前 `return null` 时
+  跑过一次、`ref` 为 null 就退出；数据到达后容器才出现，但再也不会初始化。
+  健康五维雷达、现金流瀑布、支出结构、订阅时间线四个卡片全部受影响。
+  修复：deps 变化时若容器存在但实例不存在，补一次 init。
+- **订阅时间线不可读**：用气泡大小表达金额，¥2,034 被放大到占半张图、¥18 小到看不见。
+  改为横向条形图（长度编码金额），并标出扣款日。
+- **命令面板被裁切**：面板高度未随视口约束，最后两个分组被截断；Esc 也无法关闭。
+  改为 `max-h: calc(100dvh - 16vh)` + 内部滚动 + Esc 关闭。
+- **行情列表每行一条 404**：场外基金（如 110011）没有 K 线，前端仍逐行请求。
+  改为按后端同一套规则预判，跳过不支持 K 线的标的。
+- **净资产卡布局松散**：环图与明细分列两端、数值贴最右。改为整体限宽 + 固定数值列。
+- **持仓页右栏留白**：补「风险提示」卡（直接列出后端算好的 flags）。
+
+### 测试与文档
+
+- 后端 757 通过（新增 17 项回归）；前端 111 单测 + 21 e2e 通过。
+- 覆盖率实测：后端行覆盖 81.51%（9388 语句）；前端 53.55%（含未被单测覆盖的 UI 组件）。
+- `docs/screenshots/` 全部重拍（旧图是两代之前的界面，与当前 UI 不一致）；
+  README 中英双版重写「界面」章节与截图矩阵。
+- 新增 `frontend/scripts/readme-shots.mjs`（README 展示图）与 `ui-audit.mjs`（全界面审查截图）。
+
 ## [2.8.2] - 2026-10-22（对标股票软件重做三个数据页 + EXE 实打包）
 
 > 用户反馈"界面参考 codex/qoder/zcode、工作台软件和股票软件"，并追问是否打包了 exe。

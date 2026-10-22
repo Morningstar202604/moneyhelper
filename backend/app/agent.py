@@ -387,6 +387,20 @@ async def run_agent(
             name = tc.function.name
             # P2 MCP：外部 MCP 工具（server 名一致时才走 MCP 调用）
             mcp_hit = mcp_client.resolve_mcp_tool(name) if mcp_schemas else None
+            # MCP 工具同样受写操作禁令约束：外部服务器可能暴露与本地写工具同义的能力
+            # （记账/下单/改设置）。mcp__ 前缀是唯一入口，这里按去掉前缀后的名字比对，
+            # 命中 WRITE_EXCLUDED 一律拒绝——否则模型可借 MCP 绕过确定性写分支。
+            if mcp_hit is not None:
+                bare = name.removeprefix("mcp__")
+                if bare in WRITE_EXCLUDED or name in WRITE_EXCLUDED:
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "content": "该工具为写操作，只能由用户显式指令触发，模型不可调用。",
+                        }
+                    )
+                    continue
             impl = tool_map.get(name)
             if impl is None and mcp_hit is None:
                 messages.append(

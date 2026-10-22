@@ -272,6 +272,13 @@ export function MarketView() {
                   : t("market.quoteSrc")} · {t("notAdvice")}
               </p>
             )}
+            <div className="mt-3 border-t border-border/60 pt-3 text-[11.5px] leading-relaxed text-muted-foreground">
+              <ul className="space-y-1">
+                <li>· {t("market.tip1")}</li>
+                <li>· {t("market.tip2")}</li>
+                <li>· {t("market.tip3")}</li>
+              </ul>
+            </div>
           </>
         ) : holdings.length === 0 ? (
           <EmptyState mode="compact" text={t("holdings.empty")} />
@@ -352,14 +359,6 @@ export function MarketView() {
           />
         ) : null}
 
-        <div className="rounded-2xl border border-border bg-card p-3.5 text-[12px] leading-relaxed text-muted-foreground">
-          <div className="mb-1 font-medium text-foreground/80">{t("market.tipsTitle")}</div>
-          <ul className="list-disc space-y-1 pl-4">
-            <li>{t("market.tip1")}</li>
-            <li>{t("market.tip2")}</li>
-            <li>{t("market.tip3")}</li>
-          </ul>
-        </div>
       </div>
       </div>
 

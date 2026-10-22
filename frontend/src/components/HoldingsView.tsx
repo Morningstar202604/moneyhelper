@@ -233,6 +233,26 @@ export function HoldingsView({ onGoMarket }: { onGoMarket?: () => void } = {}) {
               </ul>
             )}
           </Card>
+
+          {/* 风险清单：把后端算好的 flags 直接列出来（股票软件的"风险提示"面板） */}
+          {(dashboard.flags ?? []).length > 0 && (
+            <Card className="p-[var(--card-pad)]">
+              <div className="mb-2 text-sm font-medium">{t("holdings.riskTitle")}</div>
+              <ul className="space-y-1.5">
+                {(dashboard.flags ?? []).slice(0, 5).map((f) => (
+                  <li key={f.code + f.text} className="flex gap-1.5 text-[12px] leading-relaxed">
+                    <span
+                      className={cn(
+                        "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
+                        f.level === "error" ? "bg-red-500" : f.level === "warn" ? "bg-amber-500" : "bg-emerald-500",
+                      )}
+                    />
+                    <span className="text-foreground/75">{f.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </div>
       </div>
 

@@ -73,7 +73,24 @@ export function useEChart(
         // echarts 异步加载期间 option 可能已经就绪，补一次避免首帧空白
         const latest = optionRef.current;
         if (latest) chart.setOption(latest, { notMerge: true });
-        ro = new ResizeObserver(() => chart?.resize());
+        // 容器初始尺寸可能为 0（在隐藏面板 / 懒加载 tab / flex 尚未布局时挂载）。
+        // 此时 init 出来的实例宽高是 0，后续 resize() 不会重算坐标系，表现为「图表一片空白」。
+        // 记录上次尺寸，仅在 0 → 非 0 或尺寸实际变化时先 resize 再重放 option。
+        let lastW = el.clientWidth;
+        let lastH = el.clientHeight;
+        ro = new ResizeObserver(() => {
+          const w = el.clientWidth;
+          const h = el.clientHeight;
+          if (w === lastW && h === lastH) return;
+          const wasEmpty = lastW === 0 || lastH === 0;
+          lastW = w;
+          lastH = h;
+          chart?.resize();
+          if (wasEmpty && w > 0 && h > 0) {
+            const cur = optionRef.current;
+            if (cur) chart?.setOption(cur, { notMerge: true });
+          }
+        });
         ro.observe(el);
       })
       .catch((err: unknown) => {
@@ -87,15 +104,26 @@ export function useEChart(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 数据/配置变化：只 setOption，不重建实例
+  // 数据/配置变化：只 setOption，不重建实例。
+  //
+  // 关键：调用方常见写法是「数据没来 → return null；数据来了才渲染容器」。
+  // 那种情况下挂载 effect 跑过一次、ref 是 null 就退出，之后再也不会初始化——
+  // 图表的 div 有了，画布却永远是空的。这里在 ref 为空但容器已经出现时补一次 init。
   useEffect(() => {
-    if (!option || !ref.current) return;
+    if (!option) return;
     loadEcharts()
       .then((core) => {
         const el = ref.current;
         if (!el) return;
-        const inst = core.getInstanceByDom(el);
-        inst?.setOption(option, { notMerge: true });
+        let inst = core.getInstanceByDom(el);
+        if (!inst) {
+          // 容器晚于首次挂载出现：补初始化
+          inst = core.init(el);
+          inst.setOption(option, { notMerge: true });
+          return;
+        }
+        inst.resize();
+        inst.setOption(option, { notMerge: true });
       })
       .catch(() => {
         /* 加载失败由挂载 effect 上报 */

@@ -44,6 +44,17 @@ _rate_buckets: dict[str, list[float]] = {}
 _RATE_BUCKETS_CAP = 4096
 
 
+def _normalize_ip(ip: str) -> str:
+    """把本地回环的各种写法归一到同一个 key，避免 IPv4/IPv6 各拿一份限流配额。"""
+    raw = (ip or "").strip().lower()
+    if raw in ("::1", "0:0:0:0:0:0:0:1", "localhost"):
+        return "127.0.0.1"
+    # IPv4-mapped IPv6：::ffff:127.0.0.1
+    if raw.startswith("::ffff:"):
+        return raw[7:]
+    return raw
+
+
 def _rate_limit_check(client_ip: str) -> tuple[bool, int]:
     """返回 (是否放行, 0=放行 or 秒数=retry_after)。"""
     if not _RATE_LIMIT_ENABLED:
@@ -70,7 +81,9 @@ async def rate_limiter_middleware(request: Request, call_next):
     if path.startswith("/api/") and path not in _SKIP_AUTH_PATHS:
         client = request.client
         ip = client.host if client else "127.0.0.1"
-        ok, retry_after = _rate_limit_check(ip)
+        # 归一化：同一客户端可能以 127.0.0.1 / ::1 / ::ffff:127.0.0.1 多种形态出现
+        # （双栈监听），按原始字符串建桶会让同一 IP 拿到多份配额。
+        ok, retry_after = _rate_limit_check(_normalize_ip(ip))
         if not ok:
             return JSONResponse(
                 {"error": "请求过于频繁，请稍后再试"},
@@ -97,46 +110,82 @@ def spawn_background(coro: Coroutine[Any, Any, None]) -> None:
 
 async def api_auth(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/api/") and path not in _SKIP_AUTH_PATHS:
-        key = os.getenv("API_TOKEN", "").strip()
-        # 鉴权逻辑共用 auth.verify_api_token（timing-safe 比对）
-        if key and verify_api_token(request) is None:
-            return JSONResponse({"error": "需要访问口令"}, status_code=401)
-        # 审计归属：把本请求解析到的操作者写进 ContextVar，后续 record_provenance
-        # 不传 username 时自动归属该用户（此前各路由硬编码 "system"，审计链全失真）。
-        actor = _resolve_actor(request, key)
-        if actor:
-            from .provenance import set_request_actor
+    if not path.startswith("/api/") or path in _SKIP_AUTH_PATHS:
+        return await call_next(request)
 
-            set_request_actor(actor)
-        # 租户隔离：JWT 用户决定这一请求读写哪份数据。无 JWT 时保持默认租户 0
-        # （本机单用户模式），共享口令模式下同样归 0——一个实例仍然是一个账本。
-        from .db.tenant import reset_current_user_id, set_current_user_id
+    key = os.getenv("API_TOKEN", "").strip()
+    # 共享口令模式：配置了 API_TOKEN 时，口令是进入实例的唯一凭据
+    if key and verify_api_token(request) is None:
+        return JSONResponse({"error": "需要访问口令"}, status_code=401)
 
-        token = set_current_user_id(_resolve_tenant(request))
-        try:
-            return await call_next(request)
-        finally:
-            reset_current_user_id(token)
-    return await call_next(request)
+    # 多用户模式：库中已有账号时，除共享口令外必须具备有效 JWT。
+    #
+    # 此前这里只校验 API_TOKEN（未设置就完全放行），而租户由 _resolve_tenant 从 JWT
+    # 解析、解析失败一律归默认租户 0。结果是：只要实例暴露在网络上（或反代忘了配口令），
+    # 任何人无令牌即可读写「默认租户」的全部账本——注册了用户也绕不过去。
+    # 现在改为 fail-closed：有账号就必须带令牌（或在 /api/auth/* 登录）。
+    from .db.tenant import LOCAL_USER_ID
+
+    tenant_id = _resolve_tenant(request)
+    shared = verify_api_token(request)
+    needs_login = (
+        tenant_id == LOCAL_USER_ID
+        and shared is None
+        and not getattr(request.state, "auth_via_jwt", False)
+    )
+    if needs_login and await _has_registered_users():
+        return JSONResponse(
+            {"error": "需要登录（该实例已启用账号体系）"}, status_code=401
+        )
+
+    # 审计归属：把本请求解析到的操作者写进 ContextVar，后续 record_provenance
+    # 不传 username 时自动归属该用户（此前各路由硬编码 "system"，审计链全失真）。
+    actor = _resolve_actor(request, key)
+    if actor:
+        from .provenance import set_request_actor
+
+        set_request_actor(actor)
+
+    # 租户隔离：JWT 用户决定这一请求读写哪份数据。
+    # 无 JWT 时保持默认租户 0（本机单用户模式）；共享口令模式下同样归 0——
+    # 一个实例仍然是一个账本。
+    from .db.tenant import reset_current_user_id, set_current_user_id
+
+    token = set_current_user_id(tenant_id)
+    try:
+        return await call_next(request)
+    finally:
+        reset_current_user_id(token)
+
+
+async def _has_registered_users() -> bool:
+    """当前实例是否已启用账号体系（有任意注册用户）。失败时按"有用户"处理（fail-closed）。"""
+    try:
+        from . import db
+
+        return await db.user_count() > 0
+    except Exception:  # noqa: BLE001 — 查询失败时宁可要求登录
+        return True
 
 
 def _resolve_tenant(request: Request) -> int:
     """从 Bearer JWT 解析租户（用户 id）；解析不出来归默认租户。"""
+    from .db.tenant import LOCAL_USER_ID
+
     header = request.headers.get("authorization", "")
     if not header.lower().startswith("bearer "):
-        from .db.tenant import LOCAL_USER_ID
-
         return LOCAL_USER_ID
     try:
         from . import auth as auth_mod
 
         payload = auth_mod._decode_jwt(header[7:].strip())
-        return int(payload.get("sub") or 0)
+        uid = int(payload.get("sub") or 0)
     except Exception:  # noqa: BLE001 — 解析失败按默认租户处理（鉴权层已拦截非法口令）
-        from .db.tenant import LOCAL_USER_ID
-
         return LOCAL_USER_ID
+    if uid > 0:
+        # 明确标记"本次请求带了合法 JWT"，供 api_auth 判定是否需要强制登录
+        request.state.auth_via_jwt = True
+    return uid
 
 
 def _resolve_actor(request: Request, api_token: str) -> str:
