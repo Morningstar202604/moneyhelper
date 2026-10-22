@@ -119,7 +119,6 @@ a = Analysis(
         # 调度与工具
         "apscheduler",
         "apscheduler.triggers.cron",
-        "croniter",
         "cn2an",
         "cachetools",
         "rank_bm25",

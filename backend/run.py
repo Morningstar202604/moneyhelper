@@ -26,6 +26,20 @@ import uvicorn  # noqa: E402
 from app.main import app  # noqa: E402
 
 
+def _safe_console() -> None:
+    """让控制台能输出中文。
+
+    Windows 上双击运行 exe 时 stdout 默认是 GBK（cp936）或 cp1252，
+    打印中文横幅会抛 UnicodeEncodeError 直接闪退（CI 冒烟测试实测复现）。
+    这里把标准输出/错误切成 UTF-8，并忽略无法编码的字符作为最后兜底。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 — 老 Python / 被重定向时不支持 reconfigure
+            pass
+
+
 def open_browser_later(delay: float = 1.5):
     """延迟几秒后打开浏览器，等后端起来。"""
     def _open():
@@ -38,6 +52,7 @@ def main():
     port = int(os.getenv("PORT", "8788"))
     host = "127.0.0.1"
 
+    _safe_console()
     print("=" * 50)
     print("  小满 — 对话优先的个人理财 Agent")
     print("=" * 50)

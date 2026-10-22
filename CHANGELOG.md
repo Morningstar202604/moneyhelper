@@ -2,6 +2,15 @@
 
 项目版本号与发布历史。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本语义遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [2.8.6] - 2026-10-23（修复 Windows exe 启动闪退）
+
+- **Windows exe 双击闪退（Critical，CI 实测复现）**：`run.py` 打印中文横幅时，
+  Windows 控制台默认编码是 cp936/cp1252，`UnicodeEncodeError: 'charmap' codec can't
+  encode characters` → 未捕获异常 → 进程退出。现在启动时把 stdout/stderr 切成 UTF-8
+  并带 `errors="replace"` 兜底。
+- 移除 spec 里无效的 `croniter` hidden import（项目未使用该依赖，PyInstaller 报
+  `Hidden import 'croniter' not found`，在 CI 中只是警告，但会干扰真实错误定位）。
+
 ## [2.8.5] - 2026-10-23（设置页使用逻辑修复）
 
 > 逐个分区走查设置页，修的都是"用户会踩到但不会报错"的逻辑问题。
