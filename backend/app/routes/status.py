@@ -32,10 +32,22 @@ async def _llm_model() -> str:
 
 @router.get("/api/health")
 async def health() -> dict:
+    # auth_mode 让前端能明确告诉用户"这个实例到底要不要口令"。
+    # 此前设置页只能写"后端同时设置 API_TOKEN 才生效"，用户无从判断是否已生效。
+    import os
+
+    from .. import db
+
+    token_required = bool(os.getenv("API_TOKEN", "").strip())
+    try:
+        has_users = await db.user_count() > 0
+    except Exception:  # noqa: BLE001 — 健康检查不因统计失败而失败
+        has_users = False
     return {
         "ok": True,
         "llm_configured": await llm.llm_available(),
         "model": await _llm_model(),
+        "auth_mode": "token" if token_required else ("accounts" if has_users else "local"),
     }
 
 

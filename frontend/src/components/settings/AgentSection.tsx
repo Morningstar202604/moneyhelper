@@ -458,16 +458,27 @@ export function AgentSection() {
         </div>
       </div>
 
-      {/* Defaults */}
+      {/* Defaults：只读汇总 + 明确指出每项去哪改（原先只显示数值，用户不知道怎么改） */}
       <div>
-        <h3 className="mb-3 text-sm font-medium">默认配置</h3>
-        <div className="rounded-lg border border-border p-3 text-sm">
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div>默认语言：{String(config.defaults.default_lang)}</div>
-            <div>默认模型：{String(config.defaults.default_model)}</div>
-            <div>审批阈值：¥{String(config.defaults.approval_threshold)}</div>
-            <div>最大工具轮次：{String(config.defaults.max_tool_turns)}</div>
-          </div>
+        <h3 className="mb-1 text-sm font-medium">默认配置</h3>
+        <p className="mb-3 text-xs text-muted-foreground">
+          这里只做汇总展示；下面标注了每一项的实际修改位置。
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {[
+            { label: "默认语言", value: String(config.defaults.default_lang), where: "偏好 → 语言" },
+            { label: "默认模型", value: String(config.defaults.default_model), where: "AI 回答 → 模型" },
+            { label: "审批阈值", value: `¥${String(config.defaults.approval_threshold)}`, where: "AI 回答 → Agent 行为" },
+            { label: "最大工具轮次", value: String(config.defaults.max_tool_turns), where: "AI 回答 → Agent 行为" },
+          ].map((row) => (
+            <div key={row.label} className="rounded-lg border border-border px-3 py-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs text-muted-foreground">{row.label}</span>
+                <span className="truncate text-[13px] font-medium tabular-nums">{row.value}</span>
+              </div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground/70">在「{row.where}」修改</div>
+            </div>
+          ))}
         </div>
       </div>
 

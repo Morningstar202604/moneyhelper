@@ -100,18 +100,26 @@ export function DataSection({
           </span>
         </div>
         <div className="flex items-center justify-between gap-2">
-          <div className="text-xs text-muted-foreground">
+          <div className="min-w-0 text-xs text-muted-foreground">
             {dashboard?.source.seeded ? t("settings.demoNote") : t("settings.realNote")}
           </div>
           <Button variant="outline" size="sm" onClick={() => setResetOpen(true)}>
-            {t("settings.restoreDemo")}
+            {t("settings.loadDemoData")}
           </Button>
         </div>
-        <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/60">
-          <div className="text-xs text-muted-foreground">{t("settings.clearHistoryDesc")}</div>
-          <Button variant="outline" size="sm" onClick={() => setClearOpen(true)}>
+        <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-2">
+          <div className="min-w-0 text-xs text-muted-foreground">{t("settings.clearHistoryDesc")}</div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 border-danger/40 text-danger hover:bg-danger/10 hover:text-danger"
+            onClick={() => setClearOpen(true)}
+          >
             <Trash2 className="w-3.5 h-3.5" /> {t("settings.clearHistory")}
           </Button>
+        </div>
+        <div className="mt-1 border-t border-border/60 pt-3 text-[12px] font-medium text-foreground/70">
+          {t("settings.backupSection")}
         </div>
         <div className="space-y-1.5">
           <input

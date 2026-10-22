@@ -44,6 +44,9 @@ export default function App() {
   // 主区视图：对话 or 财务工作区（整页切换，对标 opencode / codex 的 section 导航）
   const [view, setView] = useState<DataKind | "chat">("chat");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 设置页有未保存改动时，关闭前必须确认（原先点关闭直接丢弃修改，没有任何提示）
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [settingsCloseConfirm, setSettingsCloseConfirm] = useState(false);
 
   const [activeThread, setActiveThread] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: number; threadId: string } | null>(null);
@@ -366,25 +369,43 @@ export default function App() {
                 <span className="text-[15px] font-medium">{t("topbar.settings")}</span>
                 <button
                   type="button"
-                  onClick={() => setSettingsOpen(false)}
+                  onClick={() => {
+                    if (settingsDirty) setSettingsCloseConfirm(true);
+                    else setSettingsOpen(false);
+                  }}
                   className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
                   <X className="w-4 h-4" /> {t("app.close")}
                 </button>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <div className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6">
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-4 py-4 sm:px-6">
                   <Suspense
                     fallback={
                       <div className="py-12 text-center text-sm text-muted-foreground">{t("app.preparing")}</div>
                     }
                   >
-                    <SettingsView />
+                    <SettingsView onDirtyChange={setSettingsDirty} />
                   </Suspense>
                 </div>
               </div>
             </div>
           )}
+
+          <ConfirmDialog
+            open={settingsCloseConfirm}
+            onOpenChange={setSettingsCloseConfirm}
+            title={t("settings.unsavedTitle")}
+            description={t("settings.unsavedDesc")}
+            confirmText={t("settings.discardAndClose")}
+            cancelText={t("settings.keepEditing")}
+            danger
+            onConfirm={() => {
+              setSettingsCloseConfirm(false);
+              setSettingsDirty(false);
+              setSettingsOpen(false);
+            }}
+          />
 
           <ConfirmDialog
             open={pendingDelete !== null}

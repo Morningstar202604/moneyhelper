@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Bot, Brain, BrainCog, GitCompareArrows, KeyRound, Users, Newspaper, PiggyBank, ScrollText, ShieldCheck, SlidersHorizontal, Wallet,
@@ -45,11 +45,17 @@ const SECTION_GROUPS: { key: string; ids: SectionId[] }[] = [
   { key: "settings.groupData", ids: ["data", "token", "logs", "audit", "provenance"] },
 ];
 
-export function SettingsView() {
+export function SettingsView({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void } = {}) {
   const { t } = useI18n();
   const { dashboard } = useDashboard();
   const isDesktop = useIsDesktop();
   const { bootstrap, form, saveMutate, toggleMutate, reset, set, toggle, resetForm, dirty } = useSettingsForm();
+
+  // 把「有未保存修改」上报给 App：关闭设置页时若为 true 要先确认，避免改动静默丢失。
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   // active tab 状态很小，直接放组件内即可
   const [active, setActive] = useState<SectionId>("prefs");

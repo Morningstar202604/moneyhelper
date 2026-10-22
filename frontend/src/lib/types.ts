@@ -65,6 +65,14 @@ export interface MemoryItem {
   updated_at: string;
 }
 
+export interface HealthInfo {
+  ok: boolean;
+  llm_configured: boolean;
+  model: string;
+  /** token = 需要访问口令；accounts = 已启用账号体系；local = 本机免登录 */
+  auth_mode?: "token" | "accounts" | "local";
+}
+
 export interface HealthReport {
   score: number;
   summary: string;
@@ -219,7 +227,7 @@ export interface SchedulerStatus {
 export interface BootstrapData {
   settings: Record<string, string>;
   scheduler: SchedulerStatus;
-  health: { llm_configured: boolean; model: string };
+  health: { llm_configured: boolean; model: string; auth_mode?: "token" | "accounts" | "local" };
   /** 模型目录（P0 模型点亮）：设置页勾选/输入区切换的候选清单 */
   model_catalog?: { id: string; name: string; provider: string; base: string; model: string }[];
   /** 已点亮模型（逗号分隔串解析后的列表） */
