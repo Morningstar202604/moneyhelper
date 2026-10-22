@@ -29,14 +29,18 @@ jobs:
             name: Windows x64
             artifact: xiaoman-windows-x64
             binary: xiaoman.exe
+            # Release 上的文件名：三平台必须不同，否则 Linux/macOS 都叫 xiaoman 会互相覆盖
+            asset: xiaoman-windows-x64.exe
           - os: macos-latest
             name: macOS arm64
             artifact: xiaoman-macos-arm64
             binary: xiaoman
+            asset: xiaoman-macos-arm64
           - os: ubuntu-latest
             name: Linux x64
             artifact: xiaoman-linux-x64
             binary: xiaoman
+            asset: xiaoman-linux-x64
     steps:
       - uses: actions/checkout@v4
 
@@ -95,11 +99,15 @@ jobs:
           path: backend/dist/${{ matrix.binary }}
           if-no-files-found: error
 
+      - name: 重命名为平台专属文件名
+        shell: bash
+        run: cp "backend/dist/${{ matrix.binary }}" "backend/dist/${{ matrix.asset }}"
+
       - name: 附加到 Release（tag 触发时）
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: backend/dist/${{ matrix.binary }}
-          fail_on_unmatched_files: false
+          files: backend/dist/${{ matrix.asset }}
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
