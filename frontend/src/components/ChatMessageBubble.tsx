@@ -16,14 +16,14 @@ import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
 import sql from "react-syntax-highlighter/dist/esm/languages/prism/sql";
 import yaml from "react-syntax-highlighter/dist/esm/languages/prism/yaml";
 import {
-  BarChart3, ChevronDown, ChevronUp, Copy, Download, Loader2, RotateCcw, Sparkles, Wrench,
+  ChevronDown, ChevronUp, Copy, Download, Loader2, RotateCcw, Sparkles, Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SummaryBlock } from "@/components/SummaryBlock";
+import { FinanceBlocks, type FinanceCardData } from "@/components/chat/FinanceBlocks";
 import { BRAND, BrandLogo } from "@/lib/brand";
 import { useI18n } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import type { AgentToolStep, AgentPlanStep, AnswerMeta } from "@/lib/types";
 
@@ -365,68 +365,22 @@ function BubbleInner({
 
             {m.cards && m.cards.length > 0 && (
               <div className="mt-3 space-y-2">
-                {m.cards.map((c, i) => {
-                  const d = (c.data || {}) as Record<string, any>;
-                  const market = (d.market || null) as Record<string, any> | null;
-                  const ledger = (d.ledger || null) as Record<string, any> | null;
-                  // 后端按命中的路由收集数据：问持仓只有 market，问开销只有 ledger。
-                  // 只渲染真实存在的部分，避免把没查询的指标显示成「—」（看起来像数据缺失）。
-                  const cells = [
-                    market && {
-                      label: tr("summary.marketValue"),
-                      value:
-                        market.total_market_value != null
-                          ? `¥${(market.total_market_value / 10000).toFixed(1)}万`
-                          : "—",
-                    },
-                    ledger && {
-                      label: tr("dash.monthExpense"),
-                      value: ledger.expense != null ? `¥${Number(ledger.expense).toLocaleString()}` : "—",
-                    },
-                    ledger && {
-                      label: tr("summary.monthlyNet"),
-                      value: ledger.net != null ? `¥${Number(ledger.net).toLocaleString()}` : "—",
-                    },
-                    ledger && {
-                      label: tr("summary.savingsRate"),
-                      value: ledger.savings_rate != null ? `${Number(ledger.savings_rate).toFixed(0)}%` : "—",
-                    },
-                  ].filter(Boolean) as { label: string; value: string }[];
-                  if (cells.length === 0) return null;
-                  return (
-                    <div key={i} className="rounded-2xl border border-border bg-card p-3.5">
-                      <div className="mb-2.5 flex items-center justify-between">
-                        <span className="flex items-center gap-1.5 text-xs font-medium text-foreground/70">
-                          <BarChart3 className="h-3.5 w-3.5 text-primary" />
-                          {tr("chat.snapshot")}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => onNavigate(ledger ? "ledger" : "holdings")}
-                          className="text-[11px] text-primary hover:underline"
-                        >
-                          {tr("chat.expand")} →
-                        </button>
-                      </div>
-                      <div className={cn("grid gap-2", cells.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
-                        {cells.map((cell) => (
-                          <div key={cell.label} className="rounded-xl bg-muted/60 px-3 py-2">
-                            <div className="text-[11px] text-muted-foreground">{cell.label}</div>
-                            <div className="text-sm font-semibold tabular-nums">{cell.value}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
+                {m.cards.map((c, i) => (
+                  <FinanceBlocks
+                    key={i}
+                    data={(c.data || {}) as FinanceCardData}
+                    onNavigate={onNavigate}
+                  />
+                ))}
               </div>
             )}
 
             {m.meta && m.meta.route !== "general" && m.meta.route !== "nl_add" && (
-              <SummaryBlock meta={m.meta} />
+              // 有富回答块时只用 compact：指标/风险已在块里，摘要不再重复同一组数字
+              <SummaryBlock meta={m.meta} compact={Boolean(m.cards && m.cards.length > 0)} />
             )}
 
-            {m.actions && m.actions.length > 0 && (
+            {m.actions && m.actions.length > 0 && !(m.cards && m.cards.length > 0) && (
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
                 {m.actions.filter(Boolean).map((a, i) => (
                   <button

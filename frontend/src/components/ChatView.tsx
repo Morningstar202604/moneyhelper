@@ -1,6 +1,6 @@
 import { useRef } from "react";
-import { ArrowDown, BarChart3, CreditCard, Sparkles, Wallet, type LucideIcon } from "lucide-react";
-import { useBootstrap, store } from "@/lib/store";
+import { ArrowDown, BarChart3, Clock3, CreditCard, Sparkles, Wallet, type LucideIcon } from "lucide-react";
+import { useBootstrap, useDashboard, store } from "@/lib/store";
 import { useI18n } from "@/lib/i18n";
 import { api } from "@/lib/api";
 import type { AgentToolStep, AgentPlanStep } from "@/lib/types";
@@ -35,6 +35,7 @@ export function ChatView({
 }) {
   const { t: tr } = useI18n();
   const { bootstrap } = useBootstrap();
+  const { dashboard } = useDashboard();
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -55,6 +56,13 @@ export function ChatView({
       ? suggestions.slice(0, 4).map((k) => ({ key: k, icon: Sparkles }))
       : SUGGESTIONS.map((s) => ({ key: s.key, icon: s.icon }));
 
+  // 上下文条：持仓数 / 会话轮次 / 数据更新时间
+  const holdingsCount = (dashboard?.positions ?? []).filter((p) => p.kind !== "现金").length;
+  const updatedLabel = new Date().toLocaleTimeString(tr("chat.locale") === "zh" ? "zh-CN" : "en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
   return (
     <div className="flex h-full min-h-0">
       <div className="flex min-w-0 flex-1 flex-col">
@@ -65,6 +73,22 @@ export function ChatView({
             className="h-full overflow-y-auto scroll-thin"
           >
             <div className="mx-auto w-full max-w-[48rem] px-4 pb-10 pt-4 sm:px-6">
+              {/* 上下文条：明确告诉用户助手此刻看的是哪份数据、多久之前。
+                  没有它，"我的持仓怎么样" 回答里的数字缺少可信度锚点。 */}
+              {!empty && (
+                <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/60 pb-2 text-[11px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    {tr("chat.ctxLocal")}
+                  </span>
+                  <span>{tr("chat.ctxHoldings", { n: holdingsCount })}</span>
+                  <span>{tr("chat.ctxTurns", { n: messages.length })}</span>
+                  <span className="ml-auto inline-flex items-center gap-1">
+                    <Clock3 className="h-3 w-3" />
+                    {tr("chat.ctxUpdated", { t: updatedLabel })}
+                  </span>
+                </div>
+              )}
               {empty ? (
                 <div className="flex min-h-[calc(100dvh-16rem)] flex-col items-center justify-center py-10 text-center">
                   <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">

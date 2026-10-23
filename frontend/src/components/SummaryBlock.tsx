@@ -37,8 +37,12 @@ function MetricBar({
   );
 }
 
-/** 回答尾部摘要：等级 + 关键数字 + 风险提示（全部来自后端 final 事件，口径唯一）。 */
-export function SummaryBlock({ meta }: { meta: AnswerMeta }) {
+/** 回答尾部摘要：等级 + 关键数字 + 风险提示（全部来自后端 final 事件，口径唯一）。
+ *
+ * compact=true 用于「已有富回答块」的场景：此时指标与风险已在块里展示，
+ * 这里只保留「小满的理解」（意图识别），避免同一组数字重复三遍。
+ */
+export function SummaryBlock({ meta, compact = false }: { meta: AnswerMeta; compact?: boolean }) {
   const { t } = useI18n();
   const m = meta.metrics;
   const chips: { label: string; value: string; cls?: string }[] = [];
@@ -81,12 +85,12 @@ export function SummaryBlock({ meta }: { meta: AnswerMeta }) {
           <span className="font-medium">{meta.route_reason}</span>
         </div>
       )}
-      {levelText && (
+      {levelText && !compact && (
         <div className="flex items-center gap-2">
           <Badge variant={isAlert ? "warn" : "ok"}>{levelText}</Badge>
         </div>
       )}
-      {hasChips && (
+      {hasChips && !compact && (
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums">
           {chips.map((c) => (
             <span key={c.label} className="text-muted-foreground">
@@ -96,7 +100,7 @@ export function SummaryBlock({ meta }: { meta: AnswerMeta }) {
           ))}
         </div>
       )}
-      {bars.length > 0 && (
+      {bars.length > 0 && !compact && (
         <div className="mt-2.5 space-y-1.5">
           {bars.map((b) => (
             <MetricBar key={b.label} {...b} />
