@@ -41,6 +41,7 @@ ONOFF_KEYS = (
     "ai_enabled",
     "agent_plan",
     "agent_reflect",
+    "knowledge_enabled",
     "high_contrast",
 )
 # 适老化字号档位：只允许三档，避免任意值把布局撑坏
@@ -49,7 +50,7 @@ TEXT_SCALES = ("normal", "large", "xlarge")
 # 灵活化：base_url 允许留空走 OpenAI 默认；model 允许留空走模型默认；api_key 可含前缀（sk- 等）。
 AI_TEXT_KEYS = ("ai_base_url", "ai_api_key", "ai_model")
 # 付费/自由文本设置：直存（长度截断），如晨报关注要点（可 AI 生成）
-FREE_TEXT_KEYS = ("report_focus",)
+FREE_TEXT_KEYS = ("report_focus", "custom_system_prompt")
 # 模型点亮：逗号分隔的模型名白名单（P0 模型点亮），列表直存但做目录校验
 MODEL_LIST_KEYS = ("enabled_models",)
 AI_KEY_MAX_LEN = 2000
@@ -124,6 +125,9 @@ async def put_settings(payload: dict) -> dict:
                 errors.append("必要支出类别不能为空")
                 continue
             applied[key] = ",".join(cats)
+        elif key == "custom_system_prompt":
+            # 系统提示词通常几百字，单独给 4000 字上限（其他自由文本仍 200）
+            applied[key] = str(raw).strip()[:4000]
         elif key in FREE_TEXT_KEYS:
             # 自由文本设置：去空白 + 长度截断（200 字），允许清空
             applied[key] = str(raw).strip()[:200]

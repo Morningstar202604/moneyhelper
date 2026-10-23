@@ -73,6 +73,16 @@ async def upload_attachment(request: Request) -> dict:
     return await db.add_attachment(filename, kind, size, text)
 
 
+@router.post("/api/attachments/{att_id}/index")
+async def index_attachment(att_id: int, payload: dict | None = None) -> dict:
+    """把附件加入/移出知识库。加入后问答时会按 BM25 检索其片段。"""
+    indexed = True if payload is None else bool((payload or {}).get("indexed", True))
+    try:
+        return await db.set_attachment_indexed(att_id, indexed)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=404)
+
+
 @router.delete("/api/attachments/{att_id}")
 async def remove_attachment(att_id: int) -> dict:
     return await db.delete_attachment(att_id)

@@ -270,12 +270,49 @@ async def run_agent(
     _s = await db.get_settings()
     turn_cap = max(1, min(int((_s.get("agent_tool_turns") or MAX_TURNS) or MAX_TURNS), 30))
     reflect = (_s.get("agent_reflect") or "on") != "off"
-    system_prompt = system if system is not None else AGENT_SYSTEM
+    # 知识库检索：从已入库的附件里找与问题最相关的片段，作为参考资料注入。
+    # 与长期记忆分开：知识库是长文档切片，记忆是用户主动记住的短句。
+    kb_context = ""
+    if (_s.get("knowledge_enabled") or "on") != "off":
+        try:
+            from . import knowledge
+
+            docs = await db.list_indexed_attachments()
+            if docs:
+                chunks: list[dict[str, Any]] = []
+                for d in docs:
+                    for piece in knowledge.chunk_text(str(d.get("content") or "")):
+                        chunks.append({"id": d.get("id"), "filename": d.get("filename"), "content": piece})
+                hits = knowledge.rank_chunks(question, chunks)
+                kb_context = knowledge.build_context(hits)
+        except Exception:  # noqa: BLE001 — 检索失败不影响回答
+            kb_context = ""
+
+    # 自定义提示词：设置里填了就用它覆盖内置 instructions.md（留空则用文件默认值）。
+    # 只允许追加/替换「财务分支」的系统提示；通用闲聊分支不受影响。
+    custom_prompt = str(_s.get("custom_system_prompt") or "").strip()
+    if system is not None:
+        system_prompt = system
+    elif custom_prompt:
+        system_prompt = custom_prompt
+    else:
+        system_prompt = AGENT_SYSTEM
     lang_rule = "请用简体中文回答用户的问题。" if lang == "zh" else "Answer the user in English."
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
         {"role": "system", "content": lang_rule},
     ]
+    if kb_context:
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "以下是从用户知识库检索到的资料片段，回答时可用作参考；"
+                    "若与工具查询到的实时数据冲突，以工具结果为准。\n\n" + kb_context
+                ),
+            }
+        )
+
     if history:
         messages.append(
             {
@@ -329,6 +366,12 @@ async def run_agent(
             tool_schemas = tool_schemas + mcp_schemas
         except Exception:  # noqa: BLE001 — MCP 异常不影响主流程
             pass
+    # 循环检测：模型有时会反复用完全相同的参数调同一个工具（尤其工具持续报错时），
+    # 白烧 token 也拿不到新信息。连续 3 次完全相同则中断并如实说明。
+    _repeat_key: tuple[str, str] | None = None
+    _repeat_count = 0
+    _MAX_REPEAT = 3
+
     for _turn in range(turn_cap):
         try:
             with timed("llm.tool_loop", model=cfg.get("model", ""), turn=_turn):
@@ -338,6 +381,11 @@ async def run_agent(
                     tools=tool_schemas,
                     tool_choice="auto",
                     temperature=0.2,
+                    # 单轮输出上限：防止模型陷入超长生成把请求拖到超时
+                    max_tokens=2048,
+                    # 429/5xx 由 LiteLLM 自动重试（与流式路径一致）
+                    num_retries=2,
+                    timeout=60,
                 )
         except Exception as exc:  # noqa: BLE001 — 端点失败/不支持 tools → 降级
             raise AgentUnavailable(f"模型调用失败：{type(exc).__name__}") from exc
@@ -415,6 +463,26 @@ async def run_agent(
                 args = {}
             tool_counts[name] = tool_counts.get(name, 0) + 1
             used_tools.append(name)
+            # 同工具 + 同参数连续重复检测（在真正执行前判定，避免第三次无效调用）
+            _key = (name, json.dumps(args, sort_keys=True, ensure_ascii=False, default=str))
+            if _key == _repeat_key:
+                _repeat_count += 1
+            else:
+                _repeat_key, _repeat_count = _key, 1
+            if _repeat_count >= _MAX_REPEAT:
+                await emit({
+                    "type": "thinking",
+                    "data": {"content": f"检测到重复调用 {name}，已停止以避免空转。"},
+                    "node": "finalize",
+                })
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        f"你已连续 {_repeat_count} 次用相同参数调用 {name}，结果不会变化。"
+                        "请直接基于已有信息作答，或换一种方式。"
+                    ),
+                })
+                break
             # 工具生命周期：running → 结果
             await emit({
                 "type": "tool",

@@ -127,6 +127,8 @@ SEED_SETTINGS = {
     "agent_tool_turns": "5",  # 单轮问答里模型可调用工具的轮次上限（1-30，防死循环）
     "agent_plan": "on",  # 是否展示执行计划（supervisor 计划卡 / 推理轨迹）
     "agent_reflect": "on",  # 工具失败时是否提示模型反思修正后重试
+    "custom_system_prompt": "",  # 自定义系统提示词（留空用 agents/supervisor/instructions.md）
+    "knowledge_enabled": "on",  # 知识库检索开关
     "data_note": "seed",
 }
 
@@ -301,6 +303,7 @@ CREATE TABLE IF NOT EXISTS attachments (
     kind        TEXT NOT NULL DEFAULT 'text',   -- text / csv / pdf
     size        INTEGER NOT NULL DEFAULT 0,
     content     TEXT NOT NULL DEFAULT '',       -- 提取后的文本内容（上限）
+    indexed     INTEGER NOT NULL DEFAULT 0,     -- 1 = 加入知识库（问答时参与检索）
     created_at  TEXT NOT NULL
 );
 -- 撤销记录（P2 金融级治理）：流水 / 持仓 / 负债 / 订阅 / 目标写操作前的全量快照，

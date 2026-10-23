@@ -47,6 +47,8 @@ from .audit import (
     get_attachment,
     list_attachments,
     list_audit_logs,
+    list_indexed_attachments,
+    set_attachment_indexed,
 )
 from .backup import export_data, import_backup, monthly_trend
 from .budgets import (
@@ -253,6 +255,7 @@ __all__ = [
     "list_budgets",
     "list_debts",
     "list_goals",
+    "list_indexed_attachments",
     "list_loans",
     "list_members",
     "list_memory",
@@ -289,6 +292,7 @@ __all__ = [
     "search_runs",
     "session_thread_id",
     "set_active_member",
+    "set_attachment_indexed",
     "set_conversation_summary",
     "set_read_pool",
     "set_setting",

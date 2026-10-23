@@ -93,10 +93,32 @@ async def clear_audit_logs() -> dict[str, Any]:
 
 async def list_attachments(limit: int = 50) -> list[dict[str, Any]]:
     rows = await fetch_all(
-        "SELECT id, filename, kind, size, created_at FROM attachments WHERE user_id=? ORDER BY id DESC LIMIT ?",
+        "SELECT id, filename, kind, size, indexed, created_at FROM attachments"
+        " WHERE user_id=? ORDER BY id DESC LIMIT ?",
         (current_user_id(), _clamp_limit(limit)),
     )
     return rows
+
+
+async def list_indexed_attachments() -> list[dict[str, Any]]:
+    """已加入知识库的附件（含正文，供检索切块）。"""
+    return await fetch_all(
+        "SELECT id, filename, kind, content FROM attachments"
+        " WHERE user_id=? AND indexed=1 AND content <> '' ORDER BY id DESC",
+        (current_user_id(),),
+    )
+
+
+async def set_attachment_indexed(att_id: int, indexed: bool) -> dict[str, Any]:
+    conn = await _conn()
+    cur = await conn.execute(
+        "UPDATE attachments SET indexed=? WHERE user_id=? AND id=?",
+        (1 if indexed else 0, current_user_id(), int(att_id)),
+    )
+    await conn.commit()
+    if cur.rowcount == 0:
+        raise ValueError("附件不存在")
+    return {"ok": True, "id": int(att_id), "indexed": bool(indexed)}
 
 
 async def add_attachment(

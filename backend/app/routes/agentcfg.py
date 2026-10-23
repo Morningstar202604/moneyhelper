@@ -88,3 +88,53 @@ async def generate_agent_config(payload: dict) -> dict:
     if suggestion is None:
         return {"ok": False, "error": "生成失败，请换个描述再试"}
     return {"ok": True, "suggestion": suggestion}
+
+
+# ---------------------------------------------------------------------------
+# MCP 服务器（外部插件）管理
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/mcp/servers")
+async def list_mcp_servers() -> dict:
+    """当前配置的 MCP 服务器 + 已发现工具数。
+
+    凭据打码：URL 里的 user:token 会替换成 ***，避免在设置页明文回显。
+    """
+    from .. import mcp_client
+
+    return {"servers": mcp_client.list_servers()}
+
+
+@router.put("/api/mcp/servers")
+async def put_mcp_servers(payload: dict) -> dict:
+    """保存 MCP 服务器列表。保存后立即尝试发现工具，失败只回报不阻断。"""
+    from .. import mcp_client
+
+    servers = payload.get("servers")
+    if not isinstance(servers, list):
+        return JSONResponse({"error": "servers 必须是数组"}, status_code=400)
+    try:
+        mcp_client.save_servers(servers)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    try:
+        tools = await mcp_client.refresh(force=True)
+    except Exception:  # noqa: BLE001 — 发现失败不影响保存
+        tools = []
+    return {"ok": True, "servers": mcp_client.list_servers(), "tool_count": len(tools)}
+
+
+@router.post("/api/mcp/test")
+async def test_mcp_server(payload: dict) -> dict:
+    """测试单台服务器连通性：握手 + list_tools，返回工具名列表。"""
+    from .. import mcp_client
+
+    url = str(payload.get("url") or "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        return JSONResponse({"error": "地址必须以 http:// 或 https:// 开头"}, status_code=400)
+    try:
+        tools = await mcp_client.probe(url)
+    except Exception as exc:  # noqa: BLE001 — 测试失败是预期结果，透出原因
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+    return {"ok": True, "tools": tools}

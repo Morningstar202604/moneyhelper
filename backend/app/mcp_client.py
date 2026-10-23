@@ -60,10 +60,76 @@ def _load_config() -> list[dict[str, Any]]:
         if not MCP_CFG.exists():
             return []
         data = json.loads(MCP_CFG.read_text(encoding="utf-8") or "{}")
-        return data.get("servers") or []
+        servers = data.get("servers") or []
+        # 只接受带 url 的条目：UI 保存的草稿可能缺字段，静默跳过而不是整份配置失效
+        return [s for s in servers if isinstance(s, dict) and str(s.get("url") or "").strip()]
     except Exception:  # noqa: BLE001 — 配置异常按无 MCP 处理
         _log.warning("mcp config parse failed")
         return []
+
+
+def list_servers() -> list[dict[str, Any]]:
+    """当前配置的 MCP 服务器（给设置页展示，不含任何凭据——URL 里的 token 会被打码）。"""
+    out: list[dict[str, Any]] = []
+    for s in _load_config():
+        url = str(s.get("url") or "")
+        out.append(
+            {
+                "name": str(s.get("name") or ""),
+                "url": redact_url(url),
+                "tools": list(_servers.get(str(s.get("name") or ""), [])),
+            }
+        )
+    return out
+
+
+def save_servers(servers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """保存服务器列表（写 mcp.json），返回清洗后的列表。
+
+    校验：name 非空且唯一、url 必须是 http(s)、最多 20 台。
+    保存后清空发现缓存，下一次问答会重新拉工具清单。
+    """
+    global _discover_cache
+    cleaned: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for s in servers or []:
+        if not isinstance(s, dict):
+            continue
+        name = str(s.get("name") or "").strip()[:40]
+        url = str(s.get("url") or "").strip()
+        if not name or not url:
+            continue
+        if not url.lower().startswith(("http://", "https://")):
+            raise ValueError(f"服务器「{name}」的地址必须以 http:// 或 https:// 开头")
+        if name in seen:
+            raise ValueError(f"服务器名称重复：{name}")
+        seen.add(name)
+        cleaned.append({"name": name, "url": url})
+        if len(cleaned) >= 20:
+            break
+    MCP_CFG.parent.mkdir(parents=True, exist_ok=True)
+    MCP_CFG.write_text(
+        json.dumps({"servers": cleaned}, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    _discover_cache = None
+    return cleaned
+
+
+def redact_url(url: str) -> str:
+    """把 URL 里的凭据打码：https://user:token@host/path → https://***@host/path。"""
+    from urllib.parse import urlsplit, urlunsplit
+
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return url
+    if not parts.username and not parts.password:
+        return url
+    host = parts.hostname or ""
+    netloc = f"***@{host}"
+    if parts.port:
+        netloc += f":{parts.port}"
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
 
 
 @asynccontextmanager
@@ -121,6 +187,16 @@ async def _discover(server: dict[str, Any]) -> list[Any]:
     tools = list(resp.tools)
     _servers[name] = [f"mcp__{t.name}" for t in tools]
     return tools
+
+
+async def probe(url: str) -> list[str]:
+    """测试单台 MCP 服务器：打开会话并 list_tools，返回工具名。
+
+    与 _discover 的区别：不写注册表、不读配置，纯连通性探测，供设置页「测试」按钮使用。
+    """
+    async with _open_session(url) as session:
+        resp = await session.list_tools()
+    return [str(getattr(t, "name", "")) for t in (resp.tools or []) if getattr(t, "name", None)]
 
 
 async def refresh(force: bool = False) -> list[dict[str, Any]]:
