@@ -16,7 +16,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
-from .. import db, service
+from .. import db, service, tool_schemas
 from ..logging_utils import get_logger as _get_logger
 from ..middleware import spawn_background
 
@@ -447,6 +447,13 @@ async def dept_report_decide(report_id: str, payload: dict) -> Any:
 # ---------------------------------------------------------------------------
 
 
+def _invalidate_after_write() -> None:
+    """确认执行的是写工具（记账/建仓/改设置），必须让仪表盘缓存立即过期。"""
+    from .. import analysis
+
+    analysis.invalidate_dashboard_cache()
+
+
 @router.post("/api/confirm")
 async def confirm(payload: dict):
     token = str((payload or {}).get("token") or "").strip()
@@ -500,6 +507,7 @@ async def confirm(payload: dict):
                 token[:12],
                 resumed["level"],
             )
+            _invalidate_after_write()
             return {
                 "ok": True,
                 "tool": pending["tool_name"],
@@ -529,6 +537,16 @@ async def confirm(payload: dict):
             return JSONResponse(
                 {"error": f"未知工具：{pending['tool_name']}"}, status_code=400
             )
+        clean_args, verr = tool_schemas.validate_tool_args(pending["tool_name"], pending["args"])
+        if clean_args is None:
+            log.warning(
+                "confirm: invalid args for %s token=%s: %s",
+                pending["tool_name"],
+                token[:12],
+                verr,
+            )
+            return JSONResponse({"error": f"参数校验失败，操作未执行：{verr}"}, status_code=400)
+        pending = {**pending, "args": clean_args}
         try:
             answer = await impl(pending["args"])
             log.info(
@@ -542,6 +560,7 @@ async def confirm(payload: dict):
                 "confirm EXEC failed token=%s tool=%s", token[:12], pending["tool_name"]
             )
             answer = f"执行失败：{type(exc).__name__}: {exc}"
+        _invalidate_after_write()
         return {
             "ok": True,
             "tool": pending["tool_name"],
